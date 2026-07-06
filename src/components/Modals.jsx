@@ -156,11 +156,84 @@ function TrocModal({ state, dispatch }) {
               className="w-full rounded-xl bg-teal-50 border-2 border-teal-200 p-3 font-bold text-teal-800 hover:bg-teal-100 disabled:opacity-40 text-left"
             >
               {q.name} — {q.hand.length} carte(s) en main
-              {(hasJob(q, 'chef_achats') || hasJob(q, 'chef_ventes')) && ' 🛡️ (protège 1 carte)'}
             </button>
           )
         })}
       </div>
+    </Modal>
+  )
+}
+
+// --- Troc du Chef des achats/ventes : échange avec picks face cachée -----------
+function ChefTrocModal({ state, dispatch }) {
+  const p = state.players[state.current]
+  const pend = state.pending
+
+  if (pend.step === 'target') {
+    return (
+      <Modal title={`🛡️ ${p.job.name} — troquez en protégeant 1 carte. Avec qui ?`}>
+        <div className="space-y-2">
+          {state.players.map((q, i) => {
+            if (i === state.current) return null
+            const ok = q.hand.length > 0
+            return (
+              <button
+                key={i}
+                disabled={!ok}
+                onClick={() => dispatch({ type: 'CHEF_TROC_TARGET', target: i })}
+                className="w-full rounded-xl bg-teal-50 border-2 border-teal-200 p-3 font-bold text-teal-800 hover:bg-teal-100 disabled:opacity-40 text-left"
+              >
+                {q.name} — {q.hand.length} carte(s) en main
+              </button>
+            )
+          })}
+        </div>
+      </Modal>
+    )
+  }
+
+  if (pend.step === 'protect') {
+    return (
+      <Modal title={`🛡️ ${p.name}, choisissez la carte de votre main à protéger`} wide>
+        <div className="flex gap-2 flex-wrap justify-center">
+          {p.hand.map((c) => (
+            <Card key={c.uid} card={c} onClick={() => dispatch({ type: 'CHEF_TROC_PROTECT', uid: c.uid })} />
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3">La carte protégée ne pourra pas être prise par l’adversaire.</p>
+      </Modal>
+    )
+  }
+
+  if (pend.step === 'opp-pick') {
+    const t = state.players[pend.target]
+    const count = p.hand.filter((c) => c.uid !== pend.protectedUid).length
+    return (
+      <Modal title={`🂠 ${t.name}, choisissez une carte face cachée de ${p.name}`} wide>
+        <div className="flex gap-2 flex-wrap justify-center">
+          {Array.from({ length: count }, (_, i) => (
+            <div key={i} onClick={() => dispatch({ type: 'CHEF_TROC_OPP_PICK', index: i })} className="cursor-pointer hover:-translate-y-1 transition-transform">
+              <Card faceDown card={{}} />
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3">Les cartes sont retournées : le choix se fait à l’aveugle{pend.protectedUid ? ` (1 carte est protégée par ${p.name})` : ''}.</p>
+      </Modal>
+    )
+  }
+
+  // chef-pick
+  const t = state.players[pend.target]
+  return (
+    <Modal title={`🂠 ${p.name}, choisissez une carte face cachée de ${t.name}`} wide>
+      <div className="flex gap-2 flex-wrap justify-center">
+        {t.hand.map((c, i) => (
+          <div key={c.uid} onClick={() => dispatch({ type: 'CHEF_TROC_CHEF_PICK', index: i })} className="cursor-pointer hover:-translate-y-1 transition-transform">
+            <Card faceDown card={{}} />
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-gray-400 mt-3">L’échange est effectué dès votre choix.</p>
     </Modal>
   )
 }
@@ -272,6 +345,7 @@ export default function Modals({ state, dispatch }) {
     case 'discard-pick': return <DiscardPickModal state={state} dispatch={dispatch} />
     case 'piston': return <PistonModal state={state} dispatch={dispatch} />
     case 'troc': return <TrocModal state={state} dispatch={dispatch} />
+    case 'chef-troc': return <ChefTrocModal state={state} dispatch={dispatch} />
     case 'vengeance': return <VengeanceModal state={state} dispatch={dispatch} />
     case 'casino-stake': return <CasinoStakeModal state={state} dispatch={dispatch} />
     case 'journalist': return <JournalistModal state={state} dispatch={dispatch} />

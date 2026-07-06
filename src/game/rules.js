@@ -142,8 +142,11 @@ export function canPlaySpecial(state, pIdx, card) {
       if (state.deck.length === 0) return NO('La pioche est vide')
       return OK
     case 'etoile': {
-      if (state.discard.length === 0) return NO('La défausse est vide')
-      if (!state.discard.some((e) => isPlayableFromDiscard(state, pIdx, e.card)))
+      // exclut la carte elle-même du scan (une Étoile filante dans la défausse
+      // ne doit pas s'évaluer récursivement)
+      const others = state.discard.filter((e) => e.card.uid !== card.uid)
+      if (others.length === 0) return NO('La défausse est vide')
+      if (!others.some((e) => isPlayableFromDiscard(state, pIdx, e.card)))
         return NO('Aucune carte jouable dans la défausse')
       return OK
     }

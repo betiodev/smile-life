@@ -184,6 +184,34 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
   }
 }
 
+// Avantages instantanés (API) déclenchés à la pose d'un métier
+// (pose normale ou via Piston) — retourne true si un "pending" est créé
+function triggerJobApi(s, pIdx, card) {
+  if (card.key === 'journaliste') {
+    s.pending = { type: 'journalist' }
+    return true
+  }
+  if (card.key === 'medium') {
+    s.pending = { type: 'medium', cards: s.deck.slice(-13).reverse() }
+    return true
+  }
+  if (card.key === 'astronaute') {
+    if (s.discard.some((e) => isPlayableFromDiscard(s, pIdx, e.card))) {
+      s.pending = { type: 'discard-pick', source: 'Astronaute' }
+      return true
+    }
+    log(s, `L’avantage de l’Astronaute est perdu (rien de jouable dans la défausse)`)
+  }
+  if (card.key === 'chef_achats' || card.key === 'chef_ventes') {
+    if (s.players.some((q, qi) => qi !== pIdx && q.hand.length > 0)) {
+      s.pending = { type: 'chef-troc', step: 'target' }
+      return true
+    }
+    log(s, `L’avantage du ${card.name} est perdu (aucun adversaire avec des cartes)`)
+  }
+  return false
+}
+
 // ---------------------------------------------------------------------------
 // Pose d'une carte devant soi (placement + effets)
 // Retourne true si la pose crée un état "pending" (choix à faire)
@@ -217,22 +245,7 @@ function poseSelf(s, pIdx, card) {
         })
       }
       // Avantages instantanés (API)
-      if (card.key === 'journaliste') {
-        s.pending = { type: 'journalist' }
-        return true
-      }
-      if (card.key === 'medium') {
-        s.pending = { type: 'medium', cards: s.deck.slice(-13).reverse() }
-        return true
-      }
-      if (card.key === 'astronaute') {
-        if (s.discard.some((e) => isPlayableFromDiscard(s, pIdx, e.card))) {
-          s.pending = { type: 'discard-pick', source: 'Astronaute' }
-          return true
-        }
-        log(s, `L’avantage de l’Astronaute est perdu (rien de jouable dans la défausse)`)
-      }
-      break
+      return triggerJobApi(s, pIdx, card)
     }
 
     case 'salary':
@@ -757,6 +770,17 @@ export function gameReducer(prev, action) {
       s.pending = null
       // "repiochez pour avoir 5 cartes"
       refillHand(s, s.current)
+      // le métier pistonné déclenche aussi son avantage instantané
+      triggerJobApi(s, s.current, card)
+      // Policier pistonné : purge les Bandits et Gourous
+      if (card.key === 'policier') {
+        s.players.forEach((q, qi) => {
+          if (qi !== s.current && (hasJob(q, 'bandit') || hasJob(q, 'gourou'))) {
+            log(s, `👮 Le Policier fait défausser le ${q.job.name} de ${q.name}`, 'malus')
+            loseJob(s, qi)
+          }
+        })
+      }
       finishPlay(s)
       return s
     }
@@ -764,25 +788,58 @@ export function gameReducer(prev, action) {
       if (s.pending?.type !== 'troc') return prev
       const t = s.players[action.target]
       if (!t || action.target === s.current || t.hand.length === 0) return prev
-      // Chef des achats/ventes : protège sa meilleure carte (heuristique : plus de smiles)
-      const pickFrom = (player) => {
-        let pool = player.hand
-        if (hasJob(player, 'chef_achats') || hasJob(player, 'chef_ventes')) {
-          const best = [...player.hand].sort((a, b) => b.smiles - a.smiles)[0]
-          if (player.hand.length > 1) {
-            pool = player.hand.filter((c) => c.uid !== best.uid)
-            log(s, `🛡️ ${player.name} (${player.job.name}) protège 1 carte du Troc`)
-          }
-        }
-        return pool[Math.floor(Math.random() * pool.length)]
-      }
-      const mine = pickFrom(p)
-      const theirs = pickFrom(t)
+      const mine = p.hand[Math.floor(Math.random() * p.hand.length)]
+      const theirs = t.hand[Math.floor(Math.random() * t.hand.length)]
       if (mine) removeFromHand(p, mine.uid)
       if (theirs) removeFromHand(t, theirs.uid)
       if (theirs) p.hand.push(theirs)
       if (mine) t.hand.push(mine)
       log(s, `🔄 ${p.name} troque une carte au hasard avec ${t.name}`)
+      s.pending = null
+      finishPlay(s)
+      return s
+    }
+
+    // ----- Troc du Chef des achats/ventes (avantage instantané) ------------
+    case 'CHEF_TROC_TARGET': {
+      if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'target') return prev
+      const t = s.players[action.target]
+      if (!t || action.target === s.current || t.hand.length === 0) return prev
+      // s'il reste au moins 2 cartes en main, le Chef en protège une
+      if (p.hand.length >= 2) {
+        s.pending = { type: 'chef-troc', step: 'protect', target: action.target }
+      } else {
+        s.pending = { type: 'chef-troc', step: 'opp-pick', target: action.target, protectedUid: null }
+      }
+      return s
+    }
+    case 'CHEF_TROC_PROTECT': {
+      if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'protect') return prev
+      if (!p.hand.some((c) => c.uid === action.uid)) return prev
+      log(s, `🛡️ ${p.name} protège 1 carte de son troc`)
+      s.pending = { type: 'chef-troc', step: 'opp-pick', target: s.pending.target, protectedUid: action.uid }
+      return s
+    }
+    case 'CHEF_TROC_OPP_PICK': {
+      // l'adversaire choisit, face cachée, une carte non protégée du Chef
+      if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'opp-pick') return prev
+      const pickable = p.hand.filter((c) => c.uid !== s.pending.protectedUid)
+      const picked = pickable[action.index]
+      if (!picked) return prev
+      s.pending = { type: 'chef-troc', step: 'chef-pick', target: s.pending.target, oppPickedUid: picked.uid }
+      return s
+    }
+    case 'CHEF_TROC_CHEF_PICK': {
+      // le Chef choisit, face cachée, une carte de l'adversaire — puis échange
+      if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'chef-pick') return prev
+      const t = s.players[s.pending.target]
+      const theirs = t.hand[action.index]
+      if (!theirs) return prev
+      const mine = removeFromHand(p, s.pending.oppPickedUid)
+      removeFromHand(t, theirs.uid)
+      if (mine) t.hand.push(mine)
+      p.hand.push(theirs)
+      log(s, `🔄 ${p.name} (${p.job.name}) troque une carte avec ${t.name} en en protégeant une`)
       s.pending = null
       finishPlay(s)
       return s
