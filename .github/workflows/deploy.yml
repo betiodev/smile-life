@@ -2,7 +2,7 @@ name: Déployer sur GitHub Pages
 
 on:
   push:
-    branches: [main, claude/new-session-tded70]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
