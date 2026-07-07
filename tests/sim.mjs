@@ -21,11 +21,23 @@ function step(s) {
     const p = s.players[s.current]
     switch (s.pending.type) {
       case 'purchase': {
-        // essaie de payer avec tous les salaires dispo + héritage
-        const uids = p.salaries.filter((x) => !x.invested).map((x) => x.card.uid)
         const useArchitect = s.pending.card.acqType === 'house' && p.job?.key === 'architecte' && !p.architectFreeUsed
         if (useArchitect) return gameReducer(s, { type: 'PURCHASE_CONFIRM', useArchitect: true })
-        const r = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: uids, useHeritage: p.heritage > 0 })
+        // sélection gloutonne sans salaire superflu ; héritage seulement si nécessaire
+        const cost = s.pending.card.acqType === 'house'
+          ? (p.marriage ? Math.ceil(s.pending.card.cost / 2) : s.pending.card.cost)
+          : s.pending.card.cost
+        const avail = p.salaries.filter((x) => !x.invested).sort((a, b) => b.card.level - a.card.level)
+        const allTotal = avail.reduce((t, x) => t + x.card.level, 0)
+        const useHeritage = p.heritage > 0 && allTotal < cost
+        let total = useHeritage ? p.heritage : 0
+        const uids = []
+        for (const sal of avail) {
+          if (total >= cost) break
+          uids.push(sal.card.uid)
+          total += sal.card.level
+        }
+        const r = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: uids, useHeritage })
         if (r === s) return gameReducer(s, { type: 'PURCHASE_CANCEL' })
         return r
       }

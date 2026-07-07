@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import { useState } from 'react'
 import Card from './Card'
-import { isPlayableFromDiscard, canPlayMalus, hasJob, houseCost } from '../game/rules'
+import { isPlayableFromDiscard, canPlayMalus, hasJob, houseCost, validatePayment } from '../game/rules'
 
 function Modal({ title, children, wide }) {
   return (
@@ -39,7 +39,10 @@ function PurchaseModal({ state, dispatch }) {
   const architectFree = card.acqType === 'house' && hasJob(p, 'architecte') && !p.architectFreeUsed
 
   const available = p.salaries.filter((s) => !s.invested)
-  const total = chosen.reduce((t, u) => t + available.find((s) => s.card.uid === u).card.level, 0) + (useHeritage ? p.heritage : 0)
+  const levels = chosen.map((u) => available.find((s) => s.card.uid === u).card.level)
+  const heritage = useHeritage ? p.heritage : 0
+  const total = levels.reduce((a, b) => a + b, 0) + heritage
+  const check = validatePayment(cost, levels, heritage)
   const toggle = (u) => setChosen(chosen.includes(u) ? chosen.filter((x) => x !== u) : [...chosen, u])
 
   return (
@@ -71,15 +74,16 @@ function PurchaseModal({ state, dispatch }) {
               💵 Utiliser l’Héritage ({p.heritage} liasses, tout ou rien)
             </label>
           )}
-          <div className={`mt-2 font-black ${total >= cost ? 'text-green-600' : 'text-red-500'}`}>
+          <div className={`mt-2 font-black ${check.ok ? 'text-green-600' : 'text-red-500'}`}>
             Total : {total}/{cost} liasses
-            {total > cost && <span className="text-amber-500"> — pas de monnaie rendue !</span>}
+            {check.ok && total > cost && <span className="text-amber-500"> — pas de monnaie rendue !</span>}
           </div>
+          {!check.ok && <div className="text-xs text-red-500 font-semibold">{check.reason}</div>}
         </div>
       </div>
       <div className="flex gap-2 mt-4 justify-end">
         <Btn secondary onClick={() => dispatch({ type: 'PURCHASE_CANCEL' })}>Annuler</Btn>
-        <Btn disabled={total < cost} onClick={() => dispatch({ type: 'PURCHASE_CONFIRM', salaryUids: chosen, useHeritage })}>
+        <Btn disabled={!check.ok} title={check.reason} onClick={() => dispatch({ type: 'PURCHASE_CONFIRM', salaryUids: chosen, useHeritage })}>
           💸 Acheter
         </Btn>
       </div>

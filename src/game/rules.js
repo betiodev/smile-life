@@ -28,6 +28,21 @@ export function houseCost(p, card) {
   return p.marriage ? Math.ceil(card.cost / 2) : card.cost
 }
 
+// Validation d'un paiement (achat voyage/maison) : le total doit couvrir le
+// coût ET chaque élément choisi doit être nécessaire — retirer n'importe quel
+// salaire (ou l'héritage) ferait repasser sous le coût. On peut donc surpayer
+// faute d'appoint, mais pas investir des salaires superflus (ce qui les
+// mettrait à l'abri de l'Impôt sur le revenu).
+export function validatePayment(cost, salaryLevels, heritage = 0) {
+  const total = salaryLevels.reduce((a, b) => a + b, 0) + heritage
+  if (total < cost) return NO(`Total insuffisant (${total}/${cost} liasses)`)
+  for (const lvl of salaryLevels) {
+    if (total - lvl >= cost) return NO('Retirez les salaires superflus : le coût est déjà couvert sans eux')
+  }
+  if (heritage > 0 && total - heritage >= cost) return NO('L’Héritage est superflu : le coût est déjà couvert sans lui')
+  return OK
+}
+
 const anyPolicier = (state) => state.players.some((p) => hasJob(p, 'policier'))
 const anyMilitaire = (state) => state.players.some((p) => hasJob(p, 'militaire'))
 

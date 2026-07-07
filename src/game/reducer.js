@@ -6,7 +6,7 @@ import { buildDeck, shuffle } from '../data/cards.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard,
   canTakeDiscardTop, hasJob, isProf, isInterim, handTarget, houseCost,
-  availableLiasses,
+  availableLiasses, validatePayment,
 } from './rules.js'
 
 // --- helpers ---------------------------------------------------------------
@@ -703,17 +703,18 @@ export function gameReducer(prev, action) {
       const isFree = card.acqType === 'house' && hasJob(p, 'architecte') && !p.architectFreeUsed && action.useArchitect
       const cost = card.acqType === 'house' ? houseCost(p, card) : card.cost
       if (!isFree) {
-        let paid = 0
         const chosen = []
         for (const su of action.salaryUids || []) {
           const sal = p.salaries.find((x) => x.card.uid === su && !x.invested)
-          if (sal) { chosen.push(sal); paid += sal.card.level }
+          if (sal) chosen.push(sal)
         }
-        if (action.useHeritage && p.heritage > 0) paid += p.heritage
-        if (paid < cost) return prev
+        const heritage = action.useHeritage && p.heritage > 0 ? p.heritage : 0
+        // pas de salaire superflu : impossible de sur-investir pour échapper à l'Impôt
+        if (!validatePayment(cost, chosen.map((x) => x.card.level), heritage).ok) return prev
+        const paid = chosen.reduce((t, x) => t + x.card.level, 0) + heritage
         for (const sal of chosen) sal.invested = true
-        if (action.useHeritage) p.heritage = 0
-        log(s, `${p.name} achète ${card.name} pour ${cost} liasses (${paid} investies — pas de monnaie !)`)
+        if (heritage > 0) p.heritage = 0
+        log(s, `${p.name} achète ${card.name} pour ${cost} liasses (${paid} investies${paid > cost ? ' — pas de monnaie !' : ''})`)
       } else {
         p.architectFreeUsed = true
         log(s, `🏠 ${p.name} (Architecte) obtient ${card.name} gratuitement !`)

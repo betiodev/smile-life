@@ -1,6 +1,6 @@
 // Tests ciblés des 5 corrections signalées
 import { gameReducer } from '../src/game/reducer.js'
-import { canPoseSelf, canTakeDiscardTop } from '../src/game/rules.js'
+import { canPoseSelf, canTakeDiscardTop, validatePayment } from '../src/game/rules.js'
 import { buildDeck } from '../src/data/cards.js'
 
 const deck = buildDeck()
@@ -109,6 +109,36 @@ function check(label, cond) {
   p.marriage = null
   p.job = null // démission/licenciement
   check('Après le métier : flirts conservés (7) mais plus de pose', !canPoseSelf(s, 0, flirts[8]).ok && p.flirts.length === 7)
+}
+
+// --- Achat : pas de salaire superflu (anti-évasion fiscale) ------------------
+{
+  // coût 3 : [2,1] exact → OK ; [2,2] surpaie inévitable → OK ; [2,2,1] superflu → refusé
+  check('Paiement exact accepté', validatePayment(3, [2, 1]).ok)
+  check('Surpaie inévitable acceptée (manque 1, paie avec un salaire de 2)', validatePayment(3, [2, 2]).ok)
+  check('Salaire superflu refusé', !validatePayment(3, [2, 2, 1]).ok)
+  check('Total insuffisant refusé', !validatePayment(3, [1, 1]).ok)
+  // héritage (3 liasses, tout ou rien)
+  check('Héritage nécessaire accepté', validatePayment(3, [], 3).ok)
+  check('Héritage superflu refusé', !validatePayment(3, [3], 3).ok)
+  check('Salaire superflu en plus de l’héritage refusé', !validatePayment(3, [1], 3).ok)
+
+  // et côté reducer : PURCHASE_CONFIRM applique la même règle
+  const s = freshState()
+  const travel = find((c) => c.acqType === 'travel')
+  const sal2 = findAll((c) => c.type === 'salary' && c.level === 2)
+  const sal1 = find((c) => c.type === 'salary' && c.level === 1)
+  s.screen = 'game'
+  s.phase = 'play'
+  s.players[0].salaries = [sal2[0], sal2[1], sal1].map((card) => ({ card, invested: false }))
+  s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
+  const refus = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid, sal1.uid], useHeritage: false })
+  check('Reducer : achat avec salaire superflu refusé', refus === s)
+  const okBuy = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid], useHeritage: false })
+  check('Reducer : surpaie inévitable acceptée (4/3)', okBuy !== s && okBuy.players[0].acquisitions.some((c) => c.uid === travel.uid))
+  check('Reducer : les 2 salaires choisis sont investis, le 3e non',
+    okBuy.players[0].salaries.filter((x) => x.invested).length === 2 &&
+    !okBuy.players[0].salaries.find((x) => x.card.uid === sal1.uid).invested)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)
