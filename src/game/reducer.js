@@ -88,6 +88,7 @@ function removeFromHand(p, uidToRemove) {
 }
 
 // Perte de métier (démission, licenciement, purge Policier, prison)
+// Le métier est défaussé au nom de son propriétaire : il ne peut pas le reprendre
 function loseJob(s, pIdx, destination = 'discard') {
   const p = s.players[pIdx]
   if (!p.job) return
@@ -108,7 +109,7 @@ function loseJob(s, pIdx, destination = 'discard') {
     toDiscard(s, extra, pIdx)
     log(s, `${p.name} (Chercheur) défausse 1 carte en plus`)
   }
-  if (destination === 'discard') toDiscard(s, job, null)
+  if (destination === 'discard') toDiscard(s, job, pIdx)
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +135,7 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
       for (let i = t.salaries.length - 1; i >= 0; i--) {
         if (!t.salaries[i].invested) {
           const [sal] = t.salaries.splice(i, 1)
-          toDiscard(s, sal.card, null)
+          toDiscard(s, sal.card, targetIdx)
           log(s, `${a.name} impose ${t.name} : salaire niveau ${sal.card.level} défaussé`, 'malus')
           break
         }
@@ -143,12 +144,12 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
       break
     }
     case 'divorce': {
-      toDiscard(s, t.marriage, null)
+      toDiscard(s, t.marriage, targetIdx)
       t.marriage = null
       if (t.adultery) {
-        toDiscard(s, t.adultery, null)
+        toDiscard(s, t.adultery, targetIdx)
         t.adultery = null
-        for (const child of t.children) toDiscard(s, child, null)
+        for (const child of t.children) toDiscard(s, child, targetIdx)
         t.children = []
         log(s, `${a.name} divorce ${t.name} en plein adultère : mariage, adultère et enfants perdus !`, 'malus')
       } else {
@@ -159,7 +160,7 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
     }
     case 'redoublement': {
       const study = t.studies.pop()
-      if (study) toDiscard(s, study, null)
+      if (study) toDiscard(s, study, targetIdx)
       t.malusKept.push(card)
       log(s, `${a.name} fait redoubler ${t.name} : 1 carte études défaussée`, 'malus')
       break
@@ -168,7 +169,7 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
       t.skipTurns += 3
       log(s, `${a.name} envoie ${t.name} en Prison : passe 3 tours, le Bandit est défaussé`, 'malus')
       loseJob(s, targetIdx)
-      toDiscard(s, card, null)
+      toDiscard(s, card, attackerIdx)
       break
     case 'attentat': {
       for (const child of a.children) s.removed.push(child)
@@ -221,13 +222,13 @@ function poseSelf(s, pIdx, card) {
   switch (card.type) {
     case 'study':
       p.studies.push(card)
-      log(s, `${p.name} pose ${card.name} (niveau ${p.studies.reduce((t, c) => t + c.levels, 0)}/6)`)
+      log(s, `${p.name} pose ${card.name} (${p.studies.length} carte(s), niveau ${p.studies.reduce((t, c) => t + c.levels, 0)})`)
       break
 
     case 'job': {
       if (card.isGrandProf) {
         // promotion : le Prof est défaussé
-        toDiscard(s, p.job, null)
+        toDiscard(s, p.job, pIdx)
         p.job = card
         log(s, `${p.name} est promu Grand Prof !`)
         break
@@ -353,7 +354,9 @@ function applySpecial(s, pIdx, card) {
         const c = drawCard(s)
         if (c) cards.push(c)
       }
-      log(s, `🍀 ${p.name} joue Chance : pioche ${cards.length} cartes, en garde une`)
+      // Chance agit comme une pioche : elle ne consomme pas le jeu du tour
+      s.playsRemaining += 1
+      log(s, `🍀 ${p.name} joue Chance : pioche ${cards.length} cartes, en garde une en main`)
       s.pending = { type: 'chance', cards }
       return true
     }
@@ -593,10 +596,10 @@ export function gameReducer(prev, action) {
     }
     case 'DIVORCE_VOLUNTARY': {
       if (s.phase !== 'draw' || !p.marriage) return prev
-      toDiscard(s, p.marriage, null)
+      toDiscard(s, p.marriage, s.current)
       p.marriage = null
       if (p.adultery) {
-        toDiscard(s, p.adultery, null)
+        toDiscard(s, p.adultery, s.current)
         p.adultery = null
         log(s, `${p.name} divorce volontairement (adultère défaussé, enfants et flirts conservés) et passe son tour`)
       } else {
@@ -607,7 +610,7 @@ export function gameReducer(prev, action) {
     }
     case 'STOP_ADULTERY': {
       if (!p.adultery) return prev
-      toDiscard(s, p.adultery, null)
+      toDiscard(s, p.adultery, s.current)
       p.adultery = null
       log(s, `${p.name} met fin à son adultère (flirts conservés)`)
       return s
@@ -739,10 +742,11 @@ export function gameReducer(prev, action) {
       const kept = cards.find((c) => c.uid === action.uid)
       if (!kept) return prev
       for (const c of cards) if (c.uid !== kept.uid) toDiscard(s, c, s.current)
+      // la carte gardée rejoint la main : le joueur joue ensuite ce qu'il veut
+      p.hand.push(kept)
       s.pending = null
-      s.forced = kept
-      s.forcedConsumesPlay = false
-      log(s, `🍀 ${p.name} garde une carte et défausse les deux autres`)
+      log(s, `🍀 ${p.name} garde une carte en main et défausse les deux autres`)
+      finishPlay(s)
       return s
     }
     case 'DISCARD_PICK': {

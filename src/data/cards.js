@@ -10,7 +10,7 @@ const uid = () => `c${++uidCounter}`
 // perk: 'app' (permanent) | 'api' (instantané) | null
 export const JOBS = [
   { key: 'serveur', name: 'Serveur', studyReq: 0, salaryLevel: 1, status: 'interim', perk: null, trophy: false, flavor: 'Vous êtes serviable' },
-  { key: 'barman', name: 'Barman', studyReq: 0, salaryLevel: 1, status: 'interim', perk: 'app', trophy: false, flavor: 'Flirts illimités avant le mariage' },
+  { key: 'barmaid', name: 'Barmaid', studyReq: 0, salaryLevel: 1, status: 'interim', perk: 'app', trophy: false, flavor: 'Flirts illimités avant le mariage' },
   { key: 'jardinier', name: 'Jardinier', studyReq: 1, salaryLevel: 1, status: 'interim', perk: null, trophy: false, flavor: 'Vous êtes écolo' },
   { key: 'plombier', name: 'Plombier', studyReq: 1, salaryLevel: 1, status: 'interim', perk: null, trophy: false, flavor: 'Vous êtes bricolo' },
   { key: 'stripteaser', name: 'Stripteaser', studyReq: 0, salaryLevel: 1, status: 'interim', perk: null, trophy: false, flavor: 'Vous êtes chaud bouillant' },
@@ -87,7 +87,7 @@ export const MALUS_DEFS = [
 export const SPECIAL_DEFS = [
   { key: 'anniversaire', name: 'Anniversaire', desc: 'Chaque joueur vous offre un salaire posé (le plus petit)' },
   { key: 'arcenciel', name: 'Arc-en-ciel', desc: "Jouez jusqu'à 3 cartes d'un coup puis repiochez pour revenir à 5" },
-  { key: 'chance', name: 'Chance', desc: 'Piochez 3 cartes, gardez-en une et jouez-la, défaussez les autres' },
+  { key: 'chance', name: 'Chance', desc: 'Piochez 3 cartes, gardez-en une en main, défaussez les deux autres' },
   { key: 'etoile', name: 'Étoile filante', desc: 'Prenez une carte au choix dans la défausse et jouez-la directement' },
   { key: 'heritage', name: 'Héritage', desc: 'Vaut 3 liasses de billets pour vos futurs achats' },
   { key: 'piston', name: 'Piston', desc: 'Posez le métier de votre choix sans les études nécessaires' },

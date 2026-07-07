@@ -90,7 +90,7 @@ function PurchaseModal({ state, dispatch }) {
 // --- Chance : garder 1 des 3 cartes -----------------------------------------
 function ChanceModal({ state, dispatch }) {
   return (
-    <Modal title="🍀 Chance — choisissez la carte à garder (et jouer), les autres sont défaussées" wide>
+    <Modal title="🍀 Chance — choisissez la carte à garder en main, les autres sont défaussées" wide>
       <div className="flex gap-3 flex-wrap justify-center">
         {state.pending.cards.map((c) => (
           <Card key={c.uid} card={c} onClick={() => dispatch({ type: 'CHANCE_PICK', uid: c.uid })} />

@@ -49,9 +49,11 @@ export function canPoseSelf(state, pIdx, card) {
   const p = state.players[pIdx]
   switch (card.type) {
     case 'study': {
-      if (p.job && !hasJob(p, 'medecin') && !hasJob(p, 'chirurgien'))
-        return NO('Un métier bloque les études (démissionnez d’abord)')
-      if (studyLevel(p) + card.levels > 6) return NO('Maximum 6 niveaux d’études')
+      // Médecin/Chirurgien : études continues, même au-delà des 6 cartes de base
+      const continues = hasJob(p, 'medecin') || hasJob(p, 'chirurgien')
+      if (p.job && !continues) return NO('Un métier bloque les études (démissionnez d’abord)')
+      // le plafond porte sur le nombre de CARTES études, pas le nombre de niveaux
+      if (!continues && p.studies.length >= 6) return NO('Maximum 6 cartes études')
       return OK
     }
     case 'job': {
@@ -74,7 +76,7 @@ export function canPoseSelf(state, pIdx, card) {
     }
     case 'flirt': {
       if (p.marriage && !p.adultery) return NO('Interdit de flirter une fois marié (sans Adultère)')
-      const unlimited = p.adultery || (hasJob(p, 'barman') && !p.marriage)
+      const unlimited = p.adultery || (hasJob(p, 'barmaid') && !p.marriage)
       if (!unlimited && p.flirts.length >= 5) return NO('Maximum 5 flirts')
       return OK
     }

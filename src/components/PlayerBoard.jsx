@@ -23,7 +23,7 @@ export default function PlayerBoard({ player, state, compact = false }) {
   return (
     <div className="space-y-1.5">
       <div className={`grid gap-1.5 ${compact ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
-        <Zone title={`📚💼 Vie pro — études ${studyLevel(p)}/6${p.job ? ` · salaire max ${effectiveSalaryLevel(p)}` : ''}`}
+        <Zone title={`📚💼 Vie pro — ${p.studies.length}/6 cartes études (niv. ${studyLevel(p)})${p.job ? ` · salaire max ${effectiveSalaryLevel(p)}` : ''}`}
           empty={!p.studies.length && !p.job && !p.salaries.length ? 'Sans emploi ni diplôme' : null}>
           {p.studies.map((c) => <Card key={c.uid} card={c} small />)}
           {p.job && <Card card={p.job} small />}
