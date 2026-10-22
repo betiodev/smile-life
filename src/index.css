@@ -47,6 +47,7 @@ body {
 }
 .anim-slide-up { animation: slide-up 0.3s ease-out; }
 
+@layer components {
 /* ---------------------------------------------------------------------------
    Cartes — positions mesurées sur le gabarit des cadres (en % du corps de
    carte), textes en unités de conteneur (cqw) pour suivre la taille
@@ -193,6 +194,7 @@ body {
 }
 .sl-card.is-disabled { opacity: 0.5; filter: grayscale(1); }
 .sl-card.is-zoomable:hover { transform: scale(2); z-index: 40; filter: drop-shadow(0 8px 12px rgb(0 0 0 / 0.35)); }
+}
 
 /* coup de malus : secousse + flash rouge sur le plateau de la victime */
 @keyframes hit-flash {
@@ -207,4 +209,21 @@ body {
   .sl-card.is-interactive:hover, .sl-card.is-selected { transform: none; }
   .anim-pop, .anim-shake, .anim-slide-up { animation: none; }
   .anim-hit { animation: hit-flash 0.7s ease-out; }
+}
+
+/* piles du centre */
+.pile-empty {
+  width: 4rem;
+  aspect-ratio: 968 / 1417;
+  border-radius: 0.6rem;
+  border: 2px dashed rgb(0 0 0 / 0.15);
+}
+@media (min-width: 640px) { .pile-empty { width: 84px; } }
+@keyframes pile-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgb(250 204 21 / 0)); }
+  50% { filter: drop-shadow(0 0 7px rgb(250 204 21 / 0.95)); }
+}
+.pile-glow { animation: pile-glow 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pile-glow { animation: none; filter: drop-shadow(0 0 4px rgb(250 204 21 / 0.9)); }
 }

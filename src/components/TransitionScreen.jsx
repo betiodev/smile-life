@@ -1,3 +1,5 @@
+import Card from './Card'
+
 export default function TransitionScreen({ state, dispatch }) {
   const p = state.players[state.current]
   const recent = state.log.slice(-4)
@@ -9,6 +11,13 @@ export default function TransitionScreen({ state, dispatch }) {
           Passez l’écran à <span className="text-pink-500">{p.name}</span>
         </h2>
         <p className="text-gray-500 mt-2">Les autres joueurs ne regardent pas !</p>
+
+        {/* la main reste cachée : dos de cartes */}
+        <div className="flex justify-center mt-5 [&>.sl-card:not(:first-child)]:-ml-8" title={`${p.hand.length} cartes en main`}>
+          {p.hand.map((c, i) => (
+            <Card key={c.uid} card={c} size="sm" faceDown style={{ rotate: `${(i - (p.hand.length - 1) / 2) * 6}deg` }} />
+          ))}
+        </div>
 
         {recent.length > 0 && (
           <div className="mt-5 bg-gray-50 rounded-xl p-3 text-left text-xs text-gray-600 space-y-1">

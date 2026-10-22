@@ -18,7 +18,10 @@ const SIZES = {
   sm: 'w-[76px]',
   md: 'w-28 sm:w-36',
   lg: 'w-44 sm:w-52',
+  pile: 'w-16 sm:w-[84px]',
 }
+// style CSS appliqué (data-size) : la pile se comporte comme une petite carte
+const STYLE_SIZE = { pile: 'sm' }
 
 // titre plus petit quand il est long
 const titleSize = (name) => (name.length <= 11 ? 'is-short' : name.length <= 16 ? '' : name.length <= 20 ? 'is-long' : 'is-xlong')
@@ -117,10 +120,11 @@ function Artwork({ card, cat }) {
 export default function Card({
   card, onClick, selected, disabled, small, size, faceDown, className = '', zoomable = false, style,
 }) {
-  const sz = size ?? (small ? 'sm' : 'md')
+  const sz = STYLE_SIZE[size] ?? size ?? (small ? 'sm' : 'md')
+  const width = SIZES[size ?? sz]
   const interactive = !!onClick && !disabled
   const cls = [
-    'sl-card', SIZES[sz] ?? '', 'shrink-0 select-none',
+    'sl-card', width ?? '', 'shrink-0 select-none',
     interactive ? 'is-interactive' : '',
     selected ? 'is-selected' : '',
     disabled ? 'is-disabled' : '',
