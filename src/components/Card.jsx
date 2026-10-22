@@ -1,118 +1,167 @@
 // ---------------------------------------------------------------------------
-// Rendu d'une carte — bord coloré par type, smiles, icônes et détails
+// Rendu d'une carte — 3 couches : fond teinté, illustration, cadre
+// + titre, smiles et texte d'effet ajoutés par le code
 // ---------------------------------------------------------------------------
+import { useState } from 'react'
+import availableArt from 'virtual:card-art'
+import CardBack from './CardBack'
+import CardIcon from './CardIcons'
+import { frameCategory, artKey, TINTS, categoryLabel, iconKey } from './cardArt'
 
-export const TYPE_STYLE = {
-  study: { border: 'border-blue-400', bg: 'bg-blue-50', text: 'text-blue-800', emoji: '📚', label: 'Études' },
-  job: { border: 'border-violet-500', bg: 'bg-violet-50', text: 'text-violet-800', emoji: '💼', label: 'Métier' },
-  salary: { border: 'border-green-500', bg: 'bg-green-50', text: 'text-green-800', emoji: '💰', label: 'Salaire' },
-  flirt: { border: 'border-pink-400', bg: 'bg-pink-50', text: 'text-pink-700', emoji: '💕', label: 'Flirt' },
-  marriage: { border: 'border-red-400', bg: 'bg-red-50', text: 'text-red-700', emoji: '💒', label: 'Mariage' },
-  adultery: { border: 'border-rose-500', bg: 'bg-rose-50', text: 'text-rose-700', emoji: '😏', label: 'Adultère' },
-  child: { border: 'border-orange-400', bg: 'bg-orange-50', text: 'text-orange-700', emoji: '👶', label: 'Enfant' },
-  malus: { border: 'border-red-900', bg: 'bg-red-100', text: 'text-red-900', emoji: '⚡', label: 'Malus' },
-  special: { border: 'border-amber-400', bg: 'bg-amber-50', text: 'text-amber-800', emoji: '⭐', label: 'Spéciale' },
-  acquisition: { border: 'border-teal-400', bg: 'bg-teal-50', text: 'text-teal-800', emoji: '🏠', label: 'Acquisition' },
-  distinction: { border: 'border-slate-400', bg: 'bg-slate-50', text: 'text-slate-700', emoji: '🏅', label: 'Distinction' },
+const BASE = import.meta.env.BASE_URL
+const frameUrl = (cat) => `${BASE}frames/${cat}_frame.webp`
+const artUrl = (key) => `${BASE}cards/${key}.webp`
+
+// largeur selon la taille (la hauteur suit le ratio du cadre)
+const SIZES = {
+  xs: 'w-11',
+  sm: 'w-[76px]',
+  md: 'w-28 sm:w-36',
+  lg: 'w-44 sm:w-52',
 }
 
-export function cardEmoji(card) {
-  if (card.type === 'flirt') return card.emoji
-  if (card.type === 'acquisition') {
-    if (card.acqType === 'animal') return card.emoji
-    if (card.acqType === 'travel') return '✈️'
-    return '🏠'
-  }
-  return TYPE_STYLE[card.type].emoji
-}
+// titre plus petit quand il est long
+const titleSize = (name) => (name.length <= 11 ? 'is-short' : name.length <= 16 ? '' : name.length <= 20 ? 'is-long' : 'is-xlong')
 
-const liasses = (n) => '💵'.repeat(n)
+const STATUS = { fonctionnaire: 'Fonctionnaire', interim: 'Intérimaire' }
+const PERK = { app: 'Avantage permanent', api: 'Avantage instantané' }
 
-function CardDetails({ card }) {
+function Effect({ card }) {
   switch (card.type) {
     case 'study':
-      return <div className="text-[10px] leading-tight">Niveau{card.levels > 1 ? 'x' : ''} : {card.levels} 🎓{card.levels === 2 ? '🎓' : ''}</div>
+      return <p className="sl-strong">Niveau d’études +{card.levels}</p>
     case 'job':
       return (
-        <div className="text-[10px] leading-tight space-y-0.5">
-          <div className="flex justify-between">
-            <span title="Niveau d'études requis">🎓 {card.isGrandProf ? 'Prof' : card.studyReq}</span>
-            <span title="Niveau de salaire max">{liasses(card.salaryLevel)}</span>
-          </div>
-          {card.trophy && <div title="Éligible au Grand Prix d'Excellence">🏆 Grand Prix</div>}
-          {card.status && <div className="font-bold">{card.status === 'fonctionnaire' ? '🏛️ Fonctionnaire' : '⏳ Intérimaire'}</div>}
-          {card.perk && <div className="uppercase font-bold text-[9px]">{card.perk === 'app' ? 'Avantage permanent' : 'Avantage instantané'}</div>}
-          <div className="italic opacity-80">{card.flavor}</div>
-        </div>
+        <>
+          <p className="sl-strong">
+            {card.isGrandProf ? 'Promotion' : `Études ${card.studyReq}`} · Salaire max {card.salaryLevel}
+          </p>
+          {(card.status || card.perk || card.trophy) && (
+            <p className="sl-tags">
+              {card.status && <span>{STATUS[card.status]}</span>}
+              {card.perk && <span>{PERK[card.perk]}</span>}
+              {card.trophy && <span>Grand Prix</span>}
+            </p>
+          )}
+          <p className="sl-flavor">{card.flavor}</p>
+        </>
       )
     case 'salary':
-      return <div className="text-sm">{liasses(card.level)}</div>
+      return (
+        <>
+          <p className="sl-strong">Niveau {card.level}</p>
+          <p className="sl-bills" aria-label={`${card.level} liasse(s)`}>
+            {Array.from({ length: card.level }, (_, i) => <span key={i} />)}
+          </p>
+        </>
+      )
     case 'flirt':
-      return card.allowsChild ? <div className="text-[10px]">👶 Permet 1 enfant</div> : null
+      return card.allowsChild ? <p className="sl-strong">Permet 1 enfant</p> : null
     case 'child':
-      return <div className="text-[10px] italic opacity-80 leading-tight">{card.desc}</div>
+      return <p className="sl-flavor">{card.desc}</p>
     case 'malus':
       return (
-        <div className="text-[10px] leading-tight space-y-0.5">
-          <div className="font-bold">Cible : {card.cond}</div>
-          <div>{card.desc}</div>
-        </div>
+        <>
+          <p className="sl-strong">Cible : {card.cond}</p>
+          <p>{card.desc}</p>
+        </>
       )
     case 'special':
     case 'distinction':
-      return <div className="text-[10px] leading-tight">{card.desc}</div>
+      return <p>{card.desc}</p>
     case 'acquisition':
       return (
-        <div className="text-[10px] leading-tight">
-          {card.cost > 0 ? <span>Coût : {card.cost} liasses{card.acqType === 'house' ? ' (÷2 si marié)' : ''}</span> : <span>Gratuit</span>}
-          {card.key === 'licorne' && <div>Vaut 6 😄 avec Arc-en-ciel + Étoile filante</div>}
-        </div>
+        <>
+          <p className="sl-strong">
+            {card.cost > 0 ? `Coût : ${card.cost} liasses${card.acqType === 'house' ? ' (÷2 si marié)' : ''}` : 'Gratuit'}
+          </p>
+          {card.key === 'licorne' && <p>Vaut 6 smiles avec Arc-en-ciel et Étoile filante</p>}
+        </>
       )
     default:
       return null
   }
 }
 
-export default function Card({ card, onClick, selected, disabled, small, faceDown, className = '' }) {
-  if (faceDown) {
-    return (
-      <div className={`${small ? 'w-12 h-16' : 'w-24 h-36'} rounded-lg border-2 border-indigo-300 bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow ${className}`}>
-        <span className={small ? 'text-lg' : 'text-3xl'}>😄</span>
-      </div>
-    )
-  }
-  const st = TYPE_STYLE[card.type]
-  if (small) {
-    return (
-      <div
-        onClick={onClick}
-        title={`${card.name} — ${card.smiles} 😄`}
-        className={`w-16 min-h-16 rounded-md border-2 ${st.border} ${st.bg} p-1 text-center shadow-sm shrink-0 ${onClick ? 'cursor-pointer hover:scale-105 transition-transform' : ''} ${className}`}
-      >
-        <div className="text-base leading-none">{cardEmoji(card)}</div>
-        <div className={`text-[9px] font-bold leading-tight ${st.text}`}>{card.name}</div>
-        <div className="text-[9px]">😄{card.smiles}{card.type === 'salary' ? ` ${liasses(card.level)}` : ''}</div>
-      </div>
-    )
+// résumé d'une ligne pour les petites cartes (plateau)
+function shortInfo(card) {
+  if (card.type === 'salary') return `Niveau ${card.level}`
+  if (card.type === 'study') return `+${card.levels}`
+  if (card.type === 'job') return `Salaire ${card.salaryLevel}`
+  if (card.type === 'acquisition' && card.cost > 0) return `${card.cost} liasses`
+  return categoryLabel(card)
+}
+
+// longueur approximative du texte d'effet → taille de police
+function effectLength(card) {
+  let n = [card.flavor, card.desc, card.cond].filter(Boolean).join(' ').length
+  if (card.type === 'job') n += 25 + (card.status ? 13 : 0) + (card.perk ? 19 : 0) + (card.trophy ? 10 : 0)
+  if (card.key === 'licorne') n += 50
+  return n
+}
+const textSize = (n) => (n > 85 ? 'is-xlong' : n > 50 ? 'is-long' : '')
+
+function Artwork({ card, cat }) {
+  const key = artKey(card)
+  const [failed, setFailed] = useState(false)
+  if (availableArt.has(key) && !failed) {
+    return <img className="sl-card__img" src={artUrl(key)} alt="" draggable="false" loading="lazy" onError={() => setFailed(true)} />
   }
   return (
-    <div
-      onClick={disabled ? undefined : onClick}
-      className={`relative w-28 sm:w-32 rounded-xl border-[3px] ${st.border} ${st.bg} p-2 shadow-md shrink-0 select-none transition-all
-        ${onClick && !disabled ? 'cursor-pointer hover:-translate-y-1 hover:shadow-lg' : ''}
-        ${selected ? 'ring-4 ring-yellow-400 -translate-y-2' : ''}
-        ${disabled ? 'opacity-50 grayscale' : ''} ${className}`}
-    >
-      <div className="flex items-start justify-between">
-        <span className="text-xs font-black bg-yellow-300 rounded-full px-1.5 py-0.5 shadow-sm" title="Smiles">
-          😄{card.smiles}
-        </span>
-        <span className="text-xl">{cardEmoji(card)}</span>
+    <div className="sl-card__placeholder" style={{ color: TINTS[cat].accent }}>
+      <CardIcon name={iconKey(card)} />
+    </div>
+  )
+}
+
+export default function Card({
+  card, onClick, selected, disabled, small, size, faceDown, className = '', zoomable = false, style,
+}) {
+  const sz = size ?? (small ? 'sm' : 'md')
+  const interactive = !!onClick && !disabled
+  const cls = [
+    'sl-card', SIZES[sz] ?? '', 'shrink-0 select-none',
+    interactive ? 'is-interactive' : '',
+    selected ? 'is-selected' : '',
+    disabled ? 'is-disabled' : '',
+    zoomable ? 'is-zoomable' : '',
+    className,
+  ].join(' ')
+
+  if (faceDown) {
+    return (
+      <div className={cls} data-size={sz} data-card-uid={card?.uid} onClick={interactive ? onClick : undefined} style={style}>
+        <CardBack />
       </div>
-      <div className={`font-extrabold text-xs mt-1 leading-tight ${st.text}`}>{card.name}</div>
-      <div className={`text-[9px] uppercase tracking-wide opacity-60 ${st.text}`}>{st.label}</div>
-      <div className={`mt-1 ${st.text}`}>
-        <CardDetails card={card} />
+    )
+  }
+
+  const cat = frameCategory(card)
+  const tint = TINTS[cat]
+  const long = effectLength(card)
+  return (
+    <div
+      className={cls}
+      data-size={sz}
+      data-card-uid={card.uid}
+      onClick={interactive ? onClick : undefined}
+      title={sz === 'md' || sz === 'lg' ? undefined : `${card.name} — ${card.smiles} smile${card.smiles > 1 ? 's' : ''}`}
+      style={{ '--tint-light': tint.light, '--tint-deep': tint.deep, '--accent': tint.accent, ...style }}
+    >
+      <div className="sl-card__tint" />
+      <div className="sl-card__art"><Artwork key={card.uid} card={card} cat={cat} /></div>
+      <img className="sl-card__frame" src={frameUrl(cat)} alt="" draggable="false" />
+      <div className={`sl-card__title ${titleSize(card.name)}`}><span>{card.name}</span></div>
+      <div className="sl-card__badge" aria-label={`${card.smiles} smiles`}>{card.smiles}</div>
+      <div className={`sl-card__text ${textSize(long)}`}>
+        {sz === 'md' || sz === 'lg' ? (
+          <>
+            {long <= 50 && <p className="sl-label">{categoryLabel(card)}</p>}
+            <Effect card={card} />
+          </>
+        ) : sz === 'sm' ? (
+          <p className="sl-short">{shortInfo(card)}</p>
+        ) : null}
       </div>
     </div>
   )

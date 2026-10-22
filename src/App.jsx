@@ -4,9 +4,11 @@ import SetupScreen from './components/SetupScreen'
 import TransitionScreen from './components/TransitionScreen'
 import GameScreen from './components/GameScreen'
 import GameOverScreen from './components/GameOverScreen'
+import CardGallery from './components/CardGallery'
 
 export default function App() {
   const [state, dispatch] = useReducer(gameReducer, initialState)
+  if (window.location.hash === '#cartes') return <CardGallery />
 
   switch (state.screen) {
     case 'setup':
