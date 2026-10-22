@@ -1,3 +1,8 @@
 node_modules/
 dist/
 *.log
+
+# WebP générés à partir des PNG (npm run images)
+public/frames/*.webp
+public/cards/*.webp
+.DS_Store
