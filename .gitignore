@@ -6,3 +6,5 @@ dist/
 public/frames/*.webp
 public/cards/*.webp
 .DS_Store
+public/.DS_Store
+/.claude
