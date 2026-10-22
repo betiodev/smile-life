@@ -2,11 +2,12 @@
 // Rendu d'une carte — 3 couches : fond teinté, illustration, cadre
 // + titre, smiles et texte d'effet ajoutés par le code
 // ---------------------------------------------------------------------------
-import { useState } from 'react'
+import { useState, useLayoutEffect, useRef } from 'react'
 import availableArt from 'virtual:card-art'
 import CardBack from './CardBack'
 import CardIcon from './CardIcons'
 import { frameCategory, artKey, TINTS, categoryLabel, iconKey } from './cardArt'
+import { LaurelBadge, JobText } from './CardJob'
 
 const BASE = import.meta.env.BASE_URL
 const frameUrl = (cat) => `${BASE}frames/${cat}_frame.webp`
@@ -23,32 +24,32 @@ const SIZES = {
 // style CSS appliqué (data-size) : la pile se comporte comme une petite carte
 const STYLE_SIZE = { pile: 'sm' }
 
-// titre plus petit quand il est long
-const titleSize = (name) => (name.length <= 11 ? 'is-short' : name.length <= 16 ? '' : name.length <= 20 ? 'is-long' : 'is-xlong')
-
-const STATUS = { fonctionnaire: 'Fonctionnaire', interim: 'Intérimaire' }
-const PERK = { app: 'Avantage permanent', api: 'Avantage instantané' }
+// Titre : taille maximale, réduite (mesure réelle) s'il ne tient pas dans la
+// partie visible du bandeau. Tout est en cqw, donc le rapport ne dépend pas
+// de la taille de la carte : une seule mesure suffit.
+function FitTitle({ text, max, min }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = ref.current
+      if (!el) return
+      el.style.fontSize = `${max}cqw`
+      const box = el.parentElement.clientWidth
+      if (!box || el.scrollWidth <= box) return
+      el.style.fontSize = `${Math.max(min, (max * box) / el.scrollWidth)}cqw`
+    }
+    fit()
+    document.fonts?.ready.then(fit)
+  }, [text, max, min])
+  return <span ref={ref} style={{ fontSize: `${max}cqw` }}>{text}</span>
+}
 
 function Effect({ card }) {
   switch (card.type) {
     case 'study':
       return <p className="sl-strong">Niveau d’études +{card.levels}</p>
     case 'job':
-      return (
-        <>
-          <p className="sl-strong">
-            {card.isGrandProf ? 'Promotion' : `Études ${card.studyReq}`} · Salaire max {card.salaryLevel}
-          </p>
-          {(card.status || card.perk || card.trophy) && (
-            <p className="sl-tags">
-              {card.status && <span>{STATUS[card.status]}</span>}
-              {card.perk && <span>{PERK[card.perk]}</span>}
-              {card.trophy && <span>Grand Prix</span>}
-            </p>
-          )}
-          <p className="sl-flavor">{card.flavor}</p>
-        </>
-      )
+      return <JobText card={card} />
     case 'salary':
       return (
         <>
@@ -97,8 +98,8 @@ function shortInfo(card) {
 
 // longueur approximative du texte d'effet → taille de police
 function effectLength(card) {
+  if (card.type === 'job') return 0 // mise en page dédiée (CardJob)
   let n = [card.flavor, card.desc, card.cond].filter(Boolean).join(' ').length
-  if (card.type === 'job') n += 25 + (card.status ? 13 : 0) + (card.perk ? 19 : 0) + (card.trophy ? 10 : 0)
   if (card.key === 'licorne') n += 50
   return n
 }
@@ -143,6 +144,8 @@ export default function Card({
   const cat = frameCategory(card)
   const tint = TINTS[cat]
   const long = effectLength(card)
+  const big = sz === 'md' || sz === 'lg'
+  const laurel = big && card.type === 'job'
   return (
     <div
       className={cls}
@@ -155,12 +158,15 @@ export default function Card({
       <div className="sl-card__tint" />
       <div className="sl-card__art"><Artwork key={card.uid} card={card} cat={cat} /></div>
       <img className="sl-card__frame" src={frameUrl(cat)} alt="" draggable="false" />
-      <div className={`sl-card__title ${titleSize(card.name)}`}><span>{card.name}</span></div>
-      <div className="sl-card__badge" aria-label={`${card.smiles} smiles`}>{card.smiles}</div>
+      {laurel && <LaurelBadge card={card} />}
+      <div className={`sl-card__title ${laurel ? 'has-laurel' : ''}`}>
+        <FitTitle text={card.name} max={sz === 'sm' ? 9.5 : 8} min={sz === 'sm' ? 5 : 4.6} />
+      </div>
+      <div className="sl-card__badge" aria-label={`${card.smiles} smiles`}><span>{card.smiles}</span></div>
       <div className={`sl-card__text ${textSize(long)}`}>
-        {sz === 'md' || sz === 'lg' ? (
+        {big ? (
           <>
-            {long <= 50 && <p className="sl-label">{categoryLabel(card)}</p>}
+            {card.type !== 'job' && long <= 50 && <p className="sl-label">{categoryLabel(card)}</p>}
             <Effect card={card} />
           </>
         ) : sz === 'sm' ? (

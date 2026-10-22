@@ -98,11 +98,13 @@ body {
   pointer-events: none;
 }
 .sl-card__title {
+  /* partie visible du bandeau (x 90→782, y 140→240 sur le gabarit),
+     sans la zone du badge smile */
   position: absolute;
-  left: 5.2%;
+  left: 6.1%;
   right: 22.4%;
-  top: 5.6%;
-  height: 8.4%;
+  top: 6.42%;
+  height: 7.06%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -112,10 +114,15 @@ body {
   line-height: 1;
   letter-spacing: -0.01em;
 }
-.sl-card__title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sl-card__title.is-short { font-size: 8cqw; }
-.sl-card__title.is-long { font-size: 6cqw; }
-.sl-card__title.is-xlong { font-size: 5.2cqw; }
+.sl-card__title span {
+  /* pas d'overflow caché : la boîte rognée couperait les jambages (g, p…) ;
+     FitTitle réduit la police pour que le titre tienne */
+  white-space: nowrap;
+  /* centrage optique : la boîte du texte = hauteur des majuscules */
+  text-box: trim-both cap alphabetic;
+}
+/* Métier : la couronne de laurier occupe la gauche du bandeau (x 246→782) */
+.sl-card__title.has-laurel { left: 22.2%; }
 .sl-card__badge {
   position: absolute;
   left: 88.74%;
@@ -130,13 +137,15 @@ body {
   font-size: 10cqw;
   line-height: 1;
 }
+.sl-card__badge span { text-box: trim-both cap alphabetic; }
 .sl-card__text {
+  /* intérieur de l'encadré clair (x 80→942, y 1162→1402 sur le gabarit) */
   position: absolute;
-  left: 3.9%;
-  right: 4.5%;
-  top: 77.9%;
-  bottom: 3.8%;
-  padding: 1cqw 3cqw;
+  left: 5.06%;
+  right: 5.89%;
+  top: 78.55%;
+  bottom: 4.52%;
+  padding: 2cqw 3cqw;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -149,7 +158,7 @@ body {
 }
 .sl-card__text.is-long { font-size: 5.1cqw; }
 .sl-card__text.is-xlong { font-size: 4.6cqw; gap: 0.6cqw; }
-.sl-card__text p { margin: 0; }
+.sl-card__text p { margin: 0; text-box: trim-both cap alphabetic; }
 .sl-label {
   font-size: 0.78em;
   font-weight: 900;
@@ -176,10 +185,29 @@ body {
   background: var(--tint-deep);
   border: 0.6cqw solid var(--accent);
 }
+.sl-laurel {
+  position: absolute;
+  left: 10.85%;
+  top: 7.69%;
+  width: 21.5cqw;
+  height: 21.5cqw;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0.4cqw 0.4cqw rgb(0 0 0 / 0.25));
+}
+.sl-laurel svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sl-laurel__num { position: relative; font-weight: 900; font-size: 9.5cqw; line-height: 1; text-box: trim-both cap alphabetic; }
+.sl-laurel__icon { position: relative; width: 9.5cqw; color: #2c2c2a; }
+.sl-job { display: flex; flex-direction: column; align-items: stretch; gap: 2cqw; width: 100%; }
+.sl-job .sl-tags span { font-size: 4.1cqw; padding: 0.8cqw 2cqw; }
+.sl-job__row { display: grid; grid-template-columns: 17cqw 1fr 17cqw; align-items: center; gap: 2cqw; }
+.sl-job .sl-flavor { font-size: 5.2cqw; line-height: 1.15; }
+.sl-job .sl-flavor.is-long { font-size: 4.7cqw; }
+.sl-billpile { position: absolute; right: 5.5cqw; bottom: 5.1cqw; width: 12cqw; height: 6.4cqw; }
+.sl-bill { position: absolute; width: 12cqw; height: auto; filter: drop-shadow(0 0.3cqw 0.2cqw rgb(0 0 0 / 0.25)); }
 .sl-short { font-size: 11cqw; font-weight: 900; color: var(--accent); white-space: nowrap; }
-.sl-card[data-size="sm"] .sl-card__title { font-size: 9.5cqw; left: 4.6%; right: 21.6%; }
-.sl-card[data-size="sm"] .sl-card__title.is-long { font-size: 8cqw; }
-.sl-card[data-size="sm"] .sl-card__title.is-xlong { font-size: 7cqw; }
 .sl-card[data-size="sm"] .sl-card__badge { font-size: 12cqw; }
 .sl-card[data-size="xs"] .sl-card__title { display: none; }
 .sl-card[data-size="xs"] .sl-card__badge { font-size: 13cqw; }
