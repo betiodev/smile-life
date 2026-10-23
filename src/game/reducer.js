@@ -11,9 +11,10 @@ import {
 
 // --- helpers ---------------------------------------------------------------
 
-function makePlayer(name) {
+function makePlayer(name, color = null) {
   return {
     name,
+    color,              // couleur choisie dans le salon (affichage seulement)
     hand: [],
     studies: [],
     job: null,
@@ -516,7 +517,7 @@ export function gameReducer(prev, action) {
   if (action.type === 'START_GAME') {
     const s = {
       screen: 'transition',
-      players: action.names.map(makePlayer),
+      players: action.names.map((n, i) => makePlayer(n, action.colors?.[i] ?? null)),
       deck: shuffle(buildDeck()),
       discard: [],
       removed: [],

@@ -1,0 +1,90 @@
+// ---------------------------------------------------------------------------
+// Écran 2 — « La table » : un panneau par joueur (2 colonnes), avec ses piles
+// de cartes aussi grandes que le panneau le permet.
+// Mode cible (malus) : même vue, seuls les joueurs attaquables gardent leur
+// couleur et se touchent pour lancer le malus.
+// ---------------------------------------------------------------------------
+import PlayedStacks from './PlayedStacks'
+import useElementSize from './useElementSize'
+import { playerColor } from './theme'
+import { computeScore } from '../game/scoring'
+import { canPlayMalus } from '../game/rules'
+
+function PlayerPanel({ game, player, index, target }) {
+  const { state, hit } = game
+  const [ref, { height }] = useElementSize()
+  const isCurrent = !target && index === state.current
+  // target : null (vue normale) ou { ok, reason, onPick }
+  const pickable = target?.ok
+  const greyed = target && !target.ok
+  const cls = [
+    'table-panel',
+    isCurrent ? 'is-current' : '',
+    pickable ? 'is-target' : '',
+    greyed ? 'is-greyed' : '',
+    hit?.idx === index ? 'anim-hit' : '',
+  ].join(' ')
+  return (
+    <div
+      data-board={index}
+      data-snap
+      className={cls}
+      style={{ background: playerColor(player, index) }}
+      onClick={pickable ? target.onPick : undefined}
+      role={pickable ? 'button' : undefined}
+      aria-label={pickable ? `Attaquer ${player.name}` : undefined}
+    >
+      <div className="ui-zoom flex items-center gap-2 min-w-0 shrink-0 px-1">
+        <span className="font-title text-base font-semibold truncate">{player.name}</span>
+        {player.skipTurns > 0 && <span className="text-[11px] font-bold opacity-85">⏭️×{player.skipTurns}</span>}
+        {greyed
+          ? <span className="text-[11px] font-bold opacity-90 truncate">{target.reason}</span>
+          : <span className="text-[11px] font-bold opacity-70 whitespace-nowrap">{player.hand.length} en main</span>}
+        {pickable
+          ? <span className="ml-auto shrink-0 rounded-full bg-[#FFC93C] text-[#1F2228] px-2 font-bold text-xs">⚡ Viser</span>
+          : <span className="ml-auto shrink-0 rounded-full bg-black/25 px-2 font-title font-semibold text-sm">😄 {computeScore(player).total}</span>}
+      </div>
+      <div ref={ref} className="flex-1 min-h-0 flex gap-2 items-center overflow-x-auto overflow-y-hidden thin-scroll px-1">
+        {height > 0 && <PlayedStacks player={player} state={state} cardHeight={height - 10} />}
+      </div>
+    </div>
+  )
+}
+
+// malus : la vue de la table sert à choisir la cible (onBack = annuler)
+export default function TableView({ game, onBack, malus = null }) {
+  const { state, viewer, act, clearSelection } = game
+  // la table ne montre que les adversaires : mes cartes sont déjà sur « Ma vue »
+  const others = state.players.map((q, i) => ({ q, i })).filter(({ i }) => i !== viewer)
+  const n = others.length
+  const current = state.players[state.current]
+  const targetFor = (i) => {
+    if (!malus) return null
+    const check = canPlayMalus(state, state.current, malus, i)
+    return {
+      ...check,
+      onPick: () => { act({ type: 'PLAY_MALUS', uid: malus.uid, target: i }); clearSelection() },
+    }
+  }
+  return (
+    <div className="table-view">
+      <div className="ui-zoom flex items-center gap-3 h-10 shrink-0">
+        <button type="button" onClick={onBack} className="rounded-full bg-[#FFC93C] text-[#1F2228] font-bold text-sm px-3 py-1.5 shrink-0">
+          {malus ? '← Retour' : '← Ma main'}
+        </button>
+        <h1 className="font-title text-xl font-semibold truncate">
+          {malus ? `⚡ ${malus.name} : sur qui ?` : 'La table'}
+        </h1>
+        {!malus && (
+          <span className="ml-auto text-sm font-bold flex items-center gap-1.5 min-w-0">
+            <span className="w-3 h-3 rounded-full shrink-0" style={{ background: playerColor(current, state.current) }} />
+            <span className="truncate">{state.current === viewer ? 'C’est ton tour' : `Tour de ${current.name}`}</span>
+          </span>
+        )}
+      </div>
+      <div className={`flex-1 min-h-0 grid gap-2 ${n > 1 ? 'grid-cols-2' : 'grid-cols-1'} ${n > 2 ? 'grid-rows-2' : 'grid-rows-1'}`}>
+        {others.map(({ q, i }) => <PlayerPanel key={i} game={game} player={q} index={i} target={targetFor(i)} />)}
+      </div>
+    </div>
+  )
+}

@@ -145,7 +145,7 @@ export default function Card({
   const tint = TINTS[cat]
   const long = effectLength(card)
   const big = sz === 'md' || sz === 'lg'
-  const laurel = big && card.type === 'job'
+  const laurel = card.type === 'job' // à toutes les tailles (main, plateaux, table)
   return (
     <div
       className={cls}

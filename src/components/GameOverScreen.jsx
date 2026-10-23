@@ -27,7 +27,7 @@ export default function GameOverScreen({ state, dispatch }) {
   return (
     <div className="min-h-screen p-4 flex items-center justify-center">
       <Confetti />
-      <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-3xl anim-slide-up">
+      <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-6 sm:p-8 w-full max-w-3xl anim-slide-up text-gray-800">
         <h1 className="text-4xl font-black text-center bg-gradient-to-r from-pink-500 to-amber-500 bg-clip-text text-transparent">
           🏁 Fin de partie !
         </h1>

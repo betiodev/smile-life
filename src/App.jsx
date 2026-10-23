@@ -29,6 +29,30 @@ export default function App() {
 
   if (window.location.hash === '#cartes') return <CardGallery />
 
+  return (
+    <>
+      <Screen state={state} dispatch={dispatch} hold={hold} release={release} />
+      {state.screen !== 'setup' && <RotateOverlay />}
+    </>
+  )
+}
+
+// téléphone tenu en portrait : le jeu se joue en paysage
+function RotateOverlay() {
+  return (
+    <div className="rotate-overlay" role="alert">
+      <svg viewBox="0 0 64 64" className="w-20 h-20" fill="none" stroke="#FFC93C" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="22" y="8" width="20" height="34" rx="4" />
+        <path d="M30 37h4" />
+        <path d="M10 46a22 22 0 0 0 28 12" />
+        <path d="M33 53l5 5-6 3" />
+      </svg>
+      Tourne ton téléphone
+    </div>
+  )
+}
+
+function Screen({ state, dispatch, hold, release }) {
   if (hold && (state.screen === 'transition' || state.screen === 'gameover')) {
     return <GameScreen state={state} dispatch={dispatch} viewer={hold.viewer} locked onSettled={release} />
   }

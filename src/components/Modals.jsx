@@ -9,7 +9,7 @@ import { isPlayableFromDiscard, canPlayMalus, hasJob, houseCost, validatePayment
 function Modal({ title, children, wide }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-3">
-      <div className={`bg-white rounded-2xl shadow-2xl p-5 w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[85vh] overflow-y-auto anim-slide-up`}>
+      <div className={`bg-white text-gray-800 rounded-2xl shadow-2xl p-5 w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[85vh] overflow-y-auto anim-slide-up`}>
         <h3 className="text-lg font-black text-gray-800 mb-3">{title}</h3>
         {children}
       </div>
