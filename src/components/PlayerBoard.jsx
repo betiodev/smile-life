@@ -34,7 +34,7 @@ export default function PlayerBoard({ player, state, compact = false }) {
           {p.studies.map((c) => show({ card: c }))}
           {p.job && show({ card: p.job })}
           {p.salaries.map((s) => (
-            show({ card: s.card, className: s.invested ? 'opacity-40 saturate-50' : '' })
+            show({ card: s.card })
           ))}
         </Zone>
 
@@ -59,7 +59,7 @@ export default function PlayerBoard({ player, state, compact = false }) {
         <Zone compact={compact} title={compact ? 'Distinctions · malus' : '🏅⭐⚡ Distinctions · Spéciales · Malus'}
           empty={!p.distinctions.length && !p.specials.length && !p.malusKept.length && !casinoHere ? (compact ? '—' : 'Rien à signaler') : null}>
           {p.distinctions.map((d) => (
-            show({ card: d.card, className: d.active ? '' : 'opacity-40 saturate-50' })
+            show({ card: d.card })
           ))}
           {p.specials.map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
           {p.malusKept.map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}

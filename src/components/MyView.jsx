@@ -131,7 +131,7 @@ function TopBar({ game }) {
 // ---- centre : mes cartes posées ------------------------------------------------
 function MyPlayed({ game }) {
   const { state, viewer, p, hit, onZoom } = game
-  const [ref, { height }] = useElementSize()
+  const [ref, { width, height }] = useElementSize()
   return (
     <div
       data-board={viewer}
@@ -139,8 +139,8 @@ function MyPlayed({ game }) {
       className={`played-panel ${hit?.idx === viewer ? 'anim-hit' : ''}`}
       style={{ background: playerColor(p, viewer) }}
     >
-      <div ref={ref} className="h-full flex gap-2 items-center overflow-x-auto overflow-y-hidden thin-scroll px-2">
-        {height > 0 && <PlayedStacks player={p} state={state} cardHeight={height - 14} onZoom={onZoom} hiddenUid={game.boardHiddenUid} />}
+      <div ref={ref} className="h-full flex flex-wrap gap-2 items-center content-center overflow-auto thin-scroll px-2">
+        {height > 0 && <PlayedStacks player={p} state={state} boxWidth={width - 16} boxHeight={height - 14} onZoom={onZoom} hiddenUid={game.boardHiddenUid} />}
       </div>
     </div>
   )

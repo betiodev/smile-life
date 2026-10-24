@@ -51,12 +51,25 @@ function details(card) {
   return out
 }
 
+// « 2 salaires + Héritage »
+function paidLabel(cards) {
+  const n = cards.filter((c) => c.type === 'salary').length
+  const parts = n ? [`${n} salaire${n > 1 ? 's' : ''}`] : []
+  if (cards.some((c) => c.key === 'heritage')) parts.push('Héritage')
+  return parts.join(' + ')
+}
+
 // cards : la pile touchée (on peut passer d'une carte à l'autre)
 // hand : null (lecture seule) ou { gate, onSwipe(dir, rect), onHint, hint, from }
+// extras : { under: uid → salaires/Héritage posés sous l'acquisition, notes: uid → état }
 // onClose(rect) : rect = position de la carte au moment de fermer
-export default function CardZoom({ cards, index = cards.length - 1, hand = null, onClose }) {
+export default function CardZoom({ cards, index = cards.length - 1, hand = null, extras = null, onClose }) {
   const [i, setI] = useState(index)
-  const card = cards[i] ?? cards[cards.length - 1]
+  const [sub, setSub] = useState(null) // carte sous l'acquisition, montrée à sa place
+  const base = cards[i] ?? cards[cards.length - 1]
+  const card = sub ?? base
+  const under = extras?.under?.[base.uid] ?? []
+  const note = extras?.notes?.[card.uid]
   const cardBox = useRef(null)
   const close = () => onClose(cardRect(cardBox.current?.querySelector('.sl-card')))
 
@@ -102,15 +115,29 @@ export default function CardZoom({ cards, index = cards.length - 1, hand = null,
         <div className="self-start rounded-full bg-[#FFC93C] text-[#1F2228] px-3 py-0.5 font-title font-semibold">
           😄 {card.smiles} smile{card.smiles > 1 ? 's' : ''}
         </div>
+        {note && <div className="self-start rounded-lg bg-[#1F2228] px-2.5 py-1 text-xs font-bold leading-snug">{note}</div>}
         {lines.map((l, k) => <p key={k} className="text-sm leading-snug">{l}</p>)}
         {cards.length > 1 && (
           <div className="flex gap-1 flex-wrap mt-1">
             {cards.map((c, k) => (
-              <button key={c.uid} type="button" onClick={(e) => { e.stopPropagation(); setI(k) }}
-                className={`rounded-md ${k === i ? 'ring-2 ring-[#FFC93C]' : 'opacity-70'}`} aria-label={c.name}>
+              <button key={c.uid} type="button" onClick={(e) => { e.stopPropagation(); setI(k); setSub(null) }}
+                className={`rounded-md ${k === i && !sub ? 'ring-2 ring-[#FFC93C]' : 'opacity-70'}`} aria-label={c.name}>
                 <Card card={c} size="xs" />
               </button>
             ))}
+          </div>
+        )}
+        {under.length > 0 && (
+          <div className="mt-1">
+            <p className="text-[11px] font-bold opacity-70">Payée avec {paidLabel(under)}</p>
+            <div className="flex gap-1 flex-wrap mt-1">
+              {under.map((c) => (
+                <button key={c.uid} type="button" onClick={(e) => { e.stopPropagation(); setSub(sub?.uid === c.uid ? null : c) }}
+                  className={`rounded-md ${sub?.uid === c.uid ? 'ring-2 ring-[#FFC93C]' : ''}`} aria-label={c.name}>
+                  <Card card={c} size="xs" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {hand && <p className="text-[11px] font-bold mt-1"><span className="text-[#E8836F]">← Défausser</span> · <span className="text-[#8FCB6B]">Jouer →</span></p>}

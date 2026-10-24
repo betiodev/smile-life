@@ -3,7 +3,10 @@ import { gameReducer } from '../src/game/reducer.js'
 import {
   canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
   flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
+  paidSalaries, spentSalaries, availableLiasses, effectiveSalaryLevel,
+  unusedHeritage, paidCards, spentCards,
 } from '../src/game/rules.js'
+import { computeScore } from '../src/game/scoring.js'
 import { buildDeck } from '../src/data/cards.js'
 
 const deck = buildDeck()
@@ -143,6 +146,65 @@ function check(label, cond) {
   check('Reducer : les 2 salaires choisis sont investis, le 3e non',
     okBuy.players[0].salaries.filter((x) => x.invested).length === 2 &&
     !okBuy.players[0].salaries.find((x) => x.card.uid === sal1.uid).invested)
+
+  // les salaires payés sont rattachés à l'acquisition (posés sous elle)
+  const buyer = okBuy.players[0]
+  check('Achat : les salaires payés sont liés à l’acquisition',
+    paidSalaries(buyer, travel.uid).map((c) => c.uid).sort().join() === [sal2[0].uid, sal2[1].uid].sort().join())
+  check('Achat : aucun salaire dépensé orphelin', spentSalaries(buyer).length === 0)
+  // acquisition retirée du jeu : ses salaires restent au joueur, retournés
+  const score = computeScore(buyer).total
+  const sans = { ...buyer, acquisitions: buyer.acquisitions.filter((c) => c.uid !== travel.uid) }
+  check('Acquisition perdue : ses salaires deviennent « dépensés »', spentSalaries(sans).length === 2)
+  check('Salaires dépensés : smiles conservés', computeScore(sans).total === score - travel.smiles)
+  check('Salaires dépensés : inutilisables pour payer', availableLiasses(sans) === 1)
+}
+
+// --- Héritage : visible jusqu'à l'achat, puis sous l'acquisition --------------
+{
+  let s = freshState()
+  s.screen = 'game'
+  s.phase = 'play'
+  const her = find((c) => c.key === 'heritage')
+  const travel = find((c) => c.acqType === 'travel')
+  s.players[0].hand[0] = her
+  s = gameReducer(s, { type: 'PLAY_SELF', uid: her.uid })
+  const p0 = s.players[0]
+  check('Héritage posé : 3 liasses, carte visible (non utilisée)', p0.heritage === 3 && unusedHeritage(p0).length === 1)
+  s.current = 0
+  s.phase = 'play'
+  s.playsRemaining = 1
+  s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
+  const buy = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [], useHeritage: true })
+  const b0 = buy.players[0]
+  check('Achat avec l’Héritage : il passe sous l’acquisition', b0.heritage === 0 && unusedHeritage(b0).length === 0 &&
+    paidCards(b0, travel.uid).some((c) => c.uid === her.uid))
+  check('Héritage : reste parmi les cartes spéciales jouées', b0.specials.some((c) => c.uid === her.uid))
+  const sans = { ...b0, acquisitions: b0.acquisitions.filter((c) => c.uid !== travel.uid) }
+  check('Acquisition perdue : l’Héritage rejoint l’argent dépensé', spentCards(sans).some((c) => c.uid === her.uid))
+}
+
+// --- Grand Prix d'excellence : métier perdu → sans effet, smiles conservés ---
+{
+  const s = freshState()
+  s.screen = 'game'
+  s.phase = 'play'
+  const lic = find((c) => c.key === 'licenciement')
+  const gp = find((c) => c.key === 'grandprix')
+  const legion = find((c) => c.key === 'legion')
+  const ecrivain = JOBS_IN_DECK.find((c) => c.key === 'ecrivain')
+  const autre = JOBS_IN_DECK.find((c) => c.trophy && c.key !== 'ecrivain')
+  s.players[1].job = ecrivain
+  s.players[1].distinctions = [{ card: legion, active: true }, { card: gp, active: true }]
+  s.players[0].hand[0] = lic
+  check('Grand Prix actif : salaire niveau 4', effectiveSalaryLevel(s.players[1]) === 4)
+  const after = gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
+  const v = after.players[1]
+  check('Licenciement : Grand Prix sans effet, Légion intacte',
+    !v.job && !v.distinctions.find((d) => d.card.key === 'grandprix').active && v.distinctions.find((d) => d.card.key === 'legion').active)
+  check('Licenciement : le Grand Prix compte toujours ses smiles', computeScore(v).cat['Distinctions 🏅'] === gp.smiles + legion.smiles)
+  const nouveau = { ...v, job: autre }
+  check('Nouveau métier : le Grand Prix reste sans effet', effectiveSalaryLevel(nouveau) === autre.salaryLevel)
 }
 
 // --- Anniversaire : chaque donateur choisit le salaire offert ---------------

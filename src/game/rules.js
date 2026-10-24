@@ -36,6 +36,28 @@ export const handTarget = (p) => (hasJob(p, 'chercheur') ? 6 : 5)
 // Liasses disponibles (salaires non investis), hors héritage
 export const availableLiasses = (p) => p.salaries.filter((s) => !s.invested).reduce((t, s) => t + s.card.level, 0)
 
+// Salaires investis dans une acquisition (posés sous elle)
+export const paidSalaries = (p, acqUid) =>
+  p.salaries.filter((s) => s.invested && s.paidFor === acqUid).map((s) => s.card)
+
+// Salaires dépensés dont l'acquisition a quitté le jeu : ils restent au joueur,
+// retournés (comptent leurs smiles, ne peuvent plus payer ni être offerts)
+export const spentSalaries = (p) =>
+  p.salaries.filter((s) => s.invested && !p.acquisitions.some((a) => a.uid === s.paidFor)).map((s) => s.card)
+
+// Héritage : posé face visible tant qu'il n'a rien payé
+export const unusedHeritage = (p) => p.specials.filter((c) => c.key === 'heritage' && !p.heritageFor?.[c.uid])
+
+// Cartes posées sous une acquisition : salaires et Héritage qui l'ont payée
+export const paidCards = (p, acqUid) =>
+  [...paidSalaries(p, acqUid), ...p.specials.filter((c) => c.key === 'heritage' && p.heritageFor?.[c.uid] === acqUid)]
+
+// Argent dépensé dont l'acquisition a quitté le jeu (salaires + Héritage), retourné
+export const spentCards = (p) => [
+  ...spentSalaries(p),
+  ...p.specials.filter((c) => c.key === 'heritage' && p.heritageFor?.[c.uid] && !p.acquisitions.some((a) => a.uid === p.heritageFor[c.uid])),
+]
+
 export function houseCost(p, card) {
   return p.marriage ? Math.ceil(card.cost / 2) : card.cost
 }

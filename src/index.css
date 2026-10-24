@@ -129,6 +129,24 @@ body {
 .anim-fade { animation: fade-in 0.18s ease-out; }
 .card-zoom { touch-action: none; }
 
+.card-badge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 27%;
+  width: fit-content;
+  margin-inline: auto;
+  z-index: 2;
+  padding: 0.15em 0.5em;
+  border-radius: 0.6em;
+  background: #1F2228;
+  color: #F4EFE6;
+  max-width: 94%;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  pointer-events: none;
+}
 .stack-count {
   position: absolute;
   right: -4px;

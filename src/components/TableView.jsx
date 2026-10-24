@@ -14,7 +14,7 @@ import { Dock } from './PlayChoices'
 
 function PlayerPanel({ game, player, index, target, onZoom }) {
   const { state, hit } = game
-  const [ref, { height }] = useElementSize()
+  const [ref, { width, height }] = useElementSize()
   const isCurrent = !target && index === state.current
   // target : null (vue normale) ou { ok, reason, selected, onPick }
   const pickable = target?.ok
@@ -48,8 +48,8 @@ function PlayerPanel({ game, player, index, target, onZoom }) {
           ? <span className="ml-auto shrink-0 rounded-full bg-[#FFC93C] text-[#1F2228] px-2 font-bold text-xs">{target.selected ? '✓ Choisi' : 'Choisir'}</span>
           : <span className="ml-auto shrink-0 rounded-full bg-black/25 px-2 font-title font-semibold text-sm">😄 {computeScore(player).total}</span>}
       </div>
-      <div ref={ref} className="flex-1 min-h-0 flex gap-2 items-center overflow-x-auto overflow-y-hidden thin-scroll px-1">
-        {height > 0 && <PlayedStacks player={player} state={state} cardHeight={height - 10} onZoom={target ? null : onZoom} />}
+      <div ref={ref} className="flex-1 min-h-0 flex flex-wrap gap-2 items-center content-center overflow-auto thin-scroll px-1">
+        {height > 0 && <PlayedStacks player={player} state={state} boxWidth={width - 8} boxHeight={height - 10} onZoom={target ? null : onZoom} />}
       </div>
     </div>
   )

@@ -18,7 +18,7 @@ function makePlayer(name, color = null) {
     hand: [],
     studies: [],
     job: null,
-    salaries: [],       // [{ card, invested }]
+    salaries: [],       // [{ card, invested, paidFor }] paidFor = uid de l'acquisition payée
     flirts: [],         // dernier élément = dessus de la pile
     marriage: null,
     adultery: null,
@@ -31,6 +31,7 @@ function makePlayer(name, color = null) {
     wasBandit: false,
     didAttentat: false,
     heritage: 0,        // liasses d'héritage disponibles
+    heritageFor: {},    // uid carte Héritage → uid de l'acquisition qu'elle a payée
     architectFreeUsed: false,
   }
 }
@@ -53,6 +54,7 @@ function cloneState(state) {
       acquisitions: [...p.acquisitions],
       distinctions: p.distinctions.map((d) => ({ ...d })),
       specials: [...p.specials],
+      heritageFor: { ...p.heritageFor },
       malusKept: [...p.malusKept],
     })),
     casino: state.casino ? { ...state.casino, stake: state.casino.stake ? { ...state.casino.stake } : null } : null,
@@ -724,8 +726,13 @@ export function gameReducer(prev, action) {
         // pas de salaire superflu : impossible de sur-investir pour échapper à l'Impôt
         if (!validatePayment(cost, chosen.map((x) => x.card.level), heritage).ok) return prev
         const paid = chosen.reduce((t, x) => t + x.card.level, 0) + heritage
-        for (const sal of chosen) sal.invested = true
-        if (heritage > 0) p.heritage = 0
+        // les salaires passent sous l'acquisition qu'ils ont payée
+        for (const sal of chosen) { sal.invested = true; sal.paidFor = card.uid }
+        if (heritage > 0) {
+          p.heritage = 0
+          // l'Héritage (tout ou rien) passe sous l'acquisition, avec les salaires
+          for (const c of p.specials) if (c.key === 'heritage' && !p.heritageFor[c.uid]) p.heritageFor[c.uid] = card.uid
+        }
         log(s, `${p.name} achète ${card.name} pour ${cost} liasses (${paid} investies${paid > cost ? ' — pas de monnaie !' : ''})`)
       } else {
         p.architectFreeUsed = true
