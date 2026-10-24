@@ -5,7 +5,7 @@
 import { buildDeck, shuffle } from '../data/cards.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard,
-  canTakeDiscardTop, hasJob, isProf, isInterim, handTarget, houseCost,
+  canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
   availableLiasses, validatePayment,
 } from './rules.js'
 
@@ -220,6 +220,13 @@ function triggerJobApi(s, pIdx, card) {
 // ---------------------------------------------------------------------------
 function poseSelf(s, pIdx, card, opts = {}) {
   const p = s.players[pIdx]
+  // Intérimaire : le métier part à la défausse, dans la même action
+  // (les salaires déjà posés restent en place)
+  const replaced = interimReplaced(p, card)
+  if (replaced) {
+    log(s, `${p.name} quitte son poste de ${replaced.name} (métier intérimaire défaussé)`)
+    loseJob(s, pIdx)
+  }
   switch (card.type) {
     case 'study':
       p.studies.push(card)

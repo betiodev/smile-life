@@ -12,6 +12,18 @@ export const isProf = (p) => !!p.job?.isProf
 export const isFonctionnaire = (p) => p.job?.status === 'fonctionnaire'
 export const isInterim = (p) => p.job?.status === 'interim'
 
+// Intérimaire : poser des Études, un nouveau métier ou un Piston défausse
+// d'office le métier intérimaire (pas besoin de démissionner). → la carte
+// métier remplacée, ou null. Le Grand Prof (promotion de Prof) n'est pas concerné.
+// Piston : le métier part dès la pose du Piston (le choix du métier qui suit
+// est obligatoire).
+export function interimReplaced(p, card) {
+  if (!isInterim(p)) return null
+  if (card.type === 'study' || (card.type === 'job' && !card.isGrandProf)) return p.job
+  if (card.type === 'special' && card.key === 'piston') return p.job
+  return null
+}
+
 // Niveau de salaire effectif : niveau du métier, ou 4 si Grand Prix actif
 export function effectiveSalaryLevel(p) {
   if (!p.job) return 0
@@ -66,7 +78,7 @@ export function canPoseSelf(state, pIdx, card) {
     case 'study': {
       // Médecin/Chirurgien : études continues, même au-delà des 6 cartes de base
       const continues = hasJob(p, 'medecin') || hasJob(p, 'chirurgien')
-      if (p.job && !continues) return NO('Un métier bloque les études (démissionnez d’abord)')
+      if (p.job && !continues && !isInterim(p)) return NO('Un métier bloque les études (démissionnez d’abord)')
       // le plafond porte sur le nombre de CARTES études, pas le nombre de niveaux
       if (!continues && p.studies.length >= 6) return NO('Maximum 6 cartes études')
       return OK
@@ -76,7 +88,7 @@ export function canPoseSelf(state, pIdx, card) {
         if (!isProf(p)) return NO('Promotion réservée : il faut déjà être Prof')
         return OK
       }
-      if (p.job) return NO('Un seul métier à la fois (démissionnez d’abord)')
+      if (p.job && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
       if ((card.key === 'bandit' || card.key === 'gourou') && anyPolicier(state))
         return NO('Un Policier est en poste : ni Bandit ni Gourou')
       if (studyLevel(p) < card.studyReq)
@@ -168,7 +180,7 @@ export function canPlaySpecial(state, pIdx, card) {
       return OK
     }
     case 'piston': {
-      if (p.job) return NO('Un seul métier à la fois (démissionnez d’abord)')
+      if (p.job && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
       const jobs = p.hand.filter((c) => c.type === 'job' && !c.isGrandProf && c.uid !== card.uid)
       if (jobs.length === 0) return NO('Aucun métier en main (Grand Prof exclu)')
       if (!jobs.some((j) => !((j.key === 'bandit' || j.key === 'gourou') && anyPolicier(state))))
@@ -270,7 +282,8 @@ export function canTakeDiscardTop(state, pIdx) {
 // Une carte de la main peut-elle être jouée maintenant ? (pose ou malus)
 export function canPlayFromHand(state, pIdx, card) {
   if (card.type === 'malus') {
-    return malusHasTarget(state, pIdx, card) ? OK : NO('Aucune cible valide pour ce malus')
+    if (malusHasTarget(state, pIdx, card)) return OK
+    return NO(card.key === 'licenciement' ? 'Aucun joueur ne peut être licencié' : 'Aucune cible valide pour ce malus')
   }
   return canPoseSelf(state, pIdx, card)
 }

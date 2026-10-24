@@ -12,7 +12,7 @@ import { CARD_RATIO } from './PlayedStacks'
 import { cardRect } from './flights'
 import {
   needsPayment, purchaseCost, architectFree, cheapestPayment, vengeanceChoices,
-  birthdayDonors, flirtStealVictims, canPlayMalus, lowestUnusedSalary,
+  birthdayDonors, flirtStealVictims, canPlayMalus, lowestUnusedSalary, interimReplaced,
 } from '../game/rules'
 
 export const TOAST_MS = 3000
@@ -33,6 +33,8 @@ export const spots = {
     return r && { left: r.left, top: r.top, width: r.width }
   },
   dock: () => cardRect(q('[data-dock] .sl-card')),
+  // une carte posée sur un plateau
+  board: (i, uid) => cardRect(q(`[data-board="${i}"] [data-card-uid="${uid}"]`)),
   table: () => {
     const r = boxOf(q('[data-pile="table"]'))
     return r && { left: r.left + r.width / 2 - 20, top: r.top + r.height / 2 - 29, width: 40 }
@@ -61,6 +63,13 @@ function flowFor(state, pIdx, card, dir, casino) {
   if (card.key === 'anniversaire' && card.type === 'special') return 'birthday'
   if (needsPayment(state.players[pIdx], card)) return 'purchase'
   return 'simple'
+}
+
+// « Barmaid défaussée · Études jouées »
+function interimLabel(job, card) {
+  const gone = `${job.name} ${job.key === 'barmaid' ? 'défaussée' : 'défaussé'}`
+  const played = card.type === 'study' ? 'Études jouées' : card.type === 'job' ? `${card.name} en poste` : `${card.name} joué`
+  return `${gone} · ${played}`
 }
 
 let nextId = 0
@@ -98,9 +107,16 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
         const victim = state.players[vi]
         ghosts.push({ card: victim.flirts[victim.flirts.length - 1], from: spots.table(), to: spots.played(viewer, k + 1), victim: vi })
       })
-      const label = flow === 'discard' ? 'Carte défaussée' : flow === 'casino' ? 'Salaire misé au Casino' : 'Carte jouée'
+      // intérimaire : le métier part à la défausse (montré tout de suite, annulable)
+      const replaced = flow === 'simple' ? interimReplaced(p, card) : null
+      if (replaced) {
+        ghosts.push({ card: replaced, from: spots.board(viewer, replaced.uid), to: spots.discard(), back: () => spots.board(viewer, replaced.uid) })
+      }
+      const label = flow === 'discard' ? 'Carte défaussée'
+        : flow === 'casino' ? 'Salaire misé au Casino'
+          : replaced ? interimLabel(replaced, card) : 'Carte jouée'
       const note = steals.length ? `💘 Flirt volé à ${steals.map((i) => state.players[i].name).join(', ')}` : null
-      setIntent({ ...base, stage: 'toast', action, ghosts, label, note, until: Date.now() + TOAST_MS })
+      setIntent({ ...base, stage: 'toast', action, ghosts, label, note, leavingUid: replaced?.uid ?? null, until: Date.now() + TOAST_MS })
       return
     }
     if (flow === 'malus' || flow === 'troc') {
@@ -151,7 +167,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
     const ghosts = it.stage === 'toast'
       ? it.ghosts.map((g) => (g.victim != null
         ? { ...g, from: g.to, to: spots.table, fade: true }
-        : { ...g, from: g.to, to: () => spots.hand(uid) }))
+        : { ...g, from: g.to, to: g.back ?? (() => spots.hand(uid)) }))
       : [{ card: it.card, from: spots.dock(), to: () => spots.hand(uid) }]
     setView('me')
     setIntent({ ...it, stage: 'returning', ghosts, id: ++nextId })

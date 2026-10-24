@@ -228,6 +228,8 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     takeDiscard: canTakeDiscardTop(state, state.current),
     // carte sortie de la main : en attente, agrandie, ou qui y retourne
     hiddenUid: it ? it.card.uid : zoom?.fromHand ? zoom.cards[0].uid : zoomBack?.card.uid ?? null,
+    // métier intérimaire en partance (toast) ou qui revient (Annuler)
+    boardHiddenUid: it?.leavingUid ?? null,
     hint,
     gateFor,
     onSwipe: (card, dir, rect) => pi.start(card, dir, rect),

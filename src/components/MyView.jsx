@@ -140,7 +140,7 @@ function MyPlayed({ game }) {
       style={{ background: playerColor(p, viewer) }}
     >
       <div ref={ref} className="h-full flex gap-2 items-center overflow-x-auto overflow-y-hidden thin-scroll px-2">
-        {height > 0 && <PlayedStacks player={p} state={state} cardHeight={height - 14} onZoom={onZoom} />}
+        {height > 0 && <PlayedStacks player={p} state={state} cardHeight={height - 14} onZoom={onZoom} hiddenUid={game.boardHiddenUid} />}
       </div>
     </div>
   )

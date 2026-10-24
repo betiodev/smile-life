@@ -2,13 +2,14 @@
 import { gameReducer } from '../src/game/reducer.js'
 import {
   canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
-  flirtStealVictims, cheapestPayment, birthdayDonors,
+  flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
 } from '../src/game/rules.js'
 import { buildDeck } from '../src/data/cards.js'
 
 const deck = buildDeck()
 const find = (pred) => deck.find(pred)
 const findAll = (pred) => deck.filter(pred)
+const JOBS_IN_DECK = [...new Map(findAll((c) => c.type === 'job').map((c) => [c.key, c])).values()]
 
 function freshState() {
   return gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: false })
@@ -198,6 +199,114 @@ function check(label, cond) {
   check('Paiement impossible → null', cheapestPayment(p, 20) === null)
   p.heritage = 3
   check('Héritage seul quand il suffit pour 3 (aucun salaire investi)', cheapestPayment(p, 3).useHeritage && cheapestPayment(p, 3).salaryUids.length === 0)
+}
+
+// --- Intérimaire : Études ou nouveau métier sans démissionner ---------------
+{
+  const study = find((c) => c.type === 'study' && c.levels === 1)
+  const sal = find((c) => c.type === 'salary' && c.level === 1)
+  const barmaid = find((c) => c.key === 'barmaid')
+  const setup = (card) => {
+    const s = freshState()
+    s.screen = 'game'
+    s.phase = 'play'
+    const p = s.players[0]
+    p.job = barmaid
+    p.salaries = [{ card: sal, invested: false }]
+    p.hand[0] = card
+    return s
+  }
+  const interims = JOBS_IN_DECK.filter((j) => j.status === 'interim').map((j) => j.key).sort().join()
+  check('Intérimaires : Serveur, Barmaid, Jardinier, Plombier, Stripteaser', interims === 'barmaid,jardinier,plombier,serveur,stripteaser')
+
+  // intérimaire → Études
+  let s = setup(study)
+  check('Intérimaire : Études jouables', canPlayFromHand(s, 0, study).ok)
+  check('Intérimaire : Études remplacent le métier', interimReplaced(s.players[0], study)?.uid === barmaid.uid)
+  s = gameReducer(s, { type: 'PLAY_SELF', uid: study.uid })
+  let p = s.players[0]
+  check('Intérimaire → Études : étude posée, métier retiré', p.studies.some((c) => c.uid === study.uid) && p.job === null)
+  check('Intérimaire → Études : Barmaid à la défausse, au nom du joueur', s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
+  check('Intérimaire → Études : salaire conservé tel quel', p.salaries.length === 1 && p.salaries[0].card.uid === sal.uid && !p.salaries[0].invested)
+  check('Intérimaire → Études : le jeu du tour est consommé', s.current === 1)
+
+  // intérimaire → nouveau métier (exigences remplies)
+  const pizzaiolo = find((c) => c.key === 'pizzaiolo')
+  s = setup(pizzaiolo)
+  check('Intérimaire : Pizzaïolo jouable', canPlayFromHand(s, 0, pizzaiolo).ok)
+  s = gameReducer(s, { type: 'PLAY_SELF', uid: pizzaiolo.uid })
+  p = s.players[0]
+  check('Intérimaire → métier : nouveau métier en poste', p.job?.uid === pizzaiolo.uid)
+  check('Intérimaire → métier : Barmaid à la défausse', s.discard.some((e) => e.card.uid === barmaid.uid))
+  check('Intérimaire → métier : salaire conservé', p.salaries.length === 1 && p.salaries[0].card.uid === sal.uid)
+  check('Intérimaire → métier : le jeu du tour est consommé', s.current === 1)
+
+  // intérimaire → métier sans les études requises : toujours bloqué
+  const medecin = find((c) => c.key === 'medecin')
+  s = setup(medecin)
+  const why = canPlayFromHand(s, 0, medecin)
+  check('Intérimaire → Médecin sans études : bloqué, avec la raison', !why.ok && why.reason === 'Niveau d’études insuffisant (0/6)')
+  check('Reducer : la pose refusée ne change rien', gameReducer(s, { type: 'PLAY_SELF', uid: medecin.uid }) === s)
+
+  // métier normal → Études : toujours bloqué
+  s = setup(study)
+  s.players[0].job = pizzaiolo
+  const why2 = canPlayFromHand(s, 0, study)
+  check('Métier normal → Études : bloqué (démission d’abord)', !why2.ok && /démissionnez/.test(why2.reason))
+  check('Métier normal → autre métier : bloqué', !canPlayFromHand(s, 0, find((c) => c.key === 'serveur')).ok)
+  check('Métier normal : rien n’est remplacé', interimReplaced(s.players[0], study) === null)
+
+  // intérimaire → Piston : le métier part à la pose du Piston, puis on choisit le métier
+  const piston = find((c) => c.key === 'piston')
+  s = setup(piston)
+  s.players[0].hand[1] = medecin
+  check('Intérimaire : Piston jouable', canPlayFromHand(s, 0, piston).ok)
+  s = gameReducer(s, { type: 'PLAY_SELF', uid: piston.uid })
+  p = s.players[0]
+  check('Intérimaire → Piston : Barmaid défaussée, choix du métier ouvert',
+    p.job === null && s.pending?.type === 'piston' && s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
+  s = gameReducer(s, { type: 'PISTON_PICK', uid: medecin.uid })
+  p = s.players[0]
+  check('Intérimaire → Piston : Médecin en poste sans les études', p.job?.uid === medecin.uid && p.studies.length === 0)
+  check('Intérimaire → Piston : salaire conservé', p.salaries.length === 1 && p.salaries[0].card.uid === sal.uid)
+  check('Intérimaire → Piston : le jeu du tour est consommé', s.current === 1)
+  s = setup(piston)
+  s.players[0].job = pizzaiolo
+  s.players[0].hand[1] = medecin
+  check('Métier normal → Piston : toujours bloqué', !canPlayFromHand(s, 0, piston).ok)
+}
+
+// --- Licenciement : jamais sur un fonctionnaire -----------------------------
+{
+  const fonctionnaires = JOBS_IN_DECK.filter((j) => j.status === 'fonctionnaire').map((j) => j.key).sort().join()
+  check('Fonctionnaires : Militaire, Policier, 4 Profs, Grand Prof',
+    fonctionnaires === 'grand_prof,militaire,policier,prof_anglais,prof_francais,prof_histoire,prof_maths')
+  const lic = find((c) => c.key === 'licenciement')
+  const setup = (job) => {
+    const s = freshState()
+    s.screen = 'game'
+    s.phase = 'play'
+    s.players[0].hand[0] = lic
+    s.players[1].job = job ? find((c) => c.key === job) : null
+    return s
+  }
+  let s = setup('prof_maths')
+  check('Licenciement sur un fonctionnaire : bloqué', !canPlayMalus(s, 0, lic, 1).ok)
+  check('Licenciement sans cible : injouable, avec la raison', canPlayFromHand(s, 0, lic).reason === 'Aucun joueur ne peut être licencié')
+  check('Licenciement sans cible : défausse permise', canDiscardFromHand(s, 0, lic).ok)
+  check('Reducer : licenciement d’un fonctionnaire refusé', gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 }) === s)
+  s = setup(null)
+  check('Licenciement sur un joueur sans métier : bloqué', canPlayFromHand(s, 0, lic).reason === 'Aucun joueur ne peut être licencié')
+
+  s = setup('pizzaiolo')
+  check('Licenciement sur un métier normal : jouable', canPlayMalus(s, 0, lic, 1).ok && canPlayFromHand(s, 0, lic).ok)
+  s = gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
+  check('Licenciement : le Pizzaïolo est défaussé', s.players[1].job === null && s.discard.some((e) => e.card.key === 'pizzaiolo'))
+
+  s = setup('serveur')
+  check('Licenciement sur un intérimaire : jouable', canPlayMalus(s, 0, lic, 1).ok)
+  s = gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
+  check('Licenciement : le Serveur est défaussé', s.players[1].job === null)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)
