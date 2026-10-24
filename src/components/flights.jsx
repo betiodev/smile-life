@@ -3,7 +3,7 @@
 // on compare l'emplacement de chaque carte avant/après une action, puis on
 // fait voler une copie de la carte entre les deux positions (Web Animations).
 // ---------------------------------------------------------------------------
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import Card from './Card'
 
 export const prefersReducedMotion = () =>
@@ -101,6 +101,53 @@ export function FlightLayer({ flights, onDone }) {
   return (
     <div className="fixed inset-0 pointer-events-none z-50" aria-hidden="true">
       {flights.map((f) => <Flight key={f.id} f={f} onDone={onDone} />)}
+    </div>
+  )
+}
+
+// rectangle « à plat » d'une carte, même tournée (éventail, inclinaison) :
+// largeur réelle de l'élément, centrée sur sa boîte englobante
+export function cardRect(el) {
+  if (!el) return null
+  const r = el.getBoundingClientRect()
+  const w = el.offsetWidth || r.width
+  if (!w) return null
+  const h = (w * 1417) / 968
+  return { left: r.left + r.width / 2 - w / 2, top: r.top + r.height / 2 - h / 2, width: w }
+}
+
+// Carte « fantôme » posée par-dessus l'écran (choix en attente, toast
+// d'annulation) : elle vole de `from` à `to` puis reste en place.
+// from / to peuvent être des fonctions, évaluées une fois l'écran à jour.
+export function Ghost({ card, from, to, fade = false, duration = DUR.discard, onArrive }) {
+  const ref = useRef(null)
+  const [rects, setRects] = useState(null)
+  useLayoutEffect(() => {
+    const f = typeof from === 'function' ? from() : from
+    const t = typeof to === 'function' ? to() : to
+    if (!t) { onArrive?.(); return }
+    setRects({ from: f ?? t, to: t })
+  }, [])
+  useLayoutEffect(() => {
+    if (!rects || !ref.current) return
+    const { from: f, to: t } = rects
+    const tf = `translate(${f.left - t.left}px, ${f.top - t.top}px) scale(${f.width / t.width})`
+    if (prefersReducedMotion()) { onArrive?.(); return }
+    const frames = [{ transform: tf, opacity: 1 }, { transform: 'none', opacity: fade ? 0 : 1 }]
+    const anim = ref.current.animate(frames, { duration, easing: 'cubic-bezier(.25,.75,.3,1)', fill: 'both' })
+    // filet de sécurité : si l'animation est suspendue (onglet en arrière-plan),
+    // la carte ne doit pas rester cachée
+    let done = false
+    const arrive = () => { if (!done) { done = true; onArrive?.() } }
+    anim.onfinish = arrive
+    const timer = setTimeout(arrive, duration + 400)
+    return () => { anim.cancel(); clearTimeout(timer) }
+  }, [rects])
+  if (!rects) return null
+  const t = rects.to
+  return (
+    <div ref={ref} className="pointer-events-none" style={{ position: 'fixed', left: t.left, top: t.top, width: t.width, transformOrigin: '0 0', zIndex: 45 }}>
+      <Card card={card} size={t.width >= 110 ? 'md' : 'sm'} style={{ width: t.width }} />
     </div>
   )
 }

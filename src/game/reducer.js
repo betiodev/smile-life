@@ -218,7 +218,7 @@ function triggerJobApi(s, pIdx, card) {
 // Pose d'une carte devant soi (placement + effets)
 // Retourne true si la pose crée un état "pending" (choix à faire)
 // ---------------------------------------------------------------------------
-function poseSelf(s, pIdx, card) {
+function poseSelf(s, pIdx, card, opts = {}) {
   const p = s.players[pIdx]
   switch (card.type) {
     case 'study':
@@ -309,7 +309,7 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'special':
-      return applySpecial(s, pIdx, card)
+      return applySpecial(s, pIdx, card, opts)
   }
   return false
 }
@@ -317,7 +317,7 @@ function poseSelf(s, pIdx, card) {
 // ---------------------------------------------------------------------------
 // Cartes spéciales — retourne true si un "pending" est créé
 // ---------------------------------------------------------------------------
-function applySpecial(s, pIdx, card) {
+function applySpecial(s, pIdx, card, opts = {}) {
   const p = s.players[pIdx]
   switch (card.key) {
     case 'anniversaire': {
@@ -325,11 +325,15 @@ function applySpecial(s, pIdx, card) {
       let gifts = 0
       s.players.forEach((q, qi) => {
         if (qi === pIdx) return
-        // le donateur donne rationnellement son plus petit salaire non investi
-        let best = -1
-        q.salaries.forEach((sal, i) => {
-          if (!sal.invested && (best === -1 || sal.card.level < q.salaries[best].card.level)) best = i
-        })
+        // le donateur choisit le salaire non investi qu'il offre (opts.gifts[qi] =
+        // uid) ; à défaut, il donne son plus petit
+        const chosen = opts.gifts?.[qi]
+        let best = chosen ? q.salaries.findIndex((sal) => sal.card.uid === chosen && !sal.invested) : -1
+        if (best < 0) {
+          q.salaries.forEach((sal, i) => {
+            if (!sal.invested && (best === -1 || sal.card.level < q.salaries[best].card.level)) best = i
+          })
+        }
         if (best >= 0) {
           const [sal] = q.salaries.splice(best, 1)
           p.salaries.push(sal)
@@ -624,7 +628,7 @@ export function gameReducer(prev, action) {
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || !canPoseSelf(s, s.current, card).ok) return prev
       if (!fromForced) removeFromHand(p, card.uid)
-      const hasPending = poseSelf(s, s.current, card)
+      const hasPending = poseSelf(s, s.current, card, { gifts: action.gifts })
       // la pose "purchase" n'est effective qu'après confirmation
       if (hasPending && s.pending?.type === 'purchase') {
         s.pending.fromForced = fromForced

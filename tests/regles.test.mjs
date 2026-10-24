@@ -1,6 +1,9 @@
 // Tests ciblés des 5 corrections signalées
 import { gameReducer } from '../src/game/reducer.js'
-import { canPoseSelf, canTakeDiscardTop, validatePayment } from '../src/game/rules.js'
+import {
+  canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
+  flirtStealVictims, cheapestPayment, birthdayDonors,
+} from '../src/game/rules.js'
 import { buildDeck } from '../src/data/cards.js'
 
 const deck = buildDeck()
@@ -139,6 +142,62 @@ function check(label, cond) {
   check('Reducer : les 2 salaires choisis sont investis, le 3e non',
     okBuy.players[0].salaries.filter((x) => x.invested).length === 2 &&
     !okBuy.players[0].salaries.find((x) => x.card.uid === sal1.uid).invested)
+}
+
+// --- Anniversaire : chaque donateur choisit le salaire offert ---------------
+{
+  let s = freshState()
+  s.screen = 'game'
+  s.phase = 'play'
+  const anniv = find((c) => c.key === 'anniversaire')
+  const [s1, s3] = [find((c) => c.type === 'salary' && c.level === 1), find((c) => c.type === 'salary' && c.level === 3)]
+  s.players[0].hand[0] = anniv
+  s.players[1].salaries = [s1, s3].map((card) => ({ card, invested: false }))
+  check('Anniversaire : Ben est donateur', birthdayDonors(s, 0).join() === '1')
+  const choisi = gameReducer(s, { type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
+  check('Anniversaire : le salaire choisi (niveau 3) est offert',
+    choisi.players[0].salaries.some((x) => x.card.uid === s3.uid) && choisi.players[1].salaries.some((x) => x.card.uid === s1.uid))
+  const auto = gameReducer(s, { type: 'PLAY_SELF', uid: anniv.uid })
+  check('Anniversaire sans choix : le plus petit est offert', auto.players[0].salaries.some((x) => x.card.uid === s1.uid))
+  // un salaire investi ne peut pas être offert, même s'il est « choisi »
+  s.players[1].salaries[1].invested = true
+  const triche = gameReducer(s, { type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
+  check('Anniversaire : un salaire investi n’est jamais offert', triche.players[1].salaries.some((x) => x.card.uid === s3.uid))
+  s.players[1].salaries = [{ card: s3, invested: true }]
+  check('Anniversaire : sans salaire non investi, pas de donateur', birthdayDonors(s, 0).length === 0)
+}
+
+// --- Aides d'interface : jouabilité, défausse forcée, vol de flirt, paiement --
+{
+  const s = freshState()
+  s.screen = 'game'
+  s.phase = 'play'
+  const sal = find((c) => c.type === 'salary' && c.level === 1)
+  check('Salaire sans métier : injouable, avec la raison du moteur', canPlayFromHand(s, 0, sal).reason === 'Il faut un métier pour poser un salaire')
+  const prison = find((c) => c.key === 'prison')
+  check('Prison sans Bandit en jeu : injouable', !canPlayFromHand(s, 0, prison).ok)
+  s.forced = sal
+  s.forcedConsumesPlay = true
+  check('Carte prise dans la défausse : défausse interdite', !canDiscardFromHand(s, 0, sal).ok)
+  s.forcedConsumesPlay = false
+  check('Carte d’Étoile filante : défausse permise', canDiscardFromHand(s, 0, sal).ok)
+
+  const bars = findAll((c) => c.type === 'flirt' && c.place === 'Au bar')
+  const zoo = find((c) => c.type === 'flirt' && c.place === 'Au zoo')
+  s.players[1].flirts = [bars[0], zoo]
+  check('Flirt sous le dessus : pas de vol', flirtStealVictims(s, 0, bars[1]).length === 0)
+  s.players[1].flirts = [zoo, bars[0]]
+  check('Flirt du dessus, même lieu : vol chez Ben', flirtStealVictims(s, 0, bars[1]).join() === '1')
+
+  const p = s.players[0]
+  const lv = (n, k = 0) => findAll((c) => c.type === 'salary' && c.level === n)[k]
+  p.salaries = [lv(4), lv(2), lv(1), lv(2, 1)].map((card) => ({ card, invested: false }))
+  const pay = cheapestPayment(p, 3)
+  check('Paiement le moins cher pour 3 : 2+1', pay.total === 3 && pay.salaryUids.length === 2)
+  check('Paiement le moins cher pour 6 : 4+2', cheapestPayment(p, 6).total === 6 && cheapestPayment(p, 6).salaryUids.length === 2)
+  check('Paiement impossible → null', cheapestPayment(p, 20) === null)
+  p.heritage = 3
+  check('Héritage seul quand il suffit pour 3 (aucun salaire investi)', cheapestPayment(p, 3).useHeritage && cheapestPayment(p, 3).salaryUids.length === 0)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

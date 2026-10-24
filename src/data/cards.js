@@ -85,7 +85,7 @@ export const MALUS_DEFS = [
 
 // --- SPÉCIALES (10) -----------------------------------------------------------
 export const SPECIAL_DEFS = [
-  { key: 'anniversaire', name: 'Anniversaire', desc: 'Chaque joueur vous offre un salaire posé (le plus petit)' },
+  { key: 'anniversaire', name: 'Anniversaire', desc: 'Chaque joueur vous offre un de ses salaires posés, au choix' },
   { key: 'arcenciel', name: 'Arc-en-ciel', desc: "Jouez jusqu'à 3 cartes d'un coup puis repiochez pour revenir à 5" },
   { key: 'chance', name: 'Chance', desc: 'Piochez 3 cartes, gardez-en une en main, défaussez les deux autres' },
   { key: 'etoile', name: 'Étoile filante', desc: 'Prenez une carte au choix dans la défausse et jouez-la directement' },

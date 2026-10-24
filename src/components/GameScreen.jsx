@@ -2,8 +2,11 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import Modals from './Modals'
 import MyView from './MyView'
 import TableView from './TableView'
-import { FlightLayer, locateCards, prefersReducedMotion, previewDuration } from './flights'
-import { canPoseSelf, canTakeDiscardTop, malusHasTarget } from '../game/rules'
+import CardZoom from './CardZoom'
+import usePlayIntent, { spots } from './usePlayIntent'
+import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, GhostLayer, ExchangeBanner } from './PlayChoices'
+import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
+import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
 
 const rectOf = (el) => {
   if (!el) return null
@@ -15,6 +18,8 @@ const rectOf = (el) => {
 // Animations : à chaque nouvel état, on repère les cartes qui ont changé de
 // place et on les fait voler (pioche → main, main → plateau avec aperçu géant,
 // main → défausse). Un malus fait trembler le plateau de la victime.
+// Action « quiet » (validée après le toast d'annulation) : la carte est déjà
+// montrée à sa place par un fantôme, on la pose sans aperçu géant.
 // ---------------------------------------------------------------------------
 function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettled, layout }) {
   const [flights, setFlights] = useState([])
@@ -62,8 +67,10 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
 
     const out = []
     let victim = null
+    let struck = false
     if (prev && root && !prefersReducedMotion()) {
       const me = `hand:${viewer}`
+      const quiet = !!lastAction?.quiet
       let drawDelay = 0
       let previewDelay = 0
       const malusUid = malusLogged && (lastAction?.type === 'PLAY_MALUS' || lastAction?.type === 'VENGEANCE_PICK') ? lastAction.uid : null
@@ -84,7 +91,13 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
         } else if (where.startsWith('board:') && !(was ?? '').startsWith('board:') && (was === me || was === 'forced' || !was || was === 'discard' || was === 'river')) {
           const i = where.slice(6)
           const el = onBoard(i, uid)
-          f = { kind: 'play', preview: true, card, from: from(uid, was) ?? pile('deck'), to: rectOf(el), el }
+          f = quiet
+            ? { kind: 'move', card, from: from(uid, was), to: rectOf(el), el }
+            : { kind: 'play', preview: true, card, from: from(uid, was) ?? pile('deck'), to: rectOf(el), el }
+        } else if (where === `board:${viewer}` && (was ?? '').startsWith('board:')) {
+          // vol de flirt, cadeaux d'Anniversaire : d'un plateau adverse vers le mien
+          const el = onBoard(viewer, uid)
+          f = { kind: 'move', card, from: from(uid, was) ?? pile('table'), to: rectOf(el), el }
         } else if (where === 'discard' && (was === me || was === 'forced')) {
           f = { kind: 'discard', card, from: from(uid, was), to: pile('discard'), el: q(`[data-pile="discard"] .sl-card`) }
         }
@@ -96,10 +109,11 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
         f.id = ++nextId.current
         out.push(f)
       }
-      // malus sans carte visible (rare) : secousse immédiate
-      if (victim != null && !out.some((f) => f.hit != null)) strike(victim)
+      // malus sans carte visible (Vengeance, rare) : secousse immédiate
+      if (victim != null && !out.some((f) => f.hit != null)) { strike(victim); struck = true }
     } else if (malusLogged && lastAction?.target != null) {
       strike(lastAction.target)
+      struck = true
     }
 
     // les cartes d'arrivée restent cachées jusqu'à l'atterrissage de leur copie
@@ -108,7 +122,9 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
       pending.current += out.length
       setFlights((fs) => [...fs, ...out])
     } else if (pending.current === 0) {
-      settle()
+      // on laisse la secousse se voir avant de passer la main
+      if (struck) setTimeout(settle, 750)
+      else settle()
     }
 
     // positions actuelles, pour le prochain changement
@@ -128,7 +144,10 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
     if (pending.current === 0) setTimeout(settle, f.hit != null ? 450 : 0)
   }, [strike, settle])
 
-  return { flights, onDone, hit }
+  // position de départ imposée pour la prochaine animation (carte en attente)
+  const remember = useCallback((uid, rect) => { snapshot.current.set(uid, rect) }, [])
+
+  return { flights, onDone, hit, remember }
 }
 
 // conçu pour 390 px de haut ; au-delà on agrandit jusqu'à ×1,7
@@ -136,30 +155,48 @@ const zoomFor = () => Math.min(1.7, Math.max(1, window.innerHeight / 390))
 
 // ---------------------------------------------------------------------------
 // Écran de jeu : « Ma vue » (main + mes cartes) ou « La table » (tous les
-// plateaux). L'état de sélection vit ici : changer d'écran ne réinitialise rien.
+// plateaux). On joue en faisant glisser les cartes de la main (SwipeCard) ;
+// l'intention de jeu (toast, choix) vit dans usePlayIntent.
 // ---------------------------------------------------------------------------
 export default function GameScreen({ state, dispatch, viewer = state.current, locked = false, onSettled }) {
   const [view, setView] = useState('me') // 'me' | 'table'
-  const [selected, setSelected] = useState(null) // uid de la carte sélectionnée
-  const [targeting, setTargeting] = useState(false) // choix de la cible malus
+  const [zoom, setZoom] = useState(null) // { cards, fromHand, from }
+  const [zoomBack, setZoomBack] = useState(null) // carte agrandie qui rentre dans la main
+  const [hint, setHint] = useState(null)
   const rootRef = useRef(null)
   const lastAction = useRef(null)
+  const rememberRef = useRef(null)
 
   // toutes les actions passent par ici pour que les animations sachent qui est visé
   const act = useCallback((action) => {
     lastAction.current = action
     dispatch(action)
   }, [dispatch])
+  const remember = useCallback((uid, rect) => rememberRef.current?.(uid, rect), [])
 
-  const { flights, onDone, hit } = useCardAnimations({
-    state, viewer, rootRef, lastAction: lastAction.current, locked, onSettled, layout: targeting ? 'target' : view,
+  const pi = usePlayIntent({ state, viewer, act, remember, setView })
+  const it = pi.intent
+  const targetingNow = it?.stage === 'target'
+
+  // fin de tour : on attend aussi la fin du bandeau du Troc avant de passer la main
+  const [animSettled, setAnimSettled] = useState(false)
+  const onAnimSettled = useCallback(() => setAnimSettled(true), [])
+  useEffect(() => { if (animSettled && !pi.banner) onSettled?.() }, [animSettled, pi.banner, onSettled])
+
+  const { flights, onDone, hit, remember: rememberAnim } = useCardAnimations({
+    state, viewer, rootRef, lastAction: lastAction.current, locked, onSettled: onAnimSettled, layout: targetingNow ? 'target' : view,
   })
+  rememberRef.current = rememberAnim
 
-  // reset de la sélection à chaque changement de tour/phase/forcé
+  useEffect(() => { setZoom(null) }, [state.current, state.phase, state.forced?.uid])
+
+  // petite bulle d'explication au-dessus de la main
+  const showHint = useCallback((text) => setHint({ text, id: Date.now() }), [])
   useEffect(() => {
-    setSelected(state.forced ? state.forced.uid : null)
-    setTargeting(false)
-  }, [state.current, state.phase, state.forced?.uid])
+    if (!hint) return
+    const t = setTimeout(() => setHint(null), 1800)
+    return () => clearTimeout(t)
+  }, [hint])
 
   // l'interface (textes, boutons) grandit avec la hauteur d'écran, comme les cartes
   const [uiZoom, setUiZoom] = useState(zoomFor)
@@ -172,32 +209,90 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   const p = state.players[viewer]
   const myTurn = !locked
   const isForced = myTurn && !!state.forced
-  const selectedCard = !myTurn ? null : isForced ? state.forced : p.hand.find((c) => c.uid === selected)
 
-  const game = {
-    state, viewer, p, act, locked, myTurn, isForced, selectedCard, targeting, hit,
-    drawPhase: myTurn && state.phase === 'draw',
-    takeDiscard: canTakeDiscardTop(state, state.current),
-    poseCheck: selectedCard ? canPoseSelf(state, state.current, selectedCard) : null,
-    canAttack: selectedCard?.type === 'malus' && malusHasTarget(state, state.current, selectedCard),
-    canBetCasino:
-      selectedCard?.type === 'salary' && !!state.casino &&
-      (!state.casino.stake || state.casino.stake.by !== state.current),
-    canDiscardSel: !!selectedCard && !(isForced && state.forcedConsumesPlay),
-    select: (uid) => { setSelected(selected === uid ? null : uid); setTargeting(false) },
-    clearSelection: () => { setSelected(null); setTargeting(false) },
-    setTargeting,
+  // le geste est-il permis ? (base commune au swipe et aux boutons)
+  const baseGate = () => {
+    if (!myTurn) return { ok: false, reason: 'Ce n’est pas ton tour' }
+    if (it || state.pending) return { ok: false }
+    if (state.phase === 'draw') return { ok: false, reason: 'Pioche d’abord' }
+    return { ok: true }
   }
+  const gateFor = (card) => (dir) => {
+    const b = baseGate()
+    if (!b.ok) return b
+    return dir === 'play' ? canPlayFromHand(state, state.current, card) : canDiscardFromHand(state, state.current, card)
+  }
+  const game = {
+    state, viewer, p, act, locked, myTurn, isForced, hit,
+    drawPhase: myTurn && state.phase === 'draw' && !it,
+    takeDiscard: canTakeDiscardTop(state, state.current),
+    // carte sortie de la main : en attente, agrandie, ou qui y retourne
+    hiddenUid: it ? it.card.uid : zoom?.fromHand ? zoom.cards[0].uid : zoomBack?.card.uid ?? null,
+    hint,
+    gateFor,
+    onSwipe: (card, dir, rect) => pi.start(card, dir, rect),
+    onHint: showHint,
+    // Casino : miser un salaire de sa main (même toast d'annulation)
+    casinoSalaries: baseGate().ok && state.casino && (!state.casino.stake || state.casino.stake.by !== state.current)
+      ? (isForced ? [state.forced] : p.hand).filter((c) => c.type === 'salary') : [],
+    onCasinoBet: (card) => pi.start(card, 'play', spots.hand(card.uid), { casino: true }),
+    onTapHand: (card) => { if (!zoomBack) setZoom({ cards: [card], fromHand: true, from: spots.hand(card.uid) }) },
+    onZoom: (cards) => setZoom({ cards, fromHand: false }),
+  }
+
+  const vengeanceMalus = it?.flow === 'vengeance' && state.players[state.current].malusKept.find((m) => m.uid === it.malusUid)
+  const targeting = targetingNow ? {
+    title: it.flow === 'malus' ? `${it.card.name} : sur qui ?`
+      : it.flow === 'troc' ? 'Troc : avec qui ?'
+        : `Vengeance (${vengeanceMalus?.name ?? 'malus'}) : sur qui ?`,
+    card: it.card,
+    from: it.from,
+    check: pi.targetCheck,
+    selected: it.target,
+    onSelect: (i) => pi.patch({ target: i }),
+    onConfirm: pi.confirm,
+    onCancel: pi.cancel,
+  } : null
+
+  const sheetProps = { intent: it, state, patch: pi.patch, onCancel: pi.cancel, onConfirm: pi.confirm }
 
   return (
     <div ref={rootRef} className="game-root" style={{ '--ui': uiZoom }}>
       {!locked && <Modals state={state} dispatch={act} />}
       <FlightLayer flights={flights} onDone={onDone} />
-      {targeting && selectedCard
-        ? <TableView game={game} malus={selectedCard} onBack={() => setTargeting(false)} />
+      {targeting
+        ? <TableView game={game} targeting={targeting} />
         : view === 'me'
           ? <MyView game={game} onOpenTable={() => setView('table')} />
-          : <TableView game={game} onBack={() => setView('me')} />}
+          : <TableView game={game} onBack={() => setView('me')} onZoom={game.onZoom} />}
+
+      <GhostLayer intent={it} onReturned={pi.returned} />
+      {it?.stage === 'toast' && <UndoToast intent={it} onUndo={pi.cancel} />}
+      {it?.stage === 'pay' && <PaymentSheet {...sheetProps} player={state.players[state.current]} />}
+      {it?.stage === 'malus-pick' && <VengeanceSheet {...sheetProps} />}
+      {it?.stage === 'birthday' && <BirthdaySheet {...sheetProps} />}
+      {it?.stage === 'gifts' && <GiftsOverlay intent={it} state={state} give={pi.give} />}
+      <ExchangeBanner banner={pi.banner} />
+
+      {zoom && (
+        <CardZoom
+          cards={zoom.cards}
+          hand={zoom.fromHand ? {
+            gate: gateFor(zoom.cards[0]),
+            onSwipe: (dir, rect) => { setZoom(null); pi.start(zoom.cards[0], dir, rect) },
+            onHint: showHint,
+            hint,
+            from: zoom.from,
+          } : null}
+          onClose={(rect) => {
+            if (zoom.fromHand && rect) setZoomBack({ card: zoom.cards[0], from: rect })
+            setZoom(null)
+          }}
+        />
+      )}
+      {zoomBack && (
+        <Ghost card={zoomBack.card} from={zoomBack.from} to={() => spots.hand(zoomBack.card.uid)} duration={300} onArrive={() => setZoomBack(null)} />
+      )}
     </div>
   )
 }

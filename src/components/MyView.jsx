@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 import { useState } from 'react'
 import Card from './Card'
+import SwipeCard from './SwipeCard'
 import PlayedStacks, { CARD_RATIO } from './PlayedStacks'
 import useElementSize from './useElementSize'
 import { playerColor, enterLandscapeFullscreen } from './theme'
@@ -129,7 +130,7 @@ function TopBar({ game }) {
 
 // ---- centre : mes cartes posées ------------------------------------------------
 function MyPlayed({ game }) {
-  const { state, viewer, p, hit } = game
+  const { state, viewer, p, hit, onZoom } = game
   const [ref, { height }] = useElementSize()
   return (
     <div
@@ -139,56 +140,58 @@ function MyPlayed({ game }) {
       style={{ background: playerColor(p, viewer) }}
     >
       <div ref={ref} className="h-full flex gap-2 items-center overflow-x-auto overflow-y-hidden thin-scroll px-2">
-        {height > 0 && <PlayedStacks player={p} state={state} cardHeight={height - 14} />}
+        {height > 0 && <PlayedStacks player={p} state={state} cardHeight={height - 14} onZoom={onZoom} />}
       </div>
     </div>
   )
 }
 
-// ---- centre : la main en éventail ------------------------------------------------
+// ---- centre : la main en éventail (glisser à droite = jouer, à gauche = défausser)
 function Hand({ game }) {
-  const { state, p, myTurn, isForced, selectedCard, select } = game
+  const { state, p, isForced, hiddenUid, gateFor, onSwipe, onHint, onTapHand, hint } = game
   const [ref, { width, height }] = useElementSize()
   const cards = isForced ? [state.forced] : p.hand
   const n = cards.length
   const mid = (n - 1) / 2
   const drop = 4 // px : chute des cartes aux extrémités (× distance²)
   const maxDrop = drop * mid * mid
-  // place réservée : chute des extrémités + la carte sélectionnée qui monte
+  // place réservée : chute des extrémités + la carte qui monte quand on la tire
   const w = Math.max(40, Math.min(200, (height - Math.max(maxDrop, 16) - 12) / (CARD_RATIO * 1.1)))
-  // chevauchement si la main déborde
+  // chevauchement : la main tient toujours dans la largeur (jamais de défilement)
   const step = n > 1 ? Math.min(w * 0.9, (width - 24 - w) / (n - 1)) : 0
-  const playable = myTurn && state.phase === 'play' && !isForced
 
   return (
-    <div ref={ref} className="flex-1 min-h-0 flex justify-center items-start pt-3" data-zone="hand" data-snap>
+    <div ref={ref} className="relative flex-1 min-h-0 flex justify-center items-start pt-3" data-zone="hand" data-snap>
       {width > 0 && cards.map((c, i) => (
-        <Card
+        <SwipeCard
           key={c.uid}
-          card={c}
-          size={w >= 110 ? 'md' : 'sm'}
-          selected={selectedCard?.uid === c.uid}
-          onClick={playable ? () => select(c.uid) : undefined}
+          gate={gateFor(c)}
+          onSwipe={(dir, rect) => onSwipe(c, dir, rect)}
+          onHint={onHint}
+          onTap={() => onTapHand(c)}
+          hidden={hiddenUid === c.uid}
           style={{
             width: w,
             marginLeft: i === 0 ? 0 : step - w,
             rotate: `${(i - mid) * 4}deg`,
             translate: `0 ${drop * (i - mid) ** 2}px`,
             transformOrigin: '50% 100%',
-            zIndex: selectedCard?.uid === c.uid ? 20 : i,
+            zIndex: i,
           }}
-        />
+        >
+          <Card card={c} size={w >= 110 ? 'md' : 'sm'} style={{ width: w }} />
+        </SwipeCard>
       ))}
+      {hint && (
+        <div key={hint.id} className="ui-zoom swipe-hint" role="status">{hint.text}</div>
+      )}
     </div>
   )
 }
 
-// ---- colonne droite : actions de la carte sélectionnée ----------------------
+// ---- colonne droite : actions du tour (les cartes se jouent par glissement)
 function Actions({ game }) {
-  const {
-    state, p, act, myTurn, isForced, selectedCard, setTargeting, drawPhase, takeDiscard,
-    poseCheck, canAttack, canBetCasino, canDiscardSel, clearSelection,
-  } = game
+  const { state, p, act, myTurn, isForced, drawPhase, takeDiscard } = game
   if (!myTurn) return null
   const discardTop = state.discard[state.discard.length - 1]
 
@@ -196,6 +199,7 @@ function Actions({ game }) {
     <div className="w-full flex flex-col gap-1.5 items-stretch">
       {drawPhase && (
         <>
+          <p className="text-[11px] leading-tight font-bold text-[#FFC93C] text-center">Pioche une carte</p>
           {!takeDiscard.ok && discardTop && (
             <p className="text-[10px] leading-tight opacity-60 text-center">♻️ {takeDiscard.reason}</p>
           )}
@@ -218,30 +222,17 @@ function Actions({ game }) {
           {isForced && (
             <p className="text-[10px] leading-tight font-bold text-[#FFC93C] text-center">⚠️ À jouer immédiatement</p>
           )}
-          {selectedCard && (
+          {game.casinoSalaries.length > 0 && (
             <>
-              <p className="text-[11px] font-bold text-center truncate">{selectedCard.name}</p>
-              {selectedCard.type !== 'malus' && (
-                <Btn tone="accent" onClick={() => { act({ type: 'PLAY_SELF', uid: selectedCard.uid }); clearSelection() }}
-                  disabled={!poseCheck.ok} title={poseCheck.reason}>✅ Poser</Btn>
-              )}
-              {selectedCard.type === 'malus' && (
-                <Btn tone="red" disabled={!canAttack} title={canAttack ? '' : 'Aucune cible valide'} onClick={() => setTargeting(true)}>
-                  ⚡ Attaquer
-                </Btn>
-              )}
-              {canBetCasino && (
-                <Btn tone="light" onClick={() => { act({ type: 'CASINO_BET', uid: selectedCard.uid }); clearSelection() }}>
-                  🎰 Miser au Casino
-                </Btn>
-              )}
-              <Btn tone="ghost" disabled={!canDiscardSel} title={canDiscardSel ? '' : 'Cette carte doit être jouée'}
-                onClick={() => { act({ type: 'DISCARD_CARD', uid: selectedCard.uid }); clearSelection() }}>
-                🗑️ Défausser
-              </Btn>
-              {!poseCheck.ok && selectedCard.type !== 'malus' && (
-                <p className="text-[10px] leading-tight text-[#F2A79A] text-center">{poseCheck.reason}</p>
-              )}
+              <p className="text-[10px] leading-tight font-bold text-center opacity-80">🎰 Miser au Casino</p>
+              <div className="flex flex-wrap gap-1 justify-center">
+                {game.casinoSalaries.map((c) => (
+                  <button key={c.uid} type="button" onClick={() => game.onCasinoBet(c)}
+                    className="rounded-full bg-[#F4EFE6] text-[#1F2228] font-bold text-xs px-2 py-1 active:scale-95">
+                    💰 {c.level}
+                  </button>
+                ))}
+              </div>
             </>
           )}
           {state.playsRemaining > 1 && !isForced && (
@@ -326,7 +317,7 @@ export default function MyView({ game, onOpenTable }) {
 
       <div className="relative min-h-0 overflow-y-auto thin-scroll">
         <div className="ui-zoom flex flex-col items-center gap-3 px-2 pt-12 pb-2">
-          <button type="button" onClick={onOpenTable} className="eyes-btn shrink-0" aria-label="Voir la table">
+          <button type="button" onClick={onOpenTable} className="eyes-btn shrink-0" aria-label="Voir la table" data-pile="table">
             <span className="eyes-btn__ring"><EyeIcon /></span>
             <span className="text-xs font-bold">Voir la table</span>
           </button>

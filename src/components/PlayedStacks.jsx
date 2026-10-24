@@ -34,12 +34,16 @@ function boardStacks(p) {
 const VISIBLE = 3 // cartes dessinées par pile (les autres sont cachées dessous)
 
 // une pile : la carte la plus récente devant, les précédentes décalées derrière
-function Stack({ cards, width }) {
+function Stack({ cards, width, onZoom }) {
   const shown = cards.slice(-VISIBLE)
   const off = Math.max(3, Math.round(width * 0.06))
   const size = sizeFor(width)
   return (
-    <div className="relative shrink-0" style={{ width: width + off * (shown.length - 1), height: width * CARD_RATIO }}>
+    <div
+      className={`relative shrink-0 ${onZoom ? 'cursor-zoom-in' : ''}`}
+      style={{ width: width + off * (shown.length - 1), height: width * CARD_RATIO }}
+      onClick={onZoom ? (e) => { e.stopPropagation(); onZoom(cards.map((x) => x.card)) } : undefined}
+    >
       {shown.map((e, i) => (
         <div key={e.card.uid} className="absolute top-0" style={{ left: off * (shown.length - 1 - i) }}>
           <Card
@@ -59,14 +63,15 @@ function Stack({ cards, width }) {
 }
 
 // rangée de piles ; cardHeight = hauteur disponible pour une carte
-export default function PlayedStacks({ player, state, cardHeight, empty = 'Aucune carte posée' }) {
+// onZoom(cartes) : toucher une pile l'agrandit (lecture seule)
+export default function PlayedStacks({ player, state, cardHeight, empty = 'Aucune carte posée', onZoom = null }) {
   const width = Math.max(28, Math.floor(cardHeight / CARD_RATIO))
   const stacks = boardStacks(player)
   const casinoHere = state.casino && state.players[state.casino.owner] === player
   const chip = 'shrink-0 self-center rounded-full bg-black/25 px-2.5 py-1 text-xs font-bold whitespace-nowrap'
   return (
     <>
-      {stacks.map((s) => <Stack key={s.group} cards={s.cards} width={width} />)}
+      {stacks.map((s) => <Stack key={s.group} cards={s.cards} width={width} onZoom={onZoom} />)}
       {player.heritage > 0 && <span className={chip}>💵 Héritage : {player.heritage}</span>}
       {casinoHere && (
         <span className={chip}>

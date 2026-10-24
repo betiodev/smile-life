@@ -262,3 +262,76 @@ export function canTakeDiscardTop(state, pIdx) {
     return NO('La carte du dessus n’est pas jouable immédiatement')
   return OK
 }
+
+// ---------------------------------------------------------------------------
+// Aides pour l'interface (aucune règle nouvelle : on réutilise celles du dessus)
+// ---------------------------------------------------------------------------
+
+// Une carte de la main peut-elle être jouée maintenant ? (pose ou malus)
+export function canPlayFromHand(state, pIdx, card) {
+  if (card.type === 'malus') {
+    return malusHasTarget(state, pIdx, card) ? OK : NO('Aucune cible valide pour ce malus')
+  }
+  return canPoseSelf(state, pIdx, card)
+}
+
+// Peut-on défausser cette carte ? (une carte prise dans la défausse ou la
+// rivière doit être réellement jouée)
+export function canDiscardFromHand(state, pIdx, card) {
+  if (state.forced?.uid === card.uid && state.forcedConsumesPlay) return NO('Cette carte doit être jouée')
+  return OK
+}
+
+// Poser ce flirt volera-t-il celui d'un adversaire ? → indices des victimes
+export function flirtStealVictims(state, pIdx, card) {
+  if (card.type !== 'flirt') return []
+  return state.players
+    .map((q, i) => ({ q, i }))
+    .filter(({ q, i }) => i !== pIdx && q.flirts[q.flirts.length - 1]?.place === card.place)
+    .map(({ i }) => i)
+}
+
+// Cette acquisition se paie-t-elle avec des salaires ?
+export function needsPayment(p, card) {
+  if (card.type !== 'acquisition' || card.acqType === 'animal') return false
+  if (card.acqType === 'travel' && hasJob(p, 'pilote')) return false
+  return true
+}
+
+export const purchaseCost = (p, card) => (card.acqType === 'house' ? houseCost(p, card) : card.cost)
+export const architectFree = (p, card) => card.acqType === 'house' && hasJob(p, 'architecte') && !p.architectFreeUsed
+
+// Paiement valide le moins cher : moins de liasses dépensées, puis moins de
+// salaires investis. → { salaryUids, useHeritage, total } ou null
+export function cheapestPayment(p, cost) {
+  const sal = p.salaries.filter((s) => !s.invested).map((s) => s.card).slice(0, 14)
+  let best = null
+  for (const h of p.heritage > 0 ? [false, true] : [false]) {
+    const heritage = h ? p.heritage : 0
+    for (let mask = 0; mask < 1 << sal.length; mask++) {
+      const picked = sal.filter((_, i) => mask & (1 << i))
+      const levels = picked.map((c) => c.level)
+      if (!validatePayment(cost, levels, heritage).ok) continue
+      const total = levels.reduce((a, b) => a + b, 0) + heritage
+      if (!best || total < best.total || (total === best.total && picked.length < best.salaryUids.length)) {
+        best = { salaryUids: picked.map((c) => c.uid), useHeritage: h, total }
+      }
+    }
+  }
+  return best
+}
+
+// Vengeance : malus reçus qui ont au moins une cible valide
+export const vengeanceChoices = (state, pIdx) =>
+  state.players[pIdx].malusKept.filter((m) => malusHasTarget(state, pIdx, m))
+
+// Anniversaire : adversaires ayant au moins un salaire non investi
+export const birthdayDonors = (state, pIdx) =>
+  state.players.map((q, i) => i).filter((i) => i !== pIdx && state.players[i].salaries.some((s) => !s.invested))
+
+// Salaire non investi le plus petit (cadeau par défaut)
+export function lowestUnusedSalary(p) {
+  let best = null
+  for (const s of p.salaries) if (!s.invested && (!best || s.card.level < best.card.level)) best = s
+  return best?.card ?? null
+}

@@ -63,6 +63,72 @@ body {
   50% { box-shadow: 0 0 0 3px #FFC93C, 0 0 16px 4px rgb(255 201 60 / 0.55); }
 }
 @media (prefers-reduced-motion: reduce) { .table-panel.is-target { animation: none; } }
+.table-panel { transition: transform 160ms ease-out; }
+.table-panel.is-selected { transform: scale(1.025); box-shadow: 0 0 0 4px #FFC93C, 0 0 22px 6px rgb(255 201 60 / 0.6); animation: none; z-index: 1; }
+
+/* main : cartes à faire glisser */
+.swipe-card { position: relative; flex-shrink: 0; }
+.swipe-card.is-dragging { z-index: 50 !important; }
+.swipe-card__move { position: relative; touch-action: none; cursor: grab; will-change: transform; }
+.swipe-card__move:active { cursor: grabbing; }
+@media (hover: hover) {
+  .swipe-card__move:hover > .sl-card { transform: translateY(-6%) scale(1.04); filter: drop-shadow(0 8px 10px rgb(0 0 0 / 0.3)); }
+  .swipe-card:hover { z-index: 30 !important; }
+  .swipe-card.is-zoomed .swipe-card__move:hover > .sl-card { transform: none; }
+}
+.swipe-stamp {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  padding: 0.15em 0.45em;
+  border: 3px solid currentColor;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.88);
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: clamp(11px, 1.6vw + 4px, 20px);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 120ms ease-out;
+}
+.swipe-stamp.is-play { color: #2F8A3B; transform: translateX(-50%) rotate(-12deg); }
+.swipe-stamp.is-discard { color: #C0392B; transform: translateX(-50%) rotate(12deg); }
+.swipe-stamp.is-play.is-locked { transform: translateX(-50%) rotate(-12deg) scale(1.12); }
+.swipe-stamp.is-discard.is-locked { transform: translateX(-50%) rotate(12deg) scale(1.12); }
+.swipe-hint {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: #F4EFE6;
+  color: #1F2228;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.4);
+  animation: slide-up 0.2s ease-out;
+  pointer-events: none;
+}
+.toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: #FFC93C;
+  transform-origin: 0 50%;
+  animation: toast-shrink linear forwards;
+}
+@keyframes toast-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.anim-fade { animation: fade-in 0.18s ease-out; }
+.card-zoom { touch-action: none; }
+
 .stack-count {
   position: absolute;
   right: -4px;
