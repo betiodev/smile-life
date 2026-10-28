@@ -471,9 +471,49 @@ function check(label, cond) {
   const r = gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 1 })
   // l'adversaire pioche dans la main du Chef, hors carte protégée
   check('Chef troc opp-pick : l’adversaire est accepté', r !== s && r.pending.step === 'chef-pick' &&
-    r.pending.oppPickedUid === s.players[0].hand[1].uid)
+    r.pending.oppPickedUid !== protectedUid && s.players[0].hand.some((c) => c.uid === r.pending.oppPickedUid))
   check('Chef troc chef-pick : de nouveau au tour du Chef', JSON.stringify(whoMustAct(r)) === '[0]' &&
     gameReducer(r, { type: 'CHEF_TROC_CHEF_PICK', index: 0, by: 1 }) === r)
+}
+
+// --- Troc du Chef : les pioches face cachée ne dépendent pas de la position ---
+{
+  const RUNS = 200
+  const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: false })
+  base.screen = 'game'
+  base.phase = 'play'
+  base.players[0].job = find((c) => c.key === 'chef_achats')
+  const chefHand = base.players[0].hand
+  const oppHand = base.players[1].hand
+  const protectedUid = chefHand[0].uid
+
+  // l'adversaire pioche chez le Chef, en visant toujours la dernière position
+  const oppState = { ...base, pending: { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid } }
+  const lastPickable = chefHand.length - 2
+  const oppTaken = new Map()
+  for (let i = 0; i < RUNS; i++) {
+    const r = gameReducer(oppState, { type: 'CHEF_TROC_OPP_PICK', index: lastPickable, by: 1 })
+    oppTaken.set(r.pending.oppPickedUid, (oppTaken.get(r.pending.oppPickedUid) ?? 0) + 1)
+  }
+  check('Chef troc opp-pick : la carte protégée n’est jamais prise', !oppTaken.has(protectedUid))
+  check('Chef troc opp-pick : la dernière position n’est pas toujours prise',
+    (oppTaken.get(chefHand[chefHand.length - 1].uid) ?? 0) < RUNS)
+  check('Chef troc opp-pick : chaque carte non protégée est prise au moins une fois',
+    chefHand.slice(1).every((c) => oppTaken.has(c.uid)))
+
+  // le Chef pioche chez l'adversaire ; la dernière carte est connue (ex. prise dans la rivière)
+  const oppPickedUid = chefHand[1].uid
+  const chefState = { ...base, pending: { type: 'chef-troc', step: 'chef-pick', target: 1, oppPickedUid } }
+  const known = oppHand[oppHand.length - 1]
+  const chefTaken = new Map()
+  for (let i = 0; i < RUNS; i++) {
+    const r = gameReducer(chefState, { type: 'CHEF_TROC_CHEF_PICK', index: oppHand.length - 1, by: 0 })
+    const got = r.players[0].hand[r.players[0].hand.length - 1]
+    chefTaken.set(got.uid, (chefTaken.get(got.uid) ?? 0) + 1)
+  }
+  check('Chef troc chef-pick : la carte connue n’est pas toujours prise', (chefTaken.get(known.uid) ?? 0) < RUNS)
+  check('Chef troc chef-pick : chaque carte adverse est prise au moins une fois',
+    oppHand.every((c) => chefTaken.has(c.uid)))
 }
 
 // --- Arrêter l'adultère : pendant son tour, sans choix en attente ----------
