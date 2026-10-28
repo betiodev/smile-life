@@ -7,6 +7,7 @@ import {
   unusedHeritage, paidCards, spentCards,
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
+import { whoMustAct } from '../src/game/turn.js'
 import { buildDeck } from '../src/data/cards.js'
 
 const deck = buildDeck()
@@ -55,7 +56,7 @@ function check(label, cond) {
   s.players[1].studies = [study]
   s.players[0].hand[0] = redoublement
   s.phase = 'play'
-  s = gameReducer(s, { type: 'PLAY_MALUS', uid: redoublement.uid, target: 1 })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: redoublement.uid, target: 1 })
   const top = s.discard[s.discard.length - 1]
   check('Redoublement : l’étude défaussée est au nom de la victime', top.card.uid === study.uid && top.by === 1)
   s.screen = 'game'; s.current = 1; s.phase = 'draw'
@@ -71,7 +72,7 @@ function check(label, cond) {
   s2.players[1].flirts = [flirt]
   s2.players[0].hand[0] = divorce
   s2.phase = 'play'
-  s2 = gameReducer(s2, { type: 'PLAY_MALUS', uid: divorce.uid, target: 1 })
+  s2 = gameReducer(s2, { by: s2.current, type: 'PLAY_MALUS', uid: divorce.uid, target: 1 })
   const top2 = s2.discard[s2.discard.length - 1]
   check('Divorce : le mariage défaussé est au nom de la victime', top2.card.uid === marriage.uid && top2.by === 1)
   s2.current = 1; s2.phase = 'draw'
@@ -86,10 +87,10 @@ function check(label, cond) {
   s.screen = 'game'
   s.phase = 'play'
   const before = s.players[0].hand.length // 5
-  s = gameReducer(s, { type: 'PLAY_SELF', uid: chance.uid })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: chance.uid })
   check('Chance ouvre le choix des 3 cartes', s.pending?.type === 'chance' && s.pending.cards.length === 3)
   const kept = s.pending.cards[1]
-  s = gameReducer(s, { type: 'CHANCE_PICK', uid: kept.uid })
+  s = gameReducer(s, { by: s.current, type: 'CHANCE_PICK', uid: kept.uid })
   const p = s.players[0]
   check('La carte gardée est en main', p.hand.some((c) => c.uid === kept.uid))
   check('Pas de carte forcée après Chance', !s.forced)
@@ -139,9 +140,9 @@ function check(label, cond) {
   s.phase = 'play'
   s.players[0].salaries = [sal2[0], sal2[1], sal1].map((card) => ({ card, invested: false }))
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
-  const refus = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid, sal1.uid], useHeritage: false })
+  const refus = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid, sal1.uid], useHeritage: false })
   check('Reducer : achat avec salaire superflu refusé', refus === s)
-  const okBuy = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid], useHeritage: false })
+  const okBuy = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid], useHeritage: false })
   check('Reducer : surpaie inévitable acceptée (4/3)', okBuy !== s && okBuy.players[0].acquisitions.some((c) => c.uid === travel.uid))
   check('Reducer : les 2 salaires choisis sont investis, le 3e non',
     okBuy.players[0].salaries.filter((x) => x.invested).length === 2 &&
@@ -168,14 +169,14 @@ function check(label, cond) {
   const her = find((c) => c.key === 'heritage')
   const travel = find((c) => c.acqType === 'travel')
   s.players[0].hand[0] = her
-  s = gameReducer(s, { type: 'PLAY_SELF', uid: her.uid })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: her.uid })
   const p0 = s.players[0]
   check('Héritage posé : 3 liasses, carte visible (non utilisée)', p0.heritage === 3 && unusedHeritage(p0).length === 1)
   s.current = 0
   s.phase = 'play'
   s.playsRemaining = 1
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
-  const buy = gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [], useHeritage: true })
+  const buy = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [], useHeritage: true })
   const b0 = buy.players[0]
   check('Achat avec l’Héritage : il passe sous l’acquisition', b0.heritage === 0 && unusedHeritage(b0).length === 0 &&
     paidCards(b0, travel.uid).some((c) => c.uid === her.uid))
@@ -198,7 +199,7 @@ function check(label, cond) {
   s.players[1].distinctions = [{ card: legion, active: true }, { card: gp, active: true }]
   s.players[0].hand[0] = lic
   check('Grand Prix actif : salaire niveau 4', effectiveSalaryLevel(s.players[1]) === 4)
-  const after = gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
+  const after = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
   const v = after.players[1]
   check('Licenciement : Grand Prix sans effet, Légion intacte',
     !v.job && !v.distinctions.find((d) => d.card.key === 'grandprix').active && v.distinctions.find((d) => d.card.key === 'legion').active)
@@ -217,14 +218,14 @@ function check(label, cond) {
   s.players[0].hand[0] = anniv
   s.players[1].salaries = [s1, s3].map((card) => ({ card, invested: false }))
   check('Anniversaire : Ben est donateur', birthdayDonors(s, 0).join() === '1')
-  const choisi = gameReducer(s, { type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
+  const choisi = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
   check('Anniversaire : le salaire choisi (niveau 3) est offert',
     choisi.players[0].salaries.some((x) => x.card.uid === s3.uid) && choisi.players[1].salaries.some((x) => x.card.uid === s1.uid))
-  const auto = gameReducer(s, { type: 'PLAY_SELF', uid: anniv.uid })
+  const auto = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: anniv.uid })
   check('Anniversaire sans choix : le plus petit est offert', auto.players[0].salaries.some((x) => x.card.uid === s1.uid))
   // un salaire investi ne peut pas être offert, même s'il est « choisi »
   s.players[1].salaries[1].invested = true
-  const triche = gameReducer(s, { type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
+  const triche = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
   check('Anniversaire : un salaire investi n’est jamais offert', triche.players[1].salaries.some((x) => x.card.uid === s3.uid))
   s.players[1].salaries = [{ card: s3, invested: true }]
   check('Anniversaire : sans salaire non investi, pas de donateur', birthdayDonors(s, 0).length === 0)
@@ -285,7 +286,7 @@ function check(label, cond) {
   let s = setup(study)
   check('Intérimaire : Études jouables', canPlayFromHand(s, 0, study).ok)
   check('Intérimaire : Études remplacent le métier', interimReplaced(s.players[0], study)?.uid === barmaid.uid)
-  s = gameReducer(s, { type: 'PLAY_SELF', uid: study.uid })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: study.uid })
   let p = s.players[0]
   check('Intérimaire → Études : étude posée, métier retiré', p.studies.some((c) => c.uid === study.uid) && p.job === null)
   check('Intérimaire → Études : Barmaid à la défausse, au nom du joueur', s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
@@ -296,7 +297,7 @@ function check(label, cond) {
   const pizzaiolo = find((c) => c.key === 'pizzaiolo')
   s = setup(pizzaiolo)
   check('Intérimaire : Pizzaïolo jouable', canPlayFromHand(s, 0, pizzaiolo).ok)
-  s = gameReducer(s, { type: 'PLAY_SELF', uid: pizzaiolo.uid })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: pizzaiolo.uid })
   p = s.players[0]
   check('Intérimaire → métier : nouveau métier en poste', p.job?.uid === pizzaiolo.uid)
   check('Intérimaire → métier : Barmaid à la défausse', s.discard.some((e) => e.card.uid === barmaid.uid))
@@ -308,7 +309,7 @@ function check(label, cond) {
   s = setup(medecin)
   const why = canPlayFromHand(s, 0, medecin)
   check('Intérimaire → Médecin sans études : bloqué, avec la raison', !why.ok && why.reason === 'Niveau d’études insuffisant (0/6)')
-  check('Reducer : la pose refusée ne change rien', gameReducer(s, { type: 'PLAY_SELF', uid: medecin.uid }) === s)
+  check('Reducer : la pose refusée ne change rien', gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: medecin.uid }) === s)
 
   // métier normal → Études : toujours bloqué
   s = setup(study)
@@ -323,11 +324,11 @@ function check(label, cond) {
   s = setup(piston)
   s.players[0].hand[1] = medecin
   check('Intérimaire : Piston jouable', canPlayFromHand(s, 0, piston).ok)
-  s = gameReducer(s, { type: 'PLAY_SELF', uid: piston.uid })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: piston.uid })
   p = s.players[0]
   check('Intérimaire → Piston : Barmaid défaussée, choix du métier ouvert',
     p.job === null && s.pending?.type === 'piston' && s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
-  s = gameReducer(s, { type: 'PISTON_PICK', uid: medecin.uid })
+  s = gameReducer(s, { by: s.current, type: 'PISTON_PICK', uid: medecin.uid })
   p = s.players[0]
   check('Intérimaire → Piston : Médecin en poste sans les études', p.job?.uid === medecin.uid && p.studies.length === 0)
   check('Intérimaire → Piston : salaire conservé', p.salaries.length === 1 && p.salaries[0].card.uid === sal.uid)
@@ -356,19 +357,53 @@ function check(label, cond) {
   check('Licenciement sur un fonctionnaire : bloqué', !canPlayMalus(s, 0, lic, 1).ok)
   check('Licenciement sans cible : injouable, avec la raison', canPlayFromHand(s, 0, lic).reason === 'Aucun joueur ne peut être licencié')
   check('Licenciement sans cible : défausse permise', canDiscardFromHand(s, 0, lic).ok)
-  check('Reducer : licenciement d’un fonctionnaire refusé', gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 }) === s)
+  check('Reducer : licenciement d’un fonctionnaire refusé', gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 }) === s)
   s = setup(null)
   check('Licenciement sur un joueur sans métier : bloqué', canPlayFromHand(s, 0, lic).reason === 'Aucun joueur ne peut être licencié')
 
   s = setup('pizzaiolo')
   check('Licenciement sur un métier normal : jouable', canPlayMalus(s, 0, lic, 1).ok && canPlayFromHand(s, 0, lic).ok)
-  s = gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
   check('Licenciement : le Pizzaïolo est défaussé', s.players[1].job === null && s.discard.some((e) => e.card.key === 'pizzaiolo'))
 
   s = setup('serveur')
   check('Licenciement sur un intérimaire : jouable', canPlayMalus(s, 0, lic, 1).ok)
-  s = gameReducer(s, { type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
+  s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
   check('Licenciement : le Serveur est défaussé', s.players[1].job === null)
+}
+
+// --- Auteur des actions : seul un joueur autorisé peut agir ----------------
+{
+  let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+  check('whoMustAct : le joueur courant au début du tour', JSON.stringify(whoMustAct(s)) === '[0]')
+  check('Transition : un autre joueur ne peut pas dire « Prêt »', gameReducer(s, { type: 'READY', by: 1 }) === s)
+  check('Action sans auteur ignorée', gameReducer(s, { type: 'READY' }) === s)
+  s = gameReducer(s, { type: 'READY', by: 0 })
+  check('Tour normal : pioche d’un autre joueur ignorée', gameReducer(s, { type: 'DRAW_DECK', by: 1 }) === s)
+  check('Tour normal : pioche d’un 3e joueur ignorée', gameReducer(s, { type: 'DRAW_DECK', by: 2 }) === s)
+  s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
+  check('Tour normal : le joueur courant pioche', s.phase === 'play' && s.players[0].hand.length === 6)
+  const uid = s.players[0].hand[0].uid
+  check('Tour normal : défausse par un autre joueur ignorée', gameReducer(s, { type: 'DISCARD_CARD', uid, by: 1 }) === s)
+}
+
+// --- Troc du Chef : à l'étape opp-pick, c'est l'adversaire qui choisit ------
+{
+  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+  s.screen = 'game'
+  s.phase = 'play'
+  s.players[0].job = find((c) => c.key === 'chef_achats')
+  const protectedUid = s.players[0].hand[0].uid
+  s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid }
+  check('whoMustAct : l’adversaire visé en opp-pick', JSON.stringify(whoMustAct(s)) === '[1]')
+  check('Chef troc opp-pick : le Chef est refusé', gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 0 }) === s)
+  check('Chef troc opp-pick : un 3e joueur est refusé', gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 2 }) === s)
+  const r = gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 1 })
+  // l'adversaire pioche dans la main du Chef, hors carte protégée
+  check('Chef troc opp-pick : l’adversaire est accepté', r !== s && r.pending.step === 'chef-pick' &&
+    r.pending.oppPickedUid === s.players[0].hand[1].uid)
+  check('Chef troc chef-pick : de nouveau au tour du Chef', JSON.stringify(whoMustAct(r)) === '[0]' &&
+    gameReducer(r, { type: 'CHEF_TROC_CHEF_PICK', index: 0, by: 1 }) === r)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

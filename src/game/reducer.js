@@ -8,6 +8,7 @@ import {
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
   availableLiasses, validatePayment,
 } from './rules.js'
+import { canAct } from './turn.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -555,7 +556,12 @@ export function gameReducer(prev, action) {
   }
   if (action.type === 'RESTART') return { screen: 'setup', log: [] }
 
+  // l'auteur de l'action doit être un joueur autorisé à agir maintenant
+  if (!prev?.players || !canAct(prev, action.by)) return prev
+
   const s = cloneState(prev)
+  // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
+  // l'adversaire choisit dans la main du Chef), c'est aussi l'auteur de l'action.
   const p = s.players[s.current]
 
   switch (action.type) {

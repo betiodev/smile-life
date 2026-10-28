@@ -216,7 +216,7 @@ function ChefTrocModal({ state, dispatch }) {
       <Modal title={`🂠 ${t.name}, choisissez une carte face cachée de ${p.name}`} wide>
         <div className="flex gap-2 flex-wrap justify-center">
           {Array.from({ length: count }, (_, i) => (
-            <div key={i} onClick={() => dispatch({ type: 'CHEF_TROC_OPP_PICK', index: i })} className="cursor-pointer hover:-translate-y-1 transition-transform">
+            <div key={i} onClick={() => dispatch({ type: 'CHEF_TROC_OPP_PICK', index: i, by: pend.target })} className="cursor-pointer hover:-translate-y-1 transition-transform">
               <Card faceDown card={{}} />
             </div>
           ))}

@@ -1,5 +1,6 @@
 // Simulation headless : joue des parties complètes au hasard via le reducer
-import { gameReducer } from '../src/game/reducer.js'
+import { gameReducer as rawReducer } from '../src/game/reducer.js'
+import { whoMustAct } from '../src/game/turn.js'
 import { canPoseSelf, canPlayMalus, canTakeDiscardTop, isPlayableFromDiscard, malusHasTarget, handTarget } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import { buildDeck } from '../src/data/cards.js'
@@ -12,6 +13,12 @@ console.log(byType)
 if (deck.length !== 200) throw new Error('Le paquet ne fait pas 200 cartes !')
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+// chaque action est signée par un joueur autorisé à agir (whoMustAct)
+function gameReducer(s, action) {
+  if (action.type === 'START_GAME') return rawReducer(s, action)
+  return rawReducer(s, { ...action, by: rand(whoMustAct(s)) })
+}
 
 function step(s) {
   // résout un état en choisissant une action valide au hasard

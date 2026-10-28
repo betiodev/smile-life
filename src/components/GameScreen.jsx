@@ -167,11 +167,13 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   const lastAction = useRef(null)
   const rememberRef = useRef(null)
 
-  // toutes les actions passent par ici pour que les animations sachent qui est visé
+  // toutes les actions passent par ici pour que les animations sachent qui est visé,
+  // et pour signer l'action du joueur qui agit (une action peut préciser un autre `by`)
   const act = useCallback((action) => {
-    lastAction.current = action
-    dispatch(action)
-  }, [dispatch])
+    const signed = { by: viewer, ...action }
+    lastAction.current = signed
+    dispatch(signed)
+  }, [dispatch, viewer])
   const remember = useCallback((uid, rect) => rememberRef.current?.(uid, rect), [])
 
   const pi = usePlayIntent({ state, viewer, act, remember, setView })
