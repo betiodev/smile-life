@@ -19,6 +19,7 @@ import {
 
 export const TOAST_MS = 3000
 export const GIFT_TIMEOUT_MS = 30000
+export const CHERCHEUR_TIMEOUT_MS = 30000
 
 const q = (sel) => document.querySelector(`.game-root ${sel}`)
 const boxOf = (el) => {
@@ -294,4 +295,29 @@ export function useBirthdayGifts({ state, act, remember, active }) {
   }, [asking, askedAt, give])
 
   return pend ? { pending: pend, asking, askedAt, give } : null
+}
+
+// ---------------------------------------------------------------------------
+// Chercheur qui perd son métier : délai pour choisir la carte à défausser.
+// Le délai reste ici (le moteur est pur). Délai dépassé, ou joueur robot /
+// déconnecté : on envoie uid null, et le moteur défausse une carte au hasard.
+// Monté en permanence (App) : le délai court aussi pendant le passage d'écran.
+// ---------------------------------------------------------------------------
+export function useChercheurDiscard({ state, dispatch }) {
+  const pend = state.pending?.type === 'chercheur-discard' ? state.pending : null
+  const who = pend ? pend.player : null
+  const asked = useRef(null)
+  if (who == null) asked.current = null
+  else if (asked.current?.player !== who) asked.current = { player: who, at: Date.now() }
+  const askedAt = asked.current?.at ?? 0
+
+  useEffect(() => {
+    if (who == null) return
+    const q = state.players[who]
+    const auto = () => dispatch({ type: 'CHERCHEUR_DISCARD', by: who, uid: null })
+    const t = setTimeout(auto, q.bot || q.disconnected ? 600 : Math.max(0, askedAt + CHERCHEUR_TIMEOUT_MS - Date.now()))
+    return () => clearTimeout(t)
+  }, [who, askedAt, dispatch])
+
+  return askedAt
 }

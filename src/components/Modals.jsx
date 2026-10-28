@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // Modales des effets interactifs (Chance, Étoile filante, Piston, Troc,
-// Vengeance, Casino, achats, Journaliste, Médium)
+// Vengeance, Casino, achats, Journaliste, Médium, défausse du Chercheur)
 // ---------------------------------------------------------------------------
 import { useState } from 'react'
 import Card from './Card'
+import { Countdown } from './PlayChoices'
+import { CHERCHEUR_TIMEOUT_MS } from './usePlayIntent'
 import { isPlayableFromDiscard, canPlayMalus, hasJob, houseCost, validatePayment } from '../game/rules'
 
 function Modal({ title, children, wide }) {
@@ -349,7 +351,32 @@ function MediumModal({ state, dispatch }) {
   )
 }
 
-export default function Modals({ state, dispatch }) {
+// --- Chercheur qui perd son métier : choisir 1 carte de sa main à défausser ------
+function ChercheurDiscardModal({ state, dispatch, since }) {
+  const pend = state.pending
+  const q = state.players[pend.player]
+  const left = <span className="font-normal text-gray-400 text-sm">· <Countdown key={pend.player} since={since} total={CHERCHEUR_TIMEOUT_MS} /></span>
+  // seul le Chercheur voit sa main (vue joueur) : les autres attendent
+  if (state.viewer !== pend.player) {
+    return (
+      <Modal title={<>🔬 {q.name} choisit 1 carte à défausser {left}</>}>
+        <p className="text-sm text-gray-500">{q.name} perd son métier de Chercheur et défausse 1 carte de sa main en plus.</p>
+      </Modal>
+    )
+  }
+  return (
+    <Modal title={<>🔬 {q.name}, vous perdez votre métier de Chercheur : choisissez 1 carte à défausser {left}</>} wide>
+      <div className="flex gap-2 flex-wrap justify-center">
+        {q.hand.map((c) => (
+          <Card key={c.uid} card={c} onClick={() => dispatch({ type: 'CHERCHEUR_DISCARD', uid: c.uid, by: pend.player })} />
+        ))}
+      </div>
+      <p className="text-xs text-gray-400 mt-3">Sans choix avant la fin du délai, une carte de votre main est défaussée au hasard.</p>
+    </Modal>
+  )
+}
+
+export default function Modals({ state, dispatch, chercheurSince }) {
   if (!state.pending) return null
   switch (state.pending.type) {
     case 'purchase': return <PurchaseModal state={state} dispatch={dispatch} />
@@ -362,6 +389,7 @@ export default function Modals({ state, dispatch }) {
     case 'casino-stake': return <CasinoStakeModal state={state} dispatch={dispatch} />
     case 'journalist': return <JournalistModal state={state} dispatch={dispatch} />
     case 'medium': return <MediumModal state={state} dispatch={dispatch} />
+    case 'chercheur-discard': return <ChercheurDiscardModal state={state} dispatch={dispatch} since={chercheurSince} />
     default: return null
   }
 }

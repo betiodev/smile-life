@@ -43,3 +43,28 @@ export default function TransitionScreen({ state, dispatch }) {
     </div>
   )
 }
+
+// Passage de l'écran pendant le tour d'un autre (Chercheur licencié) : l'écran
+// va au joueur qui doit choisir, puis revient au joueur dont c'est le tour.
+// Rien de caché n'est affiché ici.
+export function HandoffScreen({ player, index, note, onReady }) {
+  const color = playerColor(player, index)
+  return (
+    <div className="h-dvh flex items-center justify-center p-3 overflow-hidden">
+      <div className="bg-white/90 backdrop-blur rounded-3xl shadow-2xl p-4 sm:p-6 w-full max-w-md max-h-full overflow-y-auto anim-slide-up text-gray-800 text-center">
+        <div className="text-4xl mb-1">🙈</div>
+        <h2 className="font-title text-2xl font-semibold leading-tight">
+          Passe l’écran à <span style={{ color }}>{player.name}</span>
+        </h2>
+        {note && <p className="text-gray-500 text-sm mt-1">{note}</p>}
+        <button
+          onClick={onReady}
+          className="mt-4 w-full rounded-2xl text-white font-black text-lg py-3 shadow-lg hover:scale-[1.02] active:scale-95 transition-transform"
+          style={{ background: color }}
+        >
+          ✋ Prêt, c’est moi {player.name} !
+        </button>
+      </div>
+    </div>
+  )
+}

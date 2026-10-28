@@ -148,7 +148,7 @@ export function BirthdaySheet({ intent, state, onCancel, onConfirm }) {
   )
 }
 
-function Countdown({ since, total }) {
+export function Countdown({ since, total }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250)
