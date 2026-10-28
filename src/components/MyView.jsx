@@ -8,7 +8,7 @@ import PlayedStacks, { CARD_RATIO } from './PlayedStacks'
 import useElementSize from './useElementSize'
 import { playerColor, enterLandscapeFullscreen } from './theme'
 import { computeScore } from '../game/scoring'
-import { isPlayableFromDiscard, isInterim } from '../game/rules'
+import { isPlayableFromDiscard, isInterim, canStopAdultery } from '../game/rules'
 
 const Btn = ({ onClick, disabled, children, tone = 'light', title }) => {
   const tones = {
@@ -241,7 +241,7 @@ function Actions({ game }) {
         </>
       )}
 
-      {p.adultery && (
+      {canStopAdultery(state, game.viewer).ok && (
         <Btn tone="ghost" onClick={() => act({ type: 'STOP_ADULTERY' })} title="Défausse la carte Adultère, les flirts sont conservés">
           😇 Arrêter l’adultère
         </Btn>

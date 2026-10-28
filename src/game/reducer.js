@@ -6,8 +6,9 @@ import { buildDeck, shuffle } from '../data/cards.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
-  availableLiasses, validatePayment,
+  availableLiasses, validatePayment, canStopAdultery,
 } from './rules.js'
+import { canAct } from './turn.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -487,6 +488,7 @@ function endTurn(s) {
   s.current = next
   s.phase = 'draw'
   s.playsRemaining = 1
+  s.cardPlayed = false
   s.forced = null
   s.pending = null
   s.riverUsedThisTurn = false
@@ -512,6 +514,7 @@ function gameOver(s) {
 
 // Consommation d'un jeu de carte (forcé ou non)
 function consumePlay(s, wasForced) {
+  s.cardPlayed = true
   if (wasForced) {
     if (s.forcedConsumesPlay) s.playsRemaining -= 1
     s.forced = null
@@ -541,6 +544,7 @@ export function gameReducer(prev, action) {
       current: 0,
       phase: 'draw',
       playsRemaining: 1,
+      cardPlayed: false,  // une carte a-t-elle déjà été jouée ce tour ?
       forced: null,
       forcedConsumesPlay: false,
       pending: null,
@@ -555,7 +559,12 @@ export function gameReducer(prev, action) {
   }
   if (action.type === 'RESTART') return { screen: 'setup', log: [] }
 
+  // l'auteur de l'action doit être un joueur autorisé à agir maintenant
+  if (!prev?.players || !canAct(prev, action.by)) return prev
+
   const s = cloneState(prev)
+  // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
+  // l'adversaire choisit dans la main du Chef), c'est aussi l'auteur de l'action.
   const p = s.players[s.current]
 
   switch (action.type) {
@@ -623,7 +632,7 @@ export function gameReducer(prev, action) {
       return s
     }
     case 'STOP_ADULTERY': {
-      if (!p.adultery) return prev
+      if (!canStopAdultery(s, s.current).ok) return prev
       toDiscard(s, p.adultery, s.current)
       p.adultery = null
       log(s, `${p.name} met fin à son adultère (flirts conservés)`)
@@ -699,6 +708,7 @@ export function gameReducer(prev, action) {
         s.casino.stake = null
       }
       s.playsRemaining -= 1
+      s.cardPlayed = true
       finishPlay(s)
       return s
     }
