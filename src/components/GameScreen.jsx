@@ -3,7 +3,7 @@ import Modals from './Modals'
 import MyView from './MyView'
 import TableView from './TableView'
 import CardZoom from './CardZoom'
-import usePlayIntent, { spots } from './usePlayIntent'
+import usePlayIntent, { spots, useBirthdayGifts } from './usePlayIntent'
 import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, GhostLayer, ExchangeBanner } from './PlayChoices'
 import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
 import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
@@ -88,7 +88,7 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
           const el = inHand(uid)
           f = { kind: 'draw', flip: was === 'deck', card, from: from(uid, was), to: rectOf(el), el, delay: drawDelay }
           drawDelay += 140
-        } else if (where.startsWith('board:') && !(was ?? '').startsWith('board:') && (was === me || was === 'forced' || !was || was === 'discard' || was === 'river')) {
+        } else if (where.startsWith('board:') && !(was ?? '').startsWith('board:') && (was === me || was === 'forced' || !was || was === 'discard' || was === 'river' || was === 'birthday')) {
           const i = where.slice(6)
           const el = onBoard(i, uid)
           f = quiet
@@ -177,6 +177,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   const remember = useCallback((uid, rect) => rememberRef.current?.(uid, rect), [])
 
   const pi = usePlayIntent({ state, viewer, act, remember, setView })
+  const gifts = useBirthdayGifts({ state, act, remember, active: !locked })
   const it = pi.intent
   const targetingNow = it?.stage === 'target'
 
@@ -231,7 +232,8 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     // carte sortie de la main : en attente, agrandie, ou qui y retourne
     hiddenUid: it ? it.card.uid : zoom?.fromHand ? zoom.cards[0].uid : zoomBack?.card.uid ?? null,
     // métier intérimaire en partance (toast) ou qui revient (Annuler)
-    boardHiddenUid: it?.leavingUid ?? null,
+    // (et l'Anniversaire posé pendant que les donateurs choisissent)
+    boardHiddenUid: it?.leavingUid ?? gifts?.pending.card.uid ?? null,
     hint,
     gateFor,
     onSwipe: (card, dir, rect) => pi.start(card, dir, rect),
@@ -275,7 +277,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
       {it?.stage === 'pay' && <PaymentSheet {...sheetProps} player={state.players[state.current]} />}
       {it?.stage === 'malus-pick' && <VengeanceSheet {...sheetProps} />}
       {it?.stage === 'birthday' && <BirthdaySheet {...sheetProps} />}
-      {it?.stage === 'gifts' && <GiftsOverlay intent={it} state={state} give={pi.give} />}
+      {gifts && <GiftsOverlay gifts={gifts} state={state} />}
       <ExchangeBanner banner={pi.banner} />
 
       {zoom && (

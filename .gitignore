@@ -5,6 +5,6 @@ dist/
 # WebP générés à partir des PNG (npm run images)
 public/frames/*.webp
 public/cards/*.webp
+# fichiers système macOS, dans tous les dossiers
 .DS_Store
-public/.DS_Store
 /.claude

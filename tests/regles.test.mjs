@@ -209,26 +209,96 @@ function check(label, cond) {
 }
 
 // --- Anniversaire : chaque donateur choisit le salaire offert ---------------
+// Ana joue l'Anniversaire ; Ben (salaires 1 et 3) et Cléo (2 libre, 4 investi)
+// offrent chacun un salaire via BIRTHDAY_GIFT, dans n'importe quel ordre.
 {
-  let s = freshState()
-  s.screen = 'game'
-  s.phase = 'play'
   const anniv = find((c) => c.key === 'anniversaire')
-  const [s1, s3] = [find((c) => c.type === 'salary' && c.level === 1), find((c) => c.type === 'salary' && c.level === 3)]
-  s.players[0].hand[0] = anniv
-  s.players[1].salaries = [s1, s3].map((card) => ({ card, invested: false }))
-  check('Anniversaire : Ben est donateur', birthdayDonors(s, 0).join() === '1')
-  const choisi = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
-  check('Anniversaire : le salaire choisi (niveau 3) est offert',
-    choisi.players[0].salaries.some((x) => x.card.uid === s3.uid) && choisi.players[1].salaries.some((x) => x.card.uid === s1.uid))
-  const auto = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: anniv.uid })
-  check('Anniversaire sans choix : le plus petit est offert', auto.players[0].salaries.some((x) => x.card.uid === s1.uid))
-  // un salaire investi ne peut pas être offert, même s'il est « choisi »
-  s.players[1].salaries[1].invested = true
-  const triche = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: s3.uid } })
-  check('Anniversaire : un salaire investi n’est jamais offert', triche.players[1].salaries.some((x) => x.card.uid === s3.uid))
-  s.players[1].salaries = [{ card: s3, invested: true }]
-  check('Anniversaire : sans salaire non investi, pas de donateur', birthdayDonors(s, 0).length === 0)
+  const lv = (n) => find((c) => c.type === 'salary' && c.level === n)
+  const [b1, b3, c2, c4] = [lv(1), lv(3), lv(2), lv(4)]
+  const setup = () => {
+    const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+    s.screen = 'game'
+    s.phase = 'play'
+    s.players[0].hand[0] = anniv
+    s.players[1].salaries = [b1, b3].map((card) => ({ card, invested: false }))
+    s.players[2].salaries = [{ card: c2, invested: false }, { card: c4, invested: true }]
+    return s
+  }
+  const uids = (p) => p.salaries.map((x) => x.card.uid).sort().join()
+  const texts = (s, n) => s.log.slice(-n).map((e) => e.text)
+  const gift = (s, by, uid) => gameReducer(s, { type: 'BIRTHDAY_GIFT', by, uid })
+
+  const s = setup()
+  check('Anniversaire : Ben et Cléo sont donateurs', birthdayDonors(s, 0).join() === '1,2')
+  const p = gameReducer(s, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
+  check('Anniversaire : un choix des donateurs est en attente', p.pending?.type === 'birthday' &&
+    p.pending.donors.join() === '1,2' && p.players[0].specials.some((c) => c.uid === anniv.uid))
+  check('Anniversaire : aucun salaire ne bouge avant la fin des choix', p.players[0].salaries.length === 0 &&
+    p.players[1].salaries.length === 2 && p.players[2].salaries.length === 2)
+  check('whoMustAct : les deux donateurs pendant l’Anniversaire', whoMustAct(p).join() === '1,2')
+  check('Anniversaire : PLAY_SELF n’accepte plus de « gifts »',
+    gameReducer(s, { by: 0, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: b3.uid, 2: c2.uid } }).pending?.type === 'birthday')
+
+  // refus
+  check('Anniversaire : le joueur fêté ne peut pas offrir', gift(p, 0, null) === p)
+  check('Anniversaire : le joueur fêté ne peut pas jouer pendant les choix',
+    gameReducer(p, { by: 0, type: 'DISCARD_CARD', uid: p.players[0].hand[0].uid }) === p)
+  check('Anniversaire : un salaire investi est refusé', gift(p, 2, c4.uid) === p)
+  check('Anniversaire : le salaire d’un autre joueur est refusé', gift(p, 1, c2.uid) === p)
+  check('Anniversaire : un salaire inconnu est refusé', gift(p, 1, 'pas-un-uid') === p)
+
+  // Ben puis Cléo
+  const r1 = gift(p, 1, b3.uid)
+  check('Anniversaire : le choix de Ben est noté, rien n’est encore donné', r1.pending?.gifts[1] === b3.uid &&
+    r1.players[1].salaries.length === 2 && r1.players[0].salaries.length === 0)
+  check('Anniversaire : p.pending reste inchangé (état immuable)', Object.keys(p.pending.gifts).length === 0)
+  check('whoMustAct : seule Cléo reste à choisir', whoMustAct(r1).join() === '2')
+  check('Anniversaire : Ben ne peut pas offrir deux fois', gift(r1, 1, b1.uid) === r1)
+  const r2 = gift(r1, 2, null)
+  check('Anniversaire : le salaire choisi par Ben (niveau 3) est offert',
+    r2.players[0].salaries.some((x) => x.card.uid === b3.uid) && uids(r2.players[1]) === b1.uid)
+  check('Anniversaire : uid null offre le plus petit salaire libre (pas l’investi)',
+    r2.players[0].salaries.some((x) => x.card.uid === c2.uid) && uids(r2.players[2]) === c4.uid)
+  check('Anniversaire : journal dans l’ordre des joueurs', texts(r2, 2).join('|') ===
+    '🎂 Ben offre un salaire niveau 3 à Ana|🎂 Cléo offre un salaire niveau 2 à Ana')
+  check('Anniversaire : le tour se termine ensuite normalement', r2.pending === null &&
+    r2.current === 1 && r2.screen === 'transition' && whoMustAct(r2).join() === '1')
+
+  // Cléo puis Ben : même résultat
+  const q2 = gift(gift(p, 2, null), 1, b3.uid)
+  check('Anniversaire : ordre inverse, même résultat',
+    q2.players.every((x, i) => uids(x) === uids(r2.players[i])) && q2.current === r2.current &&
+    texts(q2, 2).join('|') === texts(r2, 2).join('|'))
+  check('Anniversaire : uid null de Ben offre son niveau 1',
+    gift(gift(p, 1, null), 2, null).players[0].salaries.some((x) => x.card.uid === b1.uid))
+
+  // Cléo n'a aucun salaire libre : seul Ben donne
+  const sc = setup()
+  sc.players[2].salaries = [{ card: c4, invested: true }]
+  const pc = gameReducer(sc, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
+  check('Anniversaire : sans salaire libre, Cléo n’est pas donatrice', pc.pending.donors.join() === '1' && whoMustAct(pc).join() === '1')
+  check('Anniversaire : Cléo ne peut pas offrir', gift(pc, 2, null) === pc)
+  const rc = gift(pc, 1, b1.uid)
+  check('Anniversaire : Cléo « n’a aucun salaire à offrir »', rc.pending === null &&
+    texts(rc, 2).join('|') === '🎂 Ben offre un salaire niveau 1 à Ana|🎂 Cléo n’a aucun salaire à offrir')
+
+  // personne ne peut donner : réglé tout de suite
+  const sn = setup()
+  sn.players[1].salaries = []
+  sn.players[2].salaries = [{ card: c4, invested: true }]
+  check('Anniversaire : sans salaire non investi, pas de donateur', birthdayDonors(sn, 0).length === 0)
+  const rn = gameReducer(sn, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
+  check('Anniversaire sans donateur : réglé tout de suite', rn.pending === null && rn.current === 1 &&
+    rn.log.some((e) => e.text === '🎂 Triste anniversaire pour Ana...'))
+
+  // pendant un Arc-en-ciel : Ana continue de jouer après les cadeaux
+  const sa = setup()
+  sa.playsRemaining = 3
+  const ra = gift(gift(gameReducer(sa, { by: 0, type: 'PLAY_SELF', uid: anniv.uid }), 1, null), 2, null)
+  check('Anniversaire pendant un Arc-en-ciel : le tour continue', ra.pending === null && ra.current === 0 &&
+    ra.phase === 'play' && ra.playsRemaining === 2 && whoMustAct(ra).join() === '0')
+  const next = gameReducer(ra, { by: 0, type: 'DISCARD_CARD', uid: ra.players[0].hand[0].uid })
+  check('Anniversaire pendant un Arc-en-ciel : Ana peut rejouer', next !== ra && next.playsRemaining === 1)
 }
 
 // --- Aides d'interface : jouabilité, défausse forcée, vol de flirt, paiement --

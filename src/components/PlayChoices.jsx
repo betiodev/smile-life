@@ -157,31 +157,35 @@ function Countdown({ since, total }) {
   return <span className="tabular-nums">{Math.max(0, Math.ceil((since + total - now) / 1000))} s</span>
 }
 
-export function GiftsOverlay({ intent, state, give }) {
+// gifts : { pending, asking, askedAt, give } (useBirthdayGifts)
+export function GiftsOverlay({ gifts, state }) {
+  const { pending, asking, askedAt, give } = gifts
   const me = state.players[state.current]
-  const donor = intent.donors[intent.asking]
-  const d = state.players[donor]
+  const d = state.players[asking]
   const unused = d.salaries.filter((s) => !s.invested)
   return (
     <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3 anim-fade">
       <div className="ui-zoom bg-[#2A2E36] rounded-2xl shadow-2xl p-3 flex gap-3 max-w-[min(680px,96vw)] w-full max-h-[94vh]">
-        <Dock card={intent.card} from={null} width={90} />
+        <Dock card={pending.card} from={null} width={90} />
         <div className="flex-1 min-w-0 flex flex-col gap-2">
           <h3 className="font-title text-lg font-semibold">🎂 Anniversaire de {me.name}</h3>
           <ul className="text-sm space-y-0.5">
-            {intent.donors.map((i, k) => (
-              <li key={i} className={k < intent.asking ? 'text-[#8FCB6B]' : k === intent.asking ? 'font-bold' : 'opacity-60'}>
-                {k < intent.asking ? `✓ ${state.players[i].name} a choisi` : `En attente de ${state.players[i].name}…`}
-              </li>
-            ))}
+            {pending.donors.map((i) => {
+              const done = i in pending.gifts
+              return (
+                <li key={i} className={done ? 'text-[#8FCB6B]' : i === asking ? 'font-bold' : 'opacity-60'}>
+                  {done ? `✓ ${state.players[i].name} a choisi` : `En attente de ${state.players[i].name}…`}
+                </li>
+              )
+            })}
           </ul>
-          <div className="rounded-xl p-2.5" style={{ background: playerColor(d, donor) }}>
+          <div className="rounded-xl p-2.5" style={{ background: playerColor(d, asking) }}>
             <p className="font-bold text-sm mb-1.5">
-              {d.name}, choisis le salaire que tu offres à {me.name} <span className="opacity-75">· <Countdown key={intent.asking} since={intent.askedAt} total={GIFT_TIMEOUT_MS} /></span>
+              {d.name}, choisis le salaire que tu offres à {me.name} <span className="opacity-75">· <Countdown key={asking} since={askedAt} total={GIFT_TIMEOUT_MS} /></span>
             </p>
             <div className="flex flex-wrap gap-2">
               {unused.map((s) => (
-                <button key={s.card.uid} type="button" onClick={() => give(donor, s.card.uid)} className="active:scale-95 transition-transform">
+                <button key={s.card.uid} type="button" onClick={() => give(asking, s.card.uid)} className="active:scale-95 transition-transform">
                   <Card card={s.card} size="sm" />
                 </button>
               ))}
