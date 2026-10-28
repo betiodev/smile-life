@@ -50,14 +50,14 @@ function Piles({ game }) {
           title={drawPhase ? 'Piocher' : 'Cartes restantes dans la pioche'}
         >
           <div className="relative">
-            {state.deck.length > 1 && (
+            {state.deckCount > 1 && (
               <div className="absolute top-1 left-1 opacity-60"><Card faceDown card={{}} size="pile" style={{ width: w }} /></div>
             )}
-            {state.deck.length > 0
+            {state.deckCount > 0
               ? <div data-pile="deck"><Card faceDown card={{}} size="pile" style={{ width: w }} className={drawPhase ? 'pile-glow' : ''} /></div>
               : <div data-pile="deck">{empty}</div>}
           </div>
-          <span className="ui-zoom font-title text-sm font-medium">{state.deck.length}</span>
+          <span className="ui-zoom font-title text-sm font-medium">{state.deckCount}</span>
         </button>
 
         <button

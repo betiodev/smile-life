@@ -195,7 +195,8 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
       if (it.target == null) return
       if (it.flow === 'malus') act({ type: 'PLAY_MALUS', uid: it.card.uid, target: it.target })
       if (it.flow === 'troc') {
-        exchange.current = { me, target: it.target, before: new Set(state.players[me].hand.map((c) => c.uid)), trocUid: it.card.uid }
+        // ma main avant l'échange : la carte donnée se retrouve ici, sans regarder la main adverse
+        exchange.current = { me, target: it.target, before: new Map(state.players[me].hand.map((c) => [c.uid, c])), trocUid: it.card.uid }
         act(play(it))
         act({ type: 'TROC_PICK', target: it.target })
       }
@@ -235,8 +236,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
     // le tour a pu passer au joueur suivant : on regarde la main de celui qui a troqué
     const hand = state.players[ex.me].hand
     const received = hand.find((c) => !ex.before.has(c.uid))
-    const givenUid = [...ex.before].find((u) => u !== ex.trocUid && !hand.some((c) => c.uid === u))
-    const given = state.players[ex.target].hand.find((c) => c.uid === givenUid)
+    const given = [...ex.before.values()].find((c) => c.uid !== ex.trocUid && !hand.some((h) => h.uid === c.uid))
     setBanner({ id: ++nextId, name: state.players[ex.target].name, received, given })
   }, [state])
   useEffect(() => {

@@ -25,6 +25,7 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
   const [flights, setFlights] = useState([])
   const [hit, setHit] = useState(null)
   const prevLoc = useRef(null)
+  const prevCounts = useRef(null) // { deck, hands } : tailles au rendu précédent
   const prevLogId = useRef(null)
   const snapshot = useRef(new Map()) // uid → position à l'écran au rendu précédent
   const nextId = useRef(0)
@@ -47,10 +48,16 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
     const root = rootRef.current
     const loc = locateCards(state)
     const prev = prevLoc.current
+    const counts = { deck: state.deckCount, hands: state.players.map((q) => q.hand.length) }
+    const before = prevCounts.current
     const lastLog = state.log[state.log.length - 1]
     const malusLogged = prevLogId.current !== null && lastLog?.kind === 'malus' && lastLog.id !== prevLogId.current
     prevLoc.current = loc
+    prevCounts.current = counts
     prevLogId.current = lastLog?.id ?? null
+    // la vue ne contient pas la pioche : une carte qui apparaît dans ma main
+    // alors que la pioche a diminué en vient
+    const drew = before ? before.deck - counts.deck : 0
 
     const q = (sel) => root?.querySelector(sel)
     const inHand = (uid) => q(`[data-zone="hand"] [data-card-uid="${uid}"]`)
@@ -77,7 +84,8 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
       if (malusLogged && lastAction?.target != null) victim = lastAction.target
 
       for (const [uid, { where, card }] of loc) {
-        const was = prev.get(uid)?.where
+        let was = prev.get(uid)?.where
+        if (!was && drew > 0 && where === me) was = 'deck'
         if (was === where) continue
         let f = null
         if (uid === malusUid) {
@@ -91,9 +99,11 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
         } else if (where.startsWith('board:') && !(was ?? '').startsWith('board:') && (was === me || was === 'forced' || !was || was === 'discard' || was === 'river' || was === 'birthday')) {
           const i = where.slice(6)
           const el = onBoard(i, uid)
+          // carte venue d'une main adverse (cachée jusque-là) : part du plateau de ce joueur
+          const start = from(uid, was) ?? (!was && i !== String(viewer) ? inside(q(`[data-board="${i}"]`)) : null) ?? pile('deck')
           f = quiet
             ? { kind: 'move', card, from: from(uid, was), to: rectOf(el), el }
-            : { kind: 'play', preview: true, card, from: from(uid, was) ?? pile('deck'), to: rectOf(el), el }
+            : { kind: 'play', preview: true, card, from: start, to: rectOf(el), el }
         } else if (where === `board:${viewer}` && (was ?? '').startsWith('board:')) {
           // vol de flirt, cadeaux d'Anniversaire : d'un plateau adverse vers le mien
           const el = onBoard(viewer, uid)
@@ -108,6 +118,21 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
         }
         f.id = ++nextId.current
         out.push(f)
+      }
+      // pioche d'un adversaire : ses cartes restent cachées, une carte face
+      // cachée vole de la pioche vers son plateau (ou vers « Voir la table »)
+      if (before && drew > 0) {
+        counts.hands.forEach((n, i) => {
+          if (i === viewer) return
+          const to = inside(q(`[data-board="${i}"]`)) ?? pile('table')
+          for (let k = before.hands[i] ?? n; k < n; k++) {
+            const f = { kind: 'draw', faceDown: true, card: {}, from: pile('deck'), to, delay: drawDelay }
+            if (!f.from || !f.to) continue
+            drawDelay += 140
+            f.id = ++nextId.current
+            out.push(f)
+          }
+        })
       }
       // malus sans carte visible (Vengeance, rare) : secousse immédiate
       if (victim != null && !out.some((f) => f.hit != null)) { strike(victim); struck = true }

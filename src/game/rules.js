@@ -190,7 +190,8 @@ export function canPlaySpecial(state, pIdx, card) {
     case 'casino':
       return OK
     case 'chance':
-      if (state.deck.length === 0) return NO('La pioche est vide')
+      // (la vue d'un joueur n'a que la taille de la pioche : voir view.js)
+      if ((state.deck?.length ?? state.deckCount) === 0) return NO('La pioche est vide')
       return OK
     case 'etoile': {
       // exclut la carte elle-même du scan (une Étoile filante dans la défausse

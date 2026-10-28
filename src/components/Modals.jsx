@@ -93,6 +93,8 @@ function PurchaseModal({ state, dispatch }) {
 
 // --- Chance : garder 1 des 3 cartes -----------------------------------------
 function ChanceModal({ state, dispatch }) {
+  // les 3 cartes ne sont envoyées qu'au joueur courant (vue joueur)
+  if (!state.pending.cards) return null
   return (
     <Modal title="🍀 Chance — choisissez la carte à garder en main, les autres sont défaussées" wide>
       <div className="flex gap-3 flex-wrap justify-center">
@@ -211,7 +213,8 @@ function ChefTrocModal({ state, dispatch }) {
 
   if (pend.step === 'opp-pick') {
     const t = state.players[pend.target]
-    const count = p.hand.filter((c) => c.uid !== pend.protectedUid).length
+    // l'adversaire ne connaît que le nombre de cartes où piocher (vue joueur)
+    const count = pend.pickCount
     return (
       <Modal title={`🂠 ${t.name}, choisissez une carte face cachée de ${p.name}`} wide>
         <div className="flex gap-2 flex-wrap justify-center">
@@ -221,7 +224,7 @@ function ChefTrocModal({ state, dispatch }) {
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-400 mt-3">Les cartes sont retournées : le choix se fait à l’aveugle{pend.protectedUid ? ` (1 carte est protégée par ${p.name})` : ''}.</p>
+        <p className="text-xs text-gray-400 mt-3">Les cartes sont retournées : le choix se fait à l’aveugle{pend.protected ? ` (1 carte est protégée par ${p.name})` : ''}.</p>
       </Modal>
     )
   }
@@ -302,6 +305,9 @@ function CasinoStakeModal({ state, dispatch }) {
 
 // --- Journaliste : voir toutes les mains -----------------------------------------
 function JournalistModal({ state, dispatch }) {
+  // les mains ne sont exposées qu'au Journaliste, le temps de la modale (vue joueur)
+  const hands = state.pending.hands
+  if (!hands) return null
   return (
     <Modal title="📰 Journaliste — vous voyez la main de chaque joueur" wide>
       {state.players.map((q, i) => {
@@ -310,7 +316,7 @@ function JournalistModal({ state, dispatch }) {
           <div key={i} className="mb-3">
             <div className="font-bold text-gray-700 text-sm mb-1">{q.name} :</div>
             <div className="flex gap-1.5 flex-wrap">
-              {q.hand.map((c) => <Card key={c.uid} card={c} small />)}
+              {hands[i].map((c) => <Card key={c.uid} card={c} small />)}
             </div>
           </div>
         )
@@ -324,6 +330,8 @@ function JournalistModal({ state, dispatch }) {
 
 // --- Médium : voir les 13 prochaines cartes ---------------------------------------
 function MediumModal({ state, dispatch }) {
+  // les cartes ne sont envoyées qu'au Médium (vue joueur)
+  if (!state.pending.cards) return null
   return (
     <Modal title="🔮 Médium — les 13 prochaines cartes de la pioche (dans l’ordre)" wide>
       <div className="flex gap-1.5 flex-wrap">
