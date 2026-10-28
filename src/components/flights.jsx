@@ -25,6 +25,9 @@ export function locateCards(state) {
       ...p.children, ...p.acquisitions, ...p.distinctions.map((d) => d.card), ...p.specials, ...p.malusKept,
     ].forEach((c) => put(c, b))
   })
+  // Anniversaire en attente des cadeaux : la carte reste « dans le dock »,
+  // elle ne s'envole vers le plateau qu'une fois les cadeaux reçus (comme avant)
+  if (state.pending?.type === 'birthday') put(state.pending.card, 'birthday')
   return m
 }
 

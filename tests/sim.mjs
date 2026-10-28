@@ -14,10 +14,11 @@ if (deck.length !== 200) throw new Error('Le paquet ne fait pas 200 cartes !')
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
-// chaque action est signée par un joueur autorisé à agir (whoMustAct)
+// chaque action est signée par un joueur autorisé à agir (whoMustAct),
+// sauf si elle précise déjà son auteur
 function gameReducer(s, action) {
   if (action.type === 'START_GAME') return rawReducer(s, action)
-  return rawReducer(s, { ...action, by: rand(whoMustAct(s)) })
+  return rawReducer(s, { ...action, by: action.by ?? rand(whoMustAct(s)) })
 }
 
 function step(s) {
@@ -95,6 +96,14 @@ function step(s) {
       case 'journalist':
       case 'medium':
         return gameReducer(s, { type: 'CLOSE_PENDING' })
+      case 'birthday': {
+        // un donateur qui n'a pas encore offert (dans n'importe quel ordre) :
+        // un salaire libre au hasard, ou null (délai dépassé → le plus petit)
+        const by = rand(whoMustAct(s))
+        const unused = s.players[by].salaries.filter((x) => !x.invested)
+        birthdayGifts++
+        return gameReducer(s, { type: 'BIRTHDAY_GIFT', by, uid: Math.random() < 0.3 ? null : rand(unused).card.uid })
+      }
       default:
         throw new Error('pending inconnu : ' + s.pending.type)
     }
@@ -146,6 +155,7 @@ function step(s) {
 }
 
 let totalTurns = 0
+let birthdayGifts = 0
 for (let g = 0; g < 40; g++) {
   const n = 2 + (g % 4)
   const river = g % 2 === 0
@@ -175,4 +185,4 @@ for (let g = 0; g < 40; g++) {
   const scores = s.players.map((p) => computeScore(p).total)
   console.log(`Partie ${g} (${n}j${river ? ', rivière' : ''}) : ${guard} étapes — scores ${scores.join(' / ')}`)
 }
-console.log(`\n✅ 40 parties complètes sans erreur (${totalTurns} étapes au total)`)
+console.log(`\n✅ 40 parties complètes sans erreur (${totalTurns} étapes au total, ${birthdayGifts} cadeaux d’Anniversaire)`)

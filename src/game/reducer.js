@@ -6,7 +6,7 @@ import { buildDeck, shuffle } from '../data/cards.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
-  availableLiasses, validatePayment, canStopAdultery,
+  availableLiasses, validatePayment, canStopAdultery, birthdayDonors, lowestUnusedSalary,
 } from './rules.js'
 import { canAct } from './turn.js'
 
@@ -221,7 +221,7 @@ function triggerJobApi(s, pIdx, card) {
 // Pose d'une carte devant soi (placement + effets)
 // Retourne true si la pose crée un état "pending" (choix à faire)
 // ---------------------------------------------------------------------------
-function poseSelf(s, pIdx, card, opts = {}) {
+function poseSelf(s, pIdx, card) {
   const p = s.players[pIdx]
   // Intérimaire : le métier part à la défausse, dans la même action
   // (les salaires déjà posés restent en place)
@@ -319,42 +319,48 @@ function poseSelf(s, pIdx, card, opts = {}) {
     }
 
     case 'special':
-      return applySpecial(s, pIdx, card, opts)
+      return applySpecial(s, pIdx, card)
   }
   return false
+}
+
+// Anniversaire : applique tous les cadeaux d'un coup (gifts[qi] = uid du salaire
+// offert par le joueur qi), dans l'ordre des joueurs
+function giveBirthdayGifts(s, pIdx, gifts) {
+  const p = s.players[pIdx]
+  let count = 0
+  s.players.forEach((q, qi) => {
+    if (qi === pIdx) return
+    const i = q.salaries.findIndex((sal) => sal.card.uid === gifts[qi] && !sal.invested)
+    if (i >= 0) {
+      const [sal] = q.salaries.splice(i, 1)
+      p.salaries.push(sal)
+      count++
+      log(s, `🎂 ${q.name} offre un salaire niveau ${sal.card.level} à ${p.name}`)
+    } else {
+      log(s, `🎂 ${q.name} n’a aucun salaire à offrir`)
+    }
+  })
+  if (count === 0) log(s, `🎂 Triste anniversaire pour ${p.name}...`)
 }
 
 // ---------------------------------------------------------------------------
 // Cartes spéciales — retourne true si un "pending" est créé
 // ---------------------------------------------------------------------------
-function applySpecial(s, pIdx, card, opts = {}) {
+function applySpecial(s, pIdx, card) {
   const p = s.players[pIdx]
   switch (card.key) {
     case 'anniversaire': {
       p.specials.push(card)
-      let gifts = 0
-      s.players.forEach((q, qi) => {
-        if (qi === pIdx) return
-        // le donateur choisit le salaire non investi qu'il offre (opts.gifts[qi] =
-        // uid) ; à défaut, il donne son plus petit
-        const chosen = opts.gifts?.[qi]
-        let best = chosen ? q.salaries.findIndex((sal) => sal.card.uid === chosen && !sal.invested) : -1
-        if (best < 0) {
-          q.salaries.forEach((sal, i) => {
-            if (!sal.invested && (best === -1 || sal.card.level < q.salaries[best].card.level)) best = i
-          })
-        }
-        if (best >= 0) {
-          const [sal] = q.salaries.splice(best, 1)
-          p.salaries.push(sal)
-          gifts++
-          log(s, `🎂 ${q.name} offre un salaire niveau ${sal.card.level} à ${p.name}`)
-        } else {
-          log(s, `🎂 ${q.name} n’a aucun salaire à offrir`)
-        }
-      })
-      if (gifts === 0) log(s, `🎂 Triste anniversaire pour ${p.name}...`)
-      return false
+      // chaque adversaire ayant un salaire non investi choisit celui qu'il offre
+      // (action BIRTHDAY_GIFT) ; sans donateur, l'anniversaire est réglé tout de suite
+      const donors = birthdayDonors(s, pIdx)
+      if (donors.length === 0) {
+        giveBirthdayGifts(s, pIdx, {})
+        return false
+      }
+      s.pending = { type: 'birthday', card, donors, gifts: {} }
+      return true
     }
     case 'arcenciel':
       p.specials.push(card)
@@ -564,7 +570,8 @@ export function gameReducer(prev, action) {
 
   const s = cloneState(prev)
   // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
-  // l'adversaire choisit dans la main du Chef), c'est aussi l'auteur de l'action.
+  // l'adversaire choisit dans la main du Chef) et cadeaux d'Anniversaire (chaque
+  // donateur offre son salaire), c'est aussi l'auteur de l'action.
   const p = s.players[s.current]
 
   switch (action.type) {
@@ -646,7 +653,7 @@ export function gameReducer(prev, action) {
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || !canPoseSelf(s, s.current, card).ok) return prev
       if (!fromForced) removeFromHand(p, card.uid)
-      const hasPending = poseSelf(s, s.current, card, { gifts: action.gifts })
+      const hasPending = poseSelf(s, s.current, card)
       // la pose "purchase" n'est effective qu'après confirmation
       if (hasPending && s.pending?.type === 'purchase') {
         s.pending.fromForced = fromForced
@@ -903,6 +910,27 @@ export function gameReducer(prev, action) {
         if (repl) p.hand.push(repl)
       }
       s.pending = null
+      finishPlay(s)
+      return s
+    }
+    case 'BIRTHDAY_GIFT': {
+      // un donateur de l'Anniversaire offre l'un de ses salaires non investis
+      // (uid null : son plus petit, choix par défaut à l'expiration du délai)
+      const pend = s.pending
+      if (pend?.type !== 'birthday' || !pend.donors.includes(action.by) || action.by in pend.gifts) return prev
+      const donor = s.players[action.by]
+      const gift = action.uid == null
+        ? lowestUnusedSalary(donor)
+        : donor.salaries.find((x) => x.card.uid === action.uid && !x.invested)?.card
+      if (!gift) return prev
+      // nouvel objet : cloneState ne copie pas le pending
+      const gifts = { ...pend.gifts, [action.by]: gift.uid }
+      if (pend.donors.some((i) => !(i in gifts))) {
+        s.pending = { ...pend, gifts }
+        return s
+      }
+      s.pending = null
+      giveBirthdayGifts(s, s.current, gifts)
       finishPlay(s)
       return s
     }

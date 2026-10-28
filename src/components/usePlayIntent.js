@@ -6,13 +6,15 @@
 //  - avec choix (cible, paiement, malus à renvoyer, Anniversaire) → étape de
 //    choix « Annuler » / « Confirmer », envoi au moteur à la confirmation.
 // Annuler ne touche jamais l'état du jeu : la carte revient simplement en main.
+// Les cadeaux d'Anniversaire (après la confirmation) sont une étape du moteur
+// (state.pending) : voir useBirthdayGifts plus bas.
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CARD_RATIO } from './PlayedStacks'
 import { cardRect } from './flights'
 import {
   needsPayment, purchaseCost, architectFree, cheapestPayment, vengeanceChoices,
-  birthdayDonors, flirtStealVictims, canPlayMalus, lowestUnusedSalary, interimReplaced,
+  birthdayDonors, flirtStealVictims, canPlayMalus, interimReplaced,
 } from '../game/rules'
 
 export const TOAST_MS = 3000
@@ -140,7 +142,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
       return
     }
     if (flow === 'birthday') {
-      setIntent({ ...base, stage: 'birthday', donors: birthdayDonors(state, me), gifts: {} })
+      setIntent({ ...base, stage: 'birthday', donors: birthdayDonors(state, me) })
     }
   }, [state, viewer])
 
@@ -162,7 +164,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
   // ---- annuler : la carte revient à sa place, rien n'est consommé ----------
   const cancel = useCallback(() => {
     const it = ref.current
-    if (!it || it.stage === 'returning' || it.stage === 'gifts') return
+    if (!it || it.stage === 'returning') return
     const uid = it.card.uid
     const ghosts = it.stage === 'toast'
       ? it.ghosts.map((g) => (g.victim != null
@@ -216,44 +218,12 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
       return
     }
     if (it.stage === 'birthday') {
-      if (it.donors.length === 0) {
-        act(play(it))
-        setIntent(null)
-      } else {
-        patch({ stage: 'gifts', asking: 0, askedAt: Date.now() })
-      }
+      // le moteur ouvre ensuite l'étape des cadeaux (ou règle tout de suite
+      // l'anniversaire si personne n'a de salaire à offrir)
+      act(play(it))
+      setIntent(null)
     }
   }, [act, remember, patch, setView, state])
-
-  // ---- Anniversaire : chaque donateur choisit le salaire qu'il offre --------
-  const give = useCallback((donor, salaryUid) => {
-    const it = ref.current
-    if (!it || it.stage !== 'gifts' || it.donors[it.asking] !== donor) return
-    const gifts = { ...it.gifts, [donor]: salaryUid }
-    const asking = it.asking + 1
-    if (asking < it.donors.length) {
-      setIntent({ ...it, gifts, asking, askedAt: Date.now() })
-      return
-    }
-    const dock = spots.dock()
-    if (dock) remember(it.card.uid, dock)
-    act({ ...play(it), gifts })
-    setIntent(null)
-  }, [act, remember])
-
-  // délai dépassé, ou joueur robot / déconnecté : son plus petit salaire libre
-  useEffect(() => {
-    if (intent?.stage !== 'gifts') return
-    const donor = intent.donors[intent.asking]
-    const q = state.players[donor]
-    const auto = () => give(donor, lowestUnusedSalary(q)?.uid)
-    if (q.bot || q.disconnected) {
-      const t = setTimeout(auto, 600)
-      return () => clearTimeout(t)
-    }
-    const t = setTimeout(auto, Math.max(0, intent.askedAt + GIFT_TIMEOUT_MS - Date.now()))
-    return () => clearTimeout(t)
-  }, [intent?.stage, intent?.asking, give])
 
   // ---- Troc : montrer ce qui a été échangé ----------------------------------
   // (effet de mise en page : le bandeau doit exister avant que la fin de tour
@@ -288,5 +258,40 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
     return { ok: false }
   }
 
-  return { intent, start, cancel, confirm, returned, patch, give, banner, targetCheck, commitToast }
+  return { intent, start, cancel, confirm, returned, patch, banner, targetCheck, commitToast }
+}
+
+// ---------------------------------------------------------------------------
+// Anniversaire : sur un seul écran, les donateurs sont sollicités l'un après
+// l'autre (ordre des joueurs), chacun avec son compte à rebours. Le moteur
+// accepte les cadeaux dans n'importe quel ordre ; les délais restent ici
+// (le moteur est pur). Délai dépassé, ou joueur robot / déconnecté : on
+// envoie uid null, et le moteur offre son plus petit salaire libre.
+// ---------------------------------------------------------------------------
+export function useBirthdayGifts({ state, act, remember, active }) {
+  const pend = active && state.pending?.type === 'birthday' ? state.pending : null
+  const asking = pend ? pend.donors.find((i) => !(i in pend.gifts)) ?? null : null
+  // début du délai du donateur sollicité
+  const asked = useRef(null)
+  if (asking == null) asked.current = null
+  else if (asked.current?.donor !== asking) asked.current = { donor: asking, at: Date.now() }
+  const askedAt = asked.current?.at ?? 0
+
+  const cardUid = pend?.card.uid
+  const give = useCallback((donor, uid) => {
+    // la carte part du dock quand le dernier cadeau est reçu
+    const dock = spots.dock()
+    if (dock) remember(cardUid, dock)
+    act({ type: 'BIRTHDAY_GIFT', by: donor, uid })
+  }, [act, remember, cardUid])
+
+  useEffect(() => {
+    if (asking == null) return
+    const q = state.players[asking]
+    const auto = () => give(asking, null)
+    const t = setTimeout(auto, q.bot || q.disconnected ? 600 : Math.max(0, askedAt + GIFT_TIMEOUT_MS - Date.now()))
+    return () => clearTimeout(t)
+  }, [asking, askedAt, give])
+
+  return pend ? { pending: pend, asking, askedAt, give } : null
 }
