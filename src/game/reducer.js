@@ -864,9 +864,11 @@ export function gameReducer(prev, action) {
     case 'CHEF_TROC_OPP_PICK': {
       // l'adversaire choisit, face cachée, une carte non protégée du Chef
       if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'opp-pick') return prev
+      // Pioche face cachée : l'ordre de la main est public (cartes ajoutées à la fin),
+      // donc on ignore action.index et on tire au hasard, comme une main mélangée à la table.
       const pickable = p.hand.filter((c) => c.uid !== s.pending.protectedUid)
-      const picked = pickable[action.index]
-      if (!picked) return prev
+      if (pickable.length === 0) return prev
+      const picked = pickable[Math.floor(Math.random() * pickable.length)]
       s.pending = { type: 'chef-troc', step: 'chef-pick', target: s.pending.target, oppPickedUid: picked.uid }
       return s
     }
@@ -874,8 +876,9 @@ export function gameReducer(prev, action) {
       // le Chef choisit, face cachée, une carte de l'adversaire — puis échange
       if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'chef-pick') return prev
       const t = s.players[s.pending.target]
-      const theirs = t.hand[action.index]
-      if (!theirs) return prev
+      // même raison : action.index est ignoré, tirage au hasard dans la main adverse
+      if (t.hand.length === 0) return prev
+      const theirs = t.hand[Math.floor(Math.random() * t.hand.length)]
       const mine = removeFromHand(p, s.pending.oppPickedUid)
       removeFromHand(t, theirs.uid)
       if (mine) t.hand.push(mine)
