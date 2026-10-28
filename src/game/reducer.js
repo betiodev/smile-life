@@ -92,10 +92,12 @@ function removeFromHand(p, uidToRemove) {
 }
 
 // Perte de métier (démission, licenciement, purge Policier, prison)
-// Le métier est défaussé au nom de son propriétaire : il ne peut pas le reprendre
-function loseJob(s, pIdx, destination = 'discard') {
+// Le métier est défaussé au nom de son propriétaire : il ne peut pas le reprendre.
+// Retourne true si un choix reste à faire (Chercheur : carte à défausser) ;
+// resume = ce qui reprend après ce choix ('finish-play' ou 'end-turn').
+function loseJob(s, pIdx, destination = 'discard', resume = 'finish-play') {
   const p = s.players[pIdx]
-  if (!p.job) return
+  if (!p.job) return false
   const job = p.job
   p.job = null
   p.architectFreeUsed = false
@@ -106,14 +108,14 @@ function loseJob(s, pIdx, destination = 'discard') {
       log(s, `Le Grand Prix de ${p.name} est retourné (smiles conservés)`)
     }
   }
-  // Chercheur : défausse 1 carte en plus (main 6 → 5)
-  if (job.key === 'chercheur' && p.hand.length > 0) {
-    const i = Math.floor(Math.random() * p.hand.length)
-    const extra = p.hand.splice(i, 1)[0]
-    toDiscard(s, extra, pIdx)
-    log(s, `${p.name} (Chercheur) défausse 1 carte en plus`)
-  }
   if (destination === 'discard') toDiscard(s, job, pIdx)
+  // Chercheur : défausse 1 carte en plus (main 6 → 5), choisie par le joueur
+  // lui-même (action CHERCHEUR_DISCARD), même pendant le tour d'un autre
+  if (job.key === 'chercheur' && p.hand.length > 0) {
+    s.pending = { type: 'chercheur-discard', player: pIdx, resume }
+    return true
+  }
+  return false
 }
 
 // ---------------------------------------------------------------------------
@@ -568,6 +570,9 @@ export function gameReducer(prev, action) {
   // l'auteur de l'action doit être un joueur autorisé à agir maintenant
   if (!prev?.players || !canAct(prev, action.by)) return prev
 
+  // Chercheur qui perd son métier : seule sa défausse est attendue
+  if ((prev.pending?.type === 'chercheur-discard') !== (action.type === 'CHERCHEUR_DISCARD')) return prev
+
   const s = cloneState(prev)
   // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
   // l'adversaire choisit dans la main du Chef) et cadeaux d'Anniversaire (chaque
@@ -620,8 +625,9 @@ export function gameReducer(prev, action) {
       if (s.phase !== 'draw' || !p.job) return prev
       const interim = isInterim(p)
       log(s, `${p.name} démissionne de ${p.job.name}${interim ? ' (Intérimaire : joue quand même)' : ' et passe son tour'}`)
-      loseJob(s, s.current)
-      if (!interim) endTurn(s)
+      // Chercheur : le tour ne se termine qu'après le choix de la carte défaussée
+      const choosing = loseJob(s, s.current, 'discard', interim ? 'none' : 'end-turn')
+      if (!interim && !choosing) endTurn(s)
       return s
     }
     case 'DIVORCE_VOLUNTARY': {
@@ -864,9 +870,11 @@ export function gameReducer(prev, action) {
     case 'CHEF_TROC_OPP_PICK': {
       // l'adversaire choisit, face cachée, une carte non protégée du Chef
       if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'opp-pick') return prev
+      // Pioche face cachée : l'ordre de la main est public (cartes ajoutées à la fin),
+      // donc on ignore action.index et on tire au hasard, comme une main mélangée à la table.
       const pickable = p.hand.filter((c) => c.uid !== s.pending.protectedUid)
-      const picked = pickable[action.index]
-      if (!picked) return prev
+      if (pickable.length === 0) return prev
+      const picked = pickable[Math.floor(Math.random() * pickable.length)]
       s.pending = { type: 'chef-troc', step: 'chef-pick', target: s.pending.target, oppPickedUid: picked.uid }
       return s
     }
@@ -874,8 +882,9 @@ export function gameReducer(prev, action) {
       // le Chef choisit, face cachée, une carte de l'adversaire — puis échange
       if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'chef-pick') return prev
       const t = s.players[s.pending.target]
-      const theirs = t.hand[action.index]
-      if (!theirs) return prev
+      // même raison : action.index est ignoré, tirage au hasard dans la main adverse
+      if (t.hand.length === 0) return prev
+      const theirs = t.hand[Math.floor(Math.random() * t.hand.length)]
       const mine = removeFromHand(p, s.pending.oppPickedUid)
       removeFromHand(t, theirs.uid)
       if (mine) t.hand.push(mine)
@@ -893,8 +902,9 @@ export function gameReducer(prev, action) {
       if (!canPlayMalus(s, s.current, malus, action.target).ok) return prev
       p.malusKept.splice(i, 1)
       log(s, `😈 ${p.name} se venge avec ${malus.name} !`)
-      applyMalus(s, s.current, malus, action.target)
+      // avant applyMalus : un licenciement de Chercheur ouvre un nouveau choix
       s.pending = null
+      applyMalus(s, s.current, malus, action.target)
       finishPlay(s)
       return s
     }
@@ -932,6 +942,24 @@ export function gameReducer(prev, action) {
       s.pending = null
       giveBirthdayGifts(s, s.current, gifts)
       finishPlay(s)
+      return s
+    }
+    case 'CHERCHEUR_DISCARD': {
+      // l'ex-Chercheur défausse la carte de son choix
+      // (uid null : au hasard, choix par défaut à l'expiration du délai)
+      const pend = s.pending
+      const q = s.players[pend.player]
+      const card = action.uid == null
+        ? q.hand[Math.floor(Math.random() * q.hand.length)]
+        : q.hand.find((c) => c.uid === action.uid)
+      if (!card) return prev
+      removeFromHand(q, card.uid)
+      toDiscard(s, card, pend.player)
+      log(s, `${q.name} (Chercheur) défausse 1 carte en plus`)
+      s.pending = null
+      // reprend là où la perte du métier s'était arrêtée
+      if (pend.resume === 'end-turn') endTurn(s)
+      else if (pend.resume === 'finish-play') finishPlay(s)
       return s
     }
     case 'CLOSE_PENDING': {

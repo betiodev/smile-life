@@ -51,7 +51,8 @@ function pendingFor(pending, state, viewer) {
       return pub
     }
     default:
-      // achat, anniversaire, Étoile filante, Piston, Troc, Vengeance, Casino : publics
+      // achat, anniversaire, Étoile filante, Piston, Troc, Vengeance, Casino,
+      // défausse du Chercheur (seul son joueur voit sa main) : publics
       return copy(pending)
   }
 }

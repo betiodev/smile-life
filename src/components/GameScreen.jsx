@@ -183,7 +183,7 @@ const zoomFor = () => Math.min(1.7, Math.max(1, window.innerHeight / 390))
 // plateaux). On joue en faisant glisser les cartes de la main (SwipeCard) ;
 // l'intention de jeu (toast, choix) vit dans usePlayIntent.
 // ---------------------------------------------------------------------------
-export default function GameScreen({ state, dispatch, viewer = state.current, locked = false, onSettled }) {
+export default function GameScreen({ state, dispatch, viewer = state.current, locked = false, onSettled, chercheurSince }) {
   const [view, setView] = useState('me') // 'me' | 'table'
   const [zoom, setZoom] = useState(null) // { cards, fromHand, from }
   const [zoomBack, setZoomBack] = useState(null) // carte agrandie qui rentre dans la main
@@ -235,7 +235,8 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   }, [])
 
   const p = state.players[viewer]
-  const myTurn = !locked
+  // viewer ≠ joueur courant : un Chercheur licencié tient l'écran le temps de son choix
+  const myTurn = !locked && viewer === state.current
   const isForced = myTurn && !!state.forced
 
   // le geste est-il permis ? (base commune au swipe et aux boutons)
@@ -289,7 +290,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
 
   return (
     <div ref={rootRef} className="game-root" style={{ '--ui': uiZoom }}>
-      {!locked && <Modals state={state} dispatch={act} />}
+      {!locked && <Modals state={state} dispatch={act} chercheurSince={chercheurSince} />}
       <FlightLayer flights={flights} onDone={onDone} />
       {targeting
         ? <TableView game={game} targeting={targeting} />

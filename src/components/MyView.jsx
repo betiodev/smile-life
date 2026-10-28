@@ -105,7 +105,7 @@ function Piles({ game }) {
 
 // ---- centre : barre du haut -------------------------------------------------
 function TopBar({ game }) {
-  const { state, viewer, p, locked } = game
+  const { state, viewer, p, locked, myTurn } = game
   const score = computeScore(p)
   return (
     <div className="ui-zoom flex items-center gap-2 min-w-0 h-8 shrink-0">
@@ -113,6 +113,8 @@ function TopBar({ game }) {
       <span className="font-title text-lg font-semibold truncate">{p.name}</span>
       {locked ? (
         <span className="text-xs opacity-60 whitespace-nowrap">Fin du tour…</span>
+      ) : !myTurn ? (
+        <span className="text-xs opacity-60 whitespace-nowrap truncate">tour de {state.players[state.current].name}</span>
       ) : (
         <span className="text-xs font-bold text-[#FFC93C] whitespace-nowrap truncate">
           c’est ton tour

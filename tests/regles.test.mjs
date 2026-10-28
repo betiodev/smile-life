@@ -471,9 +471,128 @@ function check(label, cond) {
   const r = gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 1 })
   // l'adversaire pioche dans la main du Chef, hors carte protégée
   check('Chef troc opp-pick : l’adversaire est accepté', r !== s && r.pending.step === 'chef-pick' &&
-    r.pending.oppPickedUid === s.players[0].hand[1].uid)
+    r.pending.oppPickedUid !== protectedUid && s.players[0].hand.some((c) => c.uid === r.pending.oppPickedUid))
   check('Chef troc chef-pick : de nouveau au tour du Chef', JSON.stringify(whoMustAct(r)) === '[0]' &&
     gameReducer(r, { type: 'CHEF_TROC_CHEF_PICK', index: 0, by: 1 }) === r)
+}
+
+// --- Troc du Chef : les pioches face cachée ne dépendent pas de la position ---
+{
+  const RUNS = 200
+  const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: false })
+  base.screen = 'game'
+  base.phase = 'play'
+  base.players[0].job = find((c) => c.key === 'chef_achats')
+  const chefHand = base.players[0].hand
+  const oppHand = base.players[1].hand
+  const protectedUid = chefHand[0].uid
+
+  // l'adversaire pioche chez le Chef, en visant toujours la dernière position
+  const oppState = { ...base, pending: { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid } }
+  const lastPickable = chefHand.length - 2
+  const oppTaken = new Map()
+  for (let i = 0; i < RUNS; i++) {
+    const r = gameReducer(oppState, { type: 'CHEF_TROC_OPP_PICK', index: lastPickable, by: 1 })
+    oppTaken.set(r.pending.oppPickedUid, (oppTaken.get(r.pending.oppPickedUid) ?? 0) + 1)
+  }
+  check('Chef troc opp-pick : la carte protégée n’est jamais prise', !oppTaken.has(protectedUid))
+  check('Chef troc opp-pick : la dernière position n’est pas toujours prise',
+    (oppTaken.get(chefHand[chefHand.length - 1].uid) ?? 0) < RUNS)
+  check('Chef troc opp-pick : chaque carte non protégée est prise au moins une fois',
+    chefHand.slice(1).every((c) => oppTaken.has(c.uid)))
+
+  // le Chef pioche chez l'adversaire ; la dernière carte est connue (ex. prise dans la rivière)
+  const oppPickedUid = chefHand[1].uid
+  const chefState = { ...base, pending: { type: 'chef-troc', step: 'chef-pick', target: 1, oppPickedUid } }
+  const known = oppHand[oppHand.length - 1]
+  const chefTaken = new Map()
+  for (let i = 0; i < RUNS; i++) {
+    const r = gameReducer(chefState, { type: 'CHEF_TROC_CHEF_PICK', index: oppHand.length - 1, by: 0 })
+    const got = r.players[0].hand[r.players[0].hand.length - 1]
+    chefTaken.set(got.uid, (chefTaken.get(got.uid) ?? 0) + 1)
+  }
+  check('Chef troc chef-pick : la carte connue n’est pas toujours prise', (chefTaken.get(known.uid) ?? 0) < RUNS)
+  check('Chef troc chef-pick : chaque carte adverse est prise au moins une fois',
+    oppHand.every((c) => chefTaken.has(c.uid)))
+}
+
+// --- Chercheur qui perd son métier : il choisit la carte défaussée en plus ---
+{
+  const chercheur = find((c) => c.key === 'chercheur')
+  const licenciement = find((c) => c.key === 'licenciement')
+  // Ana (0) joue, Ben (1) est Chercheur avec 6 cartes en main
+  const setup = () => {
+    const s = freshState()
+    s.screen = 'game'
+    s.phase = 'play'
+    s.players[1].job = chercheur
+    s.players[1].hand.push(s.deck.pop())
+    s.players[0].hand[0] = licenciement
+    return s
+  }
+
+  // Licenciement pendant le tour d'Ana
+  const s = setup()
+  const r = gameReducer(s, { type: 'PLAY_MALUS', uid: licenciement.uid, target: 1, by: 0 })
+  check('Chercheur licencié : le choix s’ouvre pour Ben', r.pending?.type === 'chercheur-discard' && r.pending.player === 1 &&
+    r.players[1].job === null && r.players[1].hand.length === 6)
+  check('Chercheur licencié : seul Ben peut agir', JSON.stringify(whoMustAct(r)) === '[1]')
+  check('Chercheur licencié : le tour d’Ana attend le choix', r.current === 0 && r.screen === 'game')
+  const chosen = r.players[1].hand[2]
+  check('Chercheur licencié : Ana ne peut pas choisir à sa place',
+    gameReducer(r, { type: 'CHERCHEUR_DISCARD', uid: chosen.uid, by: 0 }) === r)
+  check('Chercheur licencié : Ana ne peut rien jouer d’autre', gameReducer(r, { type: 'END_PLAYS', by: 0 }) === r)
+  check('Chercheur licencié : une carte hors de sa main est refusée',
+    gameReducer(r, { type: 'CHERCHEUR_DISCARD', uid: r.players[0].hand[1].uid, by: 1 }) === r)
+  const d = gameReducer(r, { type: 'CHERCHEUR_DISCARD', uid: chosen.uid, by: 1 })
+  check('Chercheur licencié : la carte choisie va à la défausse', d.discard[d.discard.length - 1].card.uid === chosen.uid &&
+    d.discard[d.discard.length - 1].by === 1 && d.players[1].hand.length === 5 && !d.players[1].hand.some((c) => c.uid === chosen.uid))
+  check('Chercheur licencié : le métier est défaussé', d.discard.some((e) => e.card.uid === chercheur.uid))
+  check('Chercheur licencié : puis le tour d’Ana se termine normalement', d.pending === null && d.current === 1 &&
+    d.screen === 'transition' && d.players[0].hand.length === 5)
+  check('Chercheur licencié : action sans choix en attente refusée',
+    gameReducer(d, { type: 'CHERCHEUR_DISCARD', uid: d.players[1].hand[0].uid, by: 1 }) === d)
+
+  // uid null (délai dépassé) : une carte de sa main au hasard
+  const n = gameReducer(r, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 })
+  const top = n.discard[n.discard.length - 1]
+  check('Chercheur : uid null défausse une carte de sa main', n.players[1].hand.length === 5 && top.by === 1 &&
+    r.players[1].hand.some((c) => c.uid === top.card.uid) && n.current === 1)
+
+  // Licenciement par Vengeance : le choix n'est pas écrasé
+  const v = setup()
+  v.players[0].hand[0] = v.deck.pop()
+  v.players[0].malusKept = [licenciement]
+  v.pending = { type: 'vengeance' }
+  v.playsRemaining = 0 // la carte Vengeance a déjà consommé le jeu
+  const rv = gameReducer(v, { type: 'VENGEANCE_PICK', uid: licenciement.uid, target: 1, by: 0 })
+  check('Chercheur licencié par Vengeance : le choix s’ouvre pour Ben', rv.pending?.type === 'chercheur-discard' && rv.current === 0)
+  const dv = gameReducer(rv, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 })
+  check('Chercheur licencié par Vengeance : puis le tour d’Ana se termine', dv.pending === null && dv.current === 1)
+
+  // Démission volontaire pendant son propre tour
+  const m = freshState()
+  m.screen = 'game'
+  m.players[0].job = chercheur
+  m.players[0].hand.push(m.deck.pop())
+  const rm = gameReducer(m, { type: 'RESIGN', by: 0 })
+  check('Chercheur démissionnaire : le choix s’ouvre, le tour n’est pas fini', rm.pending?.type === 'chercheur-discard' &&
+    rm.pending.player === 0 && rm.current === 0 && rm.screen === 'game' && rm.players[0].hand.length === 6)
+  check('Chercheur démissionnaire : pas de pioche avant le choix', gameReducer(rm, { type: 'DRAW_DECK', by: 0 }) === rm)
+  check('Chercheur démissionnaire : un autre joueur est refusé',
+    gameReducer(rm, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 }) === rm)
+  const pick = rm.players[0].hand[0]
+  const dm = gameReducer(rm, { type: 'CHERCHEUR_DISCARD', uid: pick.uid, by: 0 })
+  check('Chercheur démissionnaire : la carte choisie est défaussée, puis il passe son tour',
+    dm.discard[dm.discard.length - 1].card.uid === pick.uid && dm.pending === null && dm.current === 1 &&
+    dm.screen === 'transition' && dm.players[0].hand.length === 5)
+
+  // main vide : aucun choix
+  const e = setup()
+  e.players[1].hand = []
+  const re = gameReducer(e, { type: 'PLAY_MALUS', uid: licenciement.uid, target: 1, by: 0 })
+  check('Chercheur licencié, main vide : aucun choix, le tour se termine', re.pending === null && re.current === 1 &&
+    re.discard[re.discard.length - 1].card.uid === chercheur.uid)
 }
 
 // --- Arrêter l'adultère : pendant son tour, sans choix en attente ----------
