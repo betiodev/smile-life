@@ -440,6 +440,27 @@ function check(label, cond) {
   check('Adultère : le joueur joue une carte normalement ensuite', played !== r &&
     played.players[0].studies.some((c) => c.uid === study.uid) && played.current === 1)
 
+  // refusé après avoir joué l'Arc-en-ciel, entre ses jeux
+  const arc = find((c) => c.key === 'arcenciel')
+  const avant = gameReducer(s, { type: 'STOP_ADULTERY', by: 0 })
+  s.players[0].hand[0] = arc
+  const arcJoue = gameReducer(s, { type: 'PLAY_SELF', uid: arc.uid, by: 0 })
+  check('Adultère : autorisé avant l’Arc-en-ciel', avant.players[0].adultery === null)
+  check('Adultère : refusé entre les jeux de l’Arc-en-ciel', arcJoue.playsRemaining === 3 &&
+    !canStopAdultery(arcJoue, 0).ok && gameReducer(arcJoue, { type: 'STOP_ADULTERY', by: 0 }) === arcJoue)
+
+  // refusé aussi après une Chance (le jeu revient à 1, mais une carte a été jouée)
+  const chance = find((c) => c.key === 'chance')
+  s.players[0].hand[0] = chance
+  let ch = gameReducer(s, { type: 'PLAY_SELF', uid: chance.uid, by: 0 })
+  ch = gameReducer(ch, { type: 'CHANCE_PICK', uid: ch.pending.cards[0].uid, by: 0 })
+  check('Adultère : refusé après avoir joué Chance', ch.playsRemaining === 1 &&
+    gameReducer(ch, { type: 'STOP_ADULTERY', by: 0 }) === ch)
+
+  // au tour suivant, de nouveau autorisé
+  const tourSuivant = gameReducer(gameReducer(arcJoue, { type: 'END_PLAYS', by: 0 }), { type: 'READY', by: 1 })
+  check('Adultère : le marqueur est remis à zéro au tour suivant', tourSuivant.cardPlayed === false)
+
   // refusé pendant un choix en attente ou avec une carte forcée
   const pend = { ...s, pending: { type: 'journalist' } }
   check('Adultère : refusé pendant un choix en attente', gameReducer(pend, { type: 'STOP_ADULTERY', by: 0 }) === pend)

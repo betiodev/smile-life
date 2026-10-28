@@ -488,6 +488,7 @@ function endTurn(s) {
   s.current = next
   s.phase = 'draw'
   s.playsRemaining = 1
+  s.cardPlayed = false
   s.forced = null
   s.pending = null
   s.riverUsedThisTurn = false
@@ -513,6 +514,7 @@ function gameOver(s) {
 
 // Consommation d'un jeu de carte (forcé ou non)
 function consumePlay(s, wasForced) {
+  s.cardPlayed = true
   if (wasForced) {
     if (s.forcedConsumesPlay) s.playsRemaining -= 1
     s.forced = null
@@ -542,6 +544,7 @@ export function gameReducer(prev, action) {
       current: 0,
       phase: 'draw',
       playsRemaining: 1,
+      cardPlayed: false,  // une carte a-t-elle déjà été jouée ce tour ?
       forced: null,
       forcedConsumesPlay: false,
       pending: null,
@@ -705,6 +708,7 @@ export function gameReducer(prev, action) {
         s.casino.stake = null
       }
       s.playsRemaining -= 1
+      s.cardPlayed = true
       finishPlay(s)
       return s
     }
