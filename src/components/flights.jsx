@@ -9,11 +9,12 @@ import Card from './Card'
 export const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-// uid → { where, card } : 'deck' | 'discard' | 'river' | 'forced' | 'hand:i' | 'board:i'
+// uid → { where, card } : 'discard' | 'river' | 'forced' | 'hand:i' | 'board:i'
+// (state = vue d'un joueur : la pioche n'y est qu'un nombre, et les cartes
+// cachées des autres mains n'ont pas de vrai uid — on ne les suit pas)
 export function locateCards(state) {
   const m = new Map()
-  const put = (c, where) => c && m.set(c.uid, { where, card: c })
-  state.deck.forEach((c) => put(c, 'deck'))
+  const put = (c, where) => c && !c.hidden && m.set(c.uid, { where, card: c })
   state.discard.forEach((e) => put(e.card, 'discard'))
   state.river.forEach((c) => put(c, 'river'))
   put(state.forced, 'forced')
@@ -87,7 +88,7 @@ function Flight({ f, onDone }) {
     >
       <div ref={inner} style={{ position: 'relative', transformStyle: 'preserve-3d' }}>
         <div style={{ backfaceVisibility: 'hidden' }}>
-          <Card card={f.card} size="lg" style={{ width: base.width }} />
+          <Card card={f.card} faceDown={f.faceDown} size="lg" style={{ width: base.width }} />
         </div>
         {f.flip && (
           <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>

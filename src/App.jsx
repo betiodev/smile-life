@@ -1,5 +1,6 @@
-import { useReducer, useState, useEffect, useCallback } from 'react'
+import { useReducer, useState, useEffect, useCallback, useMemo } from 'react'
 import { gameReducer, initialState } from './game/reducer'
+import { viewFor } from './game/view'
 import SetupScreen from './components/SetupScreen'
 import TransitionScreen from './components/TransitionScreen'
 import GameScreen from './components/GameScreen'
@@ -52,20 +53,27 @@ function RotateOverlay() {
   )
 }
 
+// L'interface ne lit que la vue d'un joueur (viewFor), jamais l'état complet ;
+// les actions, elles, partent vers le reducer complet.
 function Screen({ state, dispatch, hold, release }) {
-  if (hold && (state.screen === 'transition' || state.screen === 'gameover')) {
-    return <GameScreen state={state} dispatch={dispatch} viewer={hold.viewer} locked onSettled={release} />
+  const held = hold && (state.screen === 'transition' || state.screen === 'gameover')
+  // écran de transition / de fin : vue de spectateur (l'écran passe de main en main)
+  const viewer = held ? hold.viewer : state.screen === 'game' ? state.current : null
+  const view = useMemo(() => viewFor(state, viewer), [state, viewer])
+
+  if (held) {
+    return <GameScreen state={view} dispatch={dispatch} viewer={viewer} locked onSettled={release} />
   }
 
   switch (state.screen) {
     case 'setup':
       return <SetupScreen dispatch={dispatch} />
     case 'transition':
-      return <TransitionScreen state={state} dispatch={dispatch} />
+      return <TransitionScreen state={view} dispatch={dispatch} />
     case 'game':
-      return <GameScreen state={state} dispatch={dispatch} />
+      return <GameScreen state={view} dispatch={dispatch} viewer={viewer} />
     case 'gameover':
-      return <GameOverScreen state={state} dispatch={dispatch} />
+      return <GameOverScreen state={view} dispatch={dispatch} />
     default:
       return null
   }
