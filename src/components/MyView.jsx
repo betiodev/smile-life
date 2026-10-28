@@ -8,7 +8,7 @@ import PlayedStacks, { CARD_RATIO } from './PlayedStacks'
 import useElementSize from './useElementSize'
 import { playerColor, enterLandscapeFullscreen } from './theme'
 import { computeScore } from '../game/scoring'
-import { isPlayableFromDiscard, isInterim, canStopAdultery } from '../game/rules'
+import { canTakeRiverNow, isInterim, canStopAdultery } from '../game/rules'
 
 const Btn = ({ onClick, disabled, children, tone = 'light', title }) => {
   const tones = {
@@ -79,7 +79,7 @@ function Piles({ game }) {
         <div className="flex flex-col items-center gap-1">
           <div className="flex gap-1 items-start">
             {state.river.map((c, i) => {
-              const playable = isPlayableFromDiscard(state, state.current, c)
+              const playable = canTakeRiverNow(state, state.current, c)
               return (
                 <div key={c.uid} className="flex flex-col items-center gap-0.5">
                   <Card card={c} size="xs" style={{ width: Math.min(44, (width - 20) / 3) }} />

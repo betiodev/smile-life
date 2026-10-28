@@ -4,7 +4,7 @@ import {
   canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
   flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
   paidSalaries, spentSalaries, availableLiasses, effectiveSalaryLevel,
-  unusedHeritage, paidCards, spentCards, canStopAdultery,
+  unusedHeritage, paidCards, spentCards, canStopAdultery, canTakeRiverNow,
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import { whoMustAct } from '../src/game/turn.js'
@@ -576,6 +576,27 @@ function check(label, cond) {
   check('Adultère : refusé pendant un choix en attente', gameReducer(pend, { type: 'STOP_ADULTERY', by: 0 }) === pend)
   const forced = { ...s, forced: study }
   check('Adultère : refusé avec une carte forcée', gameReducer(forced, { type: 'STOP_ADULTERY', by: 0 }) === forced)
+}
+
+// --- Rivière : Chance jouée tout de suite, le remplacement vide la pioche ---
+{
+  let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: true })
+  s = gameReducer(s, { type: 'READY', by: 0 })
+  const chance = find((c) => c.key === 'chance')
+  s.river[0] = chance
+  // une seule carte en pioche : elle remplacera la Chance dans la rivière
+  s.deck = s.deck.slice(0, 1)
+  check('Rivière : Chance non jouable si le remplacement vide la pioche', !canTakeRiverNow(s, 0, chance))
+  check('Rivière : prise « jouer » refusée (pas de carte forcée bloquée)',
+    gameReducer(s, { type: 'TAKE_RIVER', index: 0, playNow: true, by: 0 }) === s)
+  const garde = gameReducer(s, { type: 'TAKE_RIVER', index: 0, playNow: false, by: 0 })
+  check('Rivière : la Chance peut quand même être gardée en main',
+    garde.players[0].hand.some((c) => c.uid === chance.uid) && garde.deck.length === 0)
+  // avec 2 cartes en pioche, il en reste une après le remplacement
+  s.deck = buildDeck().slice(0, 2).map((c, i) => ({ ...c, uid: 'test-pioche-' + i }))
+  check('Rivière : Chance jouable s’il reste une carte après le remplacement', canTakeRiverNow(s, 0, chance))
+  const joue = gameReducer(s, { type: 'TAKE_RIVER', index: 0, playNow: true, by: 0 })
+  check('Rivière : Chance prise et forcée', joue.forced?.uid === chance.uid && joue.deck.length === 1)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)
