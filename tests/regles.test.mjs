@@ -4,7 +4,7 @@ import {
   canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
   flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
   paidSalaries, spentSalaries, availableLiasses, effectiveSalaryLevel,
-  unusedHeritage, paidCards, spentCards,
+  unusedHeritage, paidCards, spentCards, canStopAdultery,
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import { whoMustAct } from '../src/game/turn.js'
@@ -404,6 +404,47 @@ function check(label, cond) {
     r.pending.oppPickedUid === s.players[0].hand[1].uid)
   check('Chef troc chef-pick : de nouveau au tour du Chef', JSON.stringify(whoMustAct(r)) === '[0]' &&
     gameReducer(r, { type: 'CHEF_TROC_CHEF_PICK', index: 0, by: 1 }) === r)
+}
+
+// --- Arrêter l'adultère : pendant son tour, sans choix en attente ----------
+{
+  const adultere = find((c) => c.type === 'adultery')
+  const flirt = find((c) => c.type === 'flirt')
+  const setup = () => {
+    let s = freshState()
+    s.players[0].adultery = adultere
+    s.players[0].flirts = [flirt]
+    return s
+  }
+  let s = setup()
+  check('Adultère : refusé sur l’écran de transition', !canStopAdultery(s, 0).ok &&
+    gameReducer(s, { type: 'STOP_ADULTERY', by: 0 }) === s)
+  s = gameReducer(s, { type: 'READY', by: 0 })
+  check('Adultère : un autre joueur ne peut pas l’arrêter', gameReducer(s, { type: 'STOP_ADULTERY', by: 1 }) === s)
+
+  // avant la pioche
+  let r = gameReducer(s, { type: 'STOP_ADULTERY', by: 0 })
+  check('Adultère : arrêt autorisé avant la pioche', r.players[0].adultery === null &&
+    r.players[0].flirts.length === 1 && r.discard.at(-1).card.uid === adultere.uid && r.phase === 'draw')
+
+  // après la pioche, avant de jouer
+  s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
+  r = gameReducer(s, { type: 'STOP_ADULTERY', by: 0 })
+  check('Adultère : arrêt autorisé après la pioche, sans consommer le jeu', r.players[0].adultery === null &&
+    r.phase === 'play' && r.playsRemaining === 1 && r.current === 0)
+
+  // le joueur joue ensuite normalement
+  const study = find((c) => c.type === 'study' && c.levels === 1)
+  r.players[0].hand[0] = study
+  const played = gameReducer(r, { type: 'PLAY_SELF', uid: study.uid, by: 0 })
+  check('Adultère : le joueur joue une carte normalement ensuite', played !== r &&
+    played.players[0].studies.some((c) => c.uid === study.uid) && played.current === 1)
+
+  // refusé pendant un choix en attente ou avec une carte forcée
+  const pend = { ...s, pending: { type: 'journalist' } }
+  check('Adultère : refusé pendant un choix en attente', gameReducer(pend, { type: 'STOP_ADULTERY', by: 0 }) === pend)
+  const forced = { ...s, forced: study }
+  check('Adultère : refusé avec une carte forcée', gameReducer(forced, { type: 'STOP_ADULTERY', by: 0 }) === forced)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

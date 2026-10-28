@@ -297,6 +297,17 @@ export function canTakeDiscardTop(state, pIdx) {
   return OK
 }
 
+// Arrêter l'adultère : pendant son propre tour, avant ou après la pioche, tant
+// qu'aucun choix n'est en attente ni aucune carte forcée. Ne consomme pas le jeu.
+export function canStopAdultery(state, pIdx) {
+  const p = state.players[pIdx]
+  if (!p?.adultery) return NO('Pas d’adultère en cours')
+  if (state.screen !== 'game' || state.current !== pIdx) return NO('Seulement pendant votre tour')
+  if (state.phase !== 'draw' && state.phase !== 'play') return NO('Seulement pendant votre tour')
+  if (state.pending || state.forced) return NO('Terminez d’abord l’action en cours')
+  return OK
+}
+
 // ---------------------------------------------------------------------------
 // Aides pour l'interface (aucune règle nouvelle : on réutilise celles du dessus)
 // ---------------------------------------------------------------------------

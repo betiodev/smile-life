@@ -6,7 +6,7 @@ import { buildDeck, shuffle } from '../data/cards.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
-  availableLiasses, validatePayment,
+  availableLiasses, validatePayment, canStopAdultery,
 } from './rules.js'
 import { canAct } from './turn.js'
 
@@ -629,7 +629,7 @@ export function gameReducer(prev, action) {
       return s
     }
     case 'STOP_ADULTERY': {
-      if (!p.adultery) return prev
+      if (!canStopAdultery(s, s.current).ok) return prev
       toDiscard(s, p.adultery, s.current)
       p.adultery = null
       log(s, `${p.name} met fin à son adultère (flirts conservés)`)
