@@ -2,7 +2,7 @@
 // une action valide pour l'état courant
 import { gameReducer as rawReducer } from '../src/game/reducer.js'
 import { whoMustAct } from '../src/game/turn.js'
-import { canPoseSelf, canPlayMalus, canTakeDiscardTop, isPlayableFromDiscard } from '../src/game/rules.js'
+import { canPoseSelf, canPlayMalus, canTakeDiscardTop, isPlayableFromDiscard, canTakeRiverNow } from '../src/game/rules.js'
 
 export const stats = { birthdayGifts: 0, chercheurDiscards: 0 }
 
@@ -117,7 +117,7 @@ export function step(s) {
     if (s.riverEnabled)
       s.river.forEach((c, i) => {
         opts.push({ type: 'TAKE_RIVER', index: i, playNow: false })
-        if (isPlayableFromDiscard(s, s.current, c)) opts.push({ type: 'TAKE_RIVER', index: i, playNow: true })
+        if (canTakeRiverNow(s, s.current, c)) opts.push({ type: 'TAKE_RIVER', index: i, playNow: true })
       })
     if (p.job && Math.random() < 0.02) opts.push({ type: 'RESIGN' })
     if (p.marriage && Math.random() < 0.02) opts.push({ type: 'DIVORCE_VOLUNTARY' })

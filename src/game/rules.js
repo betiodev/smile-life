@@ -288,6 +288,16 @@ export function isPlayableFromDiscard(state, pIdx, card) {
   return canPoseSelf(state, pIdx, card).ok
 }
 
+// Peut-on prendre cette carte de la rivière pour la jouer immédiatement ?
+// La carte de remplacement est piochée AVANT que la carte prise soit jouée :
+// la pioche a alors une carte de moins (une Chance n'est plus jouable si
+// le remplacement prend la dernière carte de la pioche).
+export function canTakeRiverNow(state, pIdx, card) {
+  const deckSize = state.deck?.length ?? state.deckCount
+  const after = { ...state, deck: undefined, deckCount: Math.max(0, deckSize - 1) }
+  return isPlayableFromDiscard(after, pIdx, card)
+}
+
 // Peut-on prendre le dessus de la défausse en phase de pioche ?
 export function canTakeDiscardTop(state, pIdx) {
   const top = state.discard[state.discard.length - 1]

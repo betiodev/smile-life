@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 import { buildDeck, shuffle } from '../data/cards.js'
 import {
-  canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard,
+  canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard, canTakeRiverNow,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
   availableLiasses, validatePayment, canStopAdultery, birthdayDonors, lowestUnusedSalary,
 } from './rules.js'
@@ -605,7 +605,7 @@ export function gameReducer(prev, action) {
       if (s.phase !== 'draw' || !s.riverEnabled) return prev
       const i = action.index
       if (i < 0 || i >= s.river.length) return prev
-      if (action.playNow && !isPlayableFromDiscard(s, s.current, s.river[i])) return prev
+      if (action.playNow && !canTakeRiverNow(s, s.current, s.river[i])) return prev
       const card = s.river.splice(i, 1)[0]
       const repl = drawCard(s)
       if (repl) s.river.splice(i, 0, repl)
