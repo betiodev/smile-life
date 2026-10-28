@@ -15,6 +15,9 @@ const RULES = [
   // Anniversaire : les donateurs qui n'ont pas encore offert leur salaire
   // (dans n'importe quel ordre ; le joueur fêté attend)
   (s) => (s.pending?.type === 'birthday' ? s.pending.donors.filter((i) => !(i in s.pending.gifts)) : null),
+  // Chercheur qui perd son métier (Licenciement, démission) : lui seul choisit
+  // la carte qu'il défausse, même pendant le tour d'un autre joueur
+  (s) => (s.pending?.type === 'chercheur-discard' ? [s.pending.player] : null),
 ]
 
 export function whoMustAct(state) {

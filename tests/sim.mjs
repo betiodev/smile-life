@@ -40,4 +40,4 @@ for (let g = 0; g < 40; g++) {
   const scores = s.players.map((p) => computeScore(p).total)
   console.log(`Partie ${g} (${n}j${river ? ', rivière' : ''}) : ${guard} étapes — scores ${scores.join(' / ')}`)
 }
-console.log(`\n✅ 40 parties complètes sans erreur (${totalTurns} étapes au total, ${stats.birthdayGifts} cadeaux d’Anniversaire)`)
+console.log(`\n✅ 40 parties complètes sans erreur (${totalTurns} étapes au total, ${stats.birthdayGifts} cadeaux d’Anniversaire, ${stats.chercheurDiscards} défausses de Chercheur)`)

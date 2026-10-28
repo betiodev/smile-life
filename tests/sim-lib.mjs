@@ -4,7 +4,7 @@ import { gameReducer as rawReducer } from '../src/game/reducer.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { canPoseSelf, canPlayMalus, canTakeDiscardTop, isPlayableFromDiscard } from '../src/game/rules.js'
 
-export const stats = { birthdayGifts: 0 }
+export const stats = { birthdayGifts: 0, chercheurDiscards: 0 }
 
 const rand = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
@@ -97,6 +97,12 @@ export function step(s) {
         const unused = s.players[by].salaries.filter((x) => !x.invested)
         stats.birthdayGifts++
         return gameReducer(s, { type: 'BIRTHDAY_GIFT', by, uid: Math.random() < 0.3 ? null : rand(unused).card.uid })
+      }
+      case 'chercheur-discard': {
+        // l'ex-Chercheur choisit sa carte, ou null (délai dépassé → au hasard)
+        stats.chercheurDiscards++
+        const hand = s.players[s.pending.player].hand
+        return gameReducer(s, { type: 'CHERCHEUR_DISCARD', uid: Math.random() < 0.3 ? null : rand(hand).uid })
       }
       default:
         throw new Error('pending inconnu : ' + s.pending.type)

@@ -211,6 +211,12 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   let views = 0
   for (let g = 0; g < 40; g++) {
     let s = newGame(g)
+    // une partie sur deux commence avec un Chercheur posé (pris dans la pioche),
+    // pour que la défausse du Chercheur (pending public) soit bien vérifiée
+    if (g % 2 === 0) {
+      const i = s.deck.findIndex((c) => c.key === 'chercheur')
+      if (i >= 0) s.players[g % s.players.length].job = s.deck.splice(i, 1)[0]
+    }
     const viewers = [...s.players.keys(), null]
     let guard = 0
     while (true) {
@@ -223,6 +229,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
       if (++guard > 20000) throw new Error('Partie infinie ?')
     }
   }
+  check('fuite : la défausse du Chercheur est couverte par les parties simulées', pendings['chercheur-discard'] > 0)
   check(`aucune fuite sur 40 parties (${views} vues ; pendings vus : ${Object.keys(pendings).sort().join(', ')})`, true)
 }
 

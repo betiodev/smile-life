@@ -22,6 +22,7 @@ Flirts are never flipped; only the top/most recent flirt can be stolen.
 Piston cannot be used for the Grand Prof promotion.
 Licorne doubles only with BOTH Arc-en-ciel AND Étoile filante.
 Purchases: each salary invested must be necessary to reach the cost (no over-investing to dodge Impôt); overpaying for lack of change is allowed.
+Losing the Chercheur job (Licenciement, resignation): the player discards 1 extra card from their hand and THEY choose it, even during another player's turn (pending chercheur-discard). Empty hand → no extra discard.
 Ce que chaque joueur voit (src/game/view.js — verified, do not change)
 The UI must only read from viewFor(state, viewer), never from the full state; actions still go to the full reducer. viewer = player index, or null for a spectator (transition and game-over screens).
 Public: every board, river, removed pile, forced card, log, purchase and birthday pendings, the WHOLE discard pile, every hand SIZE and the deck SIZE (deckCount).
