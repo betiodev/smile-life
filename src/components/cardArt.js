@@ -35,7 +35,11 @@ export function slugify(s) {
 }
 
 // nom de l'illustration : public/cards/<cat>-<nom>.png
-export const artKey = (card) => `${frameCategory(card)}-${slugify(card.name)}`
+// (sauf les études : etude-simple.png / etude-double.png)
+export const artKey = (card) => {
+  if (card.type === 'study') return card.levels === 2 ? 'etude-double' : 'etude-simple'
+  return `${frameCategory(card)}-${slugify(card.name)}`
+}
 
 // teinte du fond (clair au centre, plus soutenu au bord) + couleur d'accent
 export const TINTS = {
