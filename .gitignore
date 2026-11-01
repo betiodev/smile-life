@@ -3,8 +3,11 @@ dist/
 *.log
 
 # WebP générés à partir des PNG (npm run images)
+# (animal, enfant, maison, speciale, voyage : WebP versionnés, sans PNG source)
 public/frames/*.webp
-public/cards/*.webp
+public/cards/etude-*.webp
+public/cards/metier-*.webp
+public/cards/salaire-*.webp
 # fichiers système macOS, dans tous les dossiers
 .DS_Store
 /.claude

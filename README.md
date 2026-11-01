@@ -25,10 +25,10 @@ npm run build    # build de production (dossier dist/)
 Chaque carte = fond teinté + illustration + cadre de catégorie (`public/frames/<catégorie>_frame.png`).
 
 - Déposez les illustrations dans `public/cards/` au format PNG (1024×1024, fond transparent conseillé), nommées `<catégorie>-<nom>.png` : minuscules, sans accents, mots séparés par des tirets. Ex. `metier-serveur.png`, `metier-prof-d-anglais.png`, `malus-impot-sur-le-revenu.png`.
-- Catégories : `etudes`, `metier`, `salaire`, `flirt`, `mariage`, `adultere`, `enfant`, `malus`, `speciale`, `animal`, `acquisition` (voyages et maisons), `distinction`.
+- Catégories : `etudes`, `metier`, `salaire`, `flirt`, `mariage`, `adultere`, `enfant`, `malus`, `speciale`, `animal`, `distinction`. Voyages et maisons : `voyage-<ville>` et `maison-1` à `maison-3` (table `ACQUISITION_ART` dans `src/components/cardArt.js`).
 - La liste complète des noms attendus est visible dans la galerie : `npm run dev` puis ouvrir `/#cartes`.
 - Tant qu'une illustration manque, la carte affiche une grande icône de sa catégorie. Dès que le fichier est poussé, il apparaît automatiquement.
-- Les PNG sont convertis en WebP allégés (`npm run images`, fait automatiquement par `npm run dev` et `npm run build`) ; seuls les WebP sont publiés.
+- Les PNG sont convertis en WebP allégés (`npm run images`, fait automatiquement par `npm run dev` et `npm run build`) ; seuls les WebP sont publiés. Les illustrations `animal`, `enfant`, `maison`, `speciale` et `voyage` sont versionnées directement en WebP, sans PNG source.
 
 ## Structure du code
 
