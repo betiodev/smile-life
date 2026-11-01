@@ -34,10 +34,23 @@ export function slugify(s) {
     .replace(/^-+|-+$/g, '')
 }
 
+// voyages et maisons : le fichier ne suit pas <cat>-<nom>
+const ACQUISITION_ART = {
+  Londres: 'voyage-londres',
+  Sydney: 'voyage-sydney',
+  'Le Caire': 'voyage-le-caire',
+  'Rio de Janeiro': 'voyage-rio',
+  'New York': 'voyage-new-york',
+  'Maison simple': 'maison-1',
+  'Grande maison': 'maison-2',
+  Villa: 'maison-3',
+}
+
 // nom de l'illustration : public/cards/<cat>-<nom>.png
-// (sauf les études : etude-simple.png / etude-double.png)
+// (sauf les études : etude-simple.png / etude-double.png, et ACQUISITION_ART)
 export const artKey = (card) => {
   if (card.type === 'study') return card.levels === 2 ? 'etude-double' : 'etude-simple'
+  if (card.type === 'acquisition' && ACQUISITION_ART[card.name]) return ACQUISITION_ART[card.name]
   return `${frameCategory(card)}-${slugify(card.name)}`
 }
 
