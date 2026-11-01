@@ -4,6 +4,8 @@
 // Les sources PNG restent dans public/frames et public/cards. On génère à côté
 // une version .webp redimensionnée (ignorée par git) : c'est elle que le jeu
 // charge. Au build, les PNG sont retirés de dist/ pour ne publier que les WebP.
+// Exception : les illustrations versionnées directement en WebP, sans PNG
+// source (voir .gitignore).
 //
 // - plugin Vite : conversion au démarrage (dev + build), surveillance de
 //   public/cards en dev, module virtuel « virtual:card-art » qui liste les
@@ -49,7 +51,10 @@ export async function optimizeAll({ root = ROOT, verbose = true } = {}) {
 
 // noms (sans extension) des illustrations présentes dans public/cards
 export function listArt(root = ROOT) {
-  return pngsIn(path.join(root, 'public/cards')).map((f) => f.replace(/\.png$/i, '')).sort()
+  const names = fs.readdirSync(path.join(root, 'public/cards'))
+    .filter((f) => /\.(png|webp)$/i.test(f))
+    .map((f) => f.replace(/\.(png|webp)$/i, ''))
+  return [...new Set(names)].sort()
 }
 
 const VIRTUAL = 'virtual:card-art'
