@@ -9,6 +9,10 @@ public/cards/etude-*.webp
 public/cards/metier-*.webp
 public/cards/salaire-*.webp
 public/cards/mariage.webp
+public/cards/malus-*.webp
+public/cards/flirt-*.webp
+public/cards/adultere-*.webp
+public/cards/distinction-*.webp
 # fichiers système macOS, dans tous les dossiers
 .DS_Store
 /.claude
