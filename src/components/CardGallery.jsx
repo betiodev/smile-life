@@ -5,7 +5,9 @@ import { artKey } from './cardArt'
 
 export default function CardGallery() {
   const seen = new Set()
-  const cards = buildDeck().filter((c) => !seen.has(artKey(c)) && seen.add(artKey(c)))
+  // les mariages partagent une image mais affichent chacun leur lieu
+  const id = (c) => (c.type === 'marriage' ? `${artKey(c)}-${c.name}` : artKey(c))
+  const cards = buildDeck().filter((c) => !seen.has(id(c)) && seen.add(id(c)))
   return (
     <div className="p-4">
       <h1 className="font-black text-xl mb-1">Galerie des cartes ({cards.length})</h1>

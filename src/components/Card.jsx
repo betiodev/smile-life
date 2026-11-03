@@ -109,7 +109,16 @@ function Artwork({ card, cat }) {
   const key = artKey(card)
   const [failed, setFailed] = useState(false)
   if (availableArt.has(key) && !failed) {
-    return <img className="sl-card__img" src={artUrl(key)} alt="" draggable="false" loading="lazy" onError={() => setFailed(true)} />
+    return (
+      <>
+        <img className="sl-card__img" src={artUrl(key)} alt="" draggable="false" loading="lazy" onError={() => setFailed(true)} />
+        {card.type === 'marriage' && (
+          <div className="sl-card__sign-art">
+            <div className="sl-card__sign"><FitTitle text={card.name} max={7} min={2.5} /></div>
+          </div>
+        )}
+      </>
+    )
   }
   return (
     <div className="sl-card__placeholder" style={{ color: TINTS[cat].accent }}>

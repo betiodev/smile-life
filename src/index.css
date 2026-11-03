@@ -281,6 +281,34 @@ body {
   object-fit: cover;
   object-position: 50% 100%;
 }
+/* Mariage : le lieu est écrit sur le panneau vierge de l'illustration.
+   L'image (carrée, mariage.png) est en « cover » calée en bas : elle occupe
+   toute la largeur de la zone et dépasse en haut. Ce calque reproduit cette
+   boîte carrée pour placer le texte en % de l'illustration. */
+.sl-card__sign-art {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+.sl-card__sign {
+  /* intérieur du panneau : x 61→97 %, y 38→50 % (marge gardée sous le bord) */
+  position: absolute;
+  left: 64%;
+  right: 5%;
+  top: 39%;
+  height: 10%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-weight: 700;
+  line-height: 1;
+  color: #2f2f2d;
+}
+.sl-card__sign span { white-space: nowrap; text-box: trim-both cap alphabetic; }
 .sl-card__placeholder {
   width: 52%;
   opacity: 0.55;

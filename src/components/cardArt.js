@@ -47,10 +47,13 @@ const ACQUISITION_ART = {
 }
 
 // nom de l'illustration : public/cards/<cat>-<nom>.png
-// (sauf les études : etude-simple.png / etude-double.png, et ACQUISITION_ART)
+// (sauf les études : etude-simple.png / etude-double.png, les mariages :
+// mariage.png, et ACQUISITION_ART)
 export const artKey = (card) => {
   if (card.type === 'study') return card.levels === 2 ? 'etude-double' : 'etude-simple'
   if (card.type === 'acquisition' && ACQUISITION_ART[card.name]) return ACQUISITION_ART[card.name]
+  // une seule illustration pour tous les mariages : le lieu est écrit sur le panneau
+  if (card.type === 'marriage') return 'mariage'
   return `${frameCategory(card)}-${slugify(card.name)}`
 }
 
