@@ -8,6 +8,7 @@ public/frames/*.webp
 public/cards/etude-*.webp
 public/cards/metier-*.webp
 public/cards/salaire-*.webp
+public/cards/mariage.webp
 # fichiers système macOS, dans tous les dossiers
 .DS_Store
 /.claude
