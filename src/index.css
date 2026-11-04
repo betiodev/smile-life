@@ -363,6 +363,7 @@ body {
   line-height: 1;
 }
 .sl-card__badge span { text-box: trim-both cap alphabetic; }
+.sl-boom { width: 1.05em; height: 1.05em; display: block; }
 .sl-card__text {
   /* intérieur de l'encadré clair (x 80→942, y 1162→1402 sur le gabarit) */
   position: absolute;

@@ -24,6 +24,23 @@ const SIZES = {
 // style CSS appliqué (data-size) : la pile se comporte comme une petite carte
 const STYLE_SIZE = { pile: 'sm' }
 
+// Icône « boum » du badge des malus (à la place du 0) : en em, elle suit la
+// taille de police du badge comme le chiffre
+function Boom() {
+  return (
+    <svg className="sl-boom" viewBox="0 0 24 24" aria-hidden="true">
+      <polygon
+        points="12,1 13.9,6.1 17.6,4.3 17,8.4 22.5,8.6 18.2,12 21.4,15.1 17,15.6 18.3,20.6 13.9,17.9 12,23 10.1,17.9 6.5,19.6 7,15.6 1.5,15.4 5.8,12 2.4,8.9 7,8.4 5.9,3.5 10.1,6.1"
+        fill="#f0531c" stroke="#2b2b2b" strokeWidth="1.1" strokeLinejoin="round"
+      />
+      <polygon
+        points="12,5.6 13.4,8.7 15.8,8.2 15.3,10.6 18.4,12 15.3,13.4 16.1,16.1 13.4,15.3 12,18.4 10.6,15.3 8,16 8.7,13.4 5.6,12 8.7,10.6 7.9,7.9 10.6,8.7"
+        fill="#ffd23f" strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 // Titre : taille maximale, réduite (mesure réelle) s'il ne tient pas dans la
 // partie visible du bandeau. Tout est en cqw, donc le rapport ne dépend pas
 // de la taille de la carte : une seule mesure suffit.
@@ -171,7 +188,11 @@ export default function Card({
       <div className={`sl-card__title ${laurel ? 'has-laurel' : ''}`}>
         <FitTitle text={card.name} max={sz === 'sm' ? 9.5 : 8} min={sz === 'sm' ? 5 : 4.6} />
       </div>
-      <div className="sl-card__badge" aria-label={`${card.smiles} smiles`}><span>{card.smiles}</span></div>
+      {card.type === 'malus' ? (
+        <div className="sl-card__badge" aria-label="Malus"><Boom /></div>
+      ) : (
+        <div className="sl-card__badge" aria-label={`${card.smiles} smiles`}><span>{card.smiles}</span></div>
+      )}
       <div className={`sl-card__text ${textSize(long)}`}>
         {big ? (
           <>
