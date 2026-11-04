@@ -10,6 +10,7 @@ body {
   background: #1F2228;
   color: #F4EFE6;
   min-height: 100vh;
+  overscroll-behavior: none; /* pas de « tirer pour rafraîchir » pendant un glissement */
 }
 
 /* ---------------------------------------------------------------------------
@@ -76,6 +77,9 @@ body {
   .swipe-card:hover { z-index: 30 !important; }
   .swipe-card.is-zoomed .swipe-card__move:hover > .sl-card { transform: none; }
 }
+/* seuil franchi : halo de la couleur de l'action (après le survol, pour l'emporter) */
+.swipe-card__move[data-swipe="play"] > .sl-card { filter: drop-shadow(0 0 10px #4CC35A) drop-shadow(0 0 3px #2F8A3B); }
+.swipe-card__move[data-swipe="discard"] > .sl-card { filter: drop-shadow(0 0 10px #E8574A) drop-shadow(0 0 3px #C0392B); }
 .swipe-stamp {
   position: absolute;
   top: 22%;
