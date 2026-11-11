@@ -301,7 +301,7 @@ The pilot extension: its spec and table are already complete.
 
 ## Phase 4 — Vie de luxe
 
-- [ ] **Step 20 — Vie de luxe — spec and fill-in table**
+- [x] **Step 20 — Vie de luxe — spec and fill-in table**
   - Goal: Turn the rules transcript into a structured spec and an empty card-data table for Teto to fill. (Fable does this during the planning session; skip the step if `docs/extensions/luxe/luxe.md` and `docs/extensions/luxe/luxe-card-data.xlsx` already exist.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/20-luxe-spec.md and follow it.`
@@ -359,7 +359,7 @@ The pilot extension: its spec and table are already complete.
 
 ## Phase 5 — Trash
 
-- [ ] **Step 25 — Trash — spec and fill-in table**
+- [x] **Step 25 — Trash — spec and fill-in table**
   - Goal: Turn the rules transcript into a structured spec and an empty card-data table for Teto to fill. (Fable does this during the planning session; skip the step if `docs/extensions/trash/trash.md` and `docs/extensions/trash/trash-card-data.xlsx` already exist.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/25-trash-spec.md and follow it.`
@@ -425,7 +425,7 @@ The pilot extension: its spec and table are already complete.
 
 ## Phase 6 — Politique
 
-- [ ] **Step 31 — Politique — spec and fill-in table**
+- [x] **Step 31 — Politique — spec and fill-in table**
   - Goal: Turn the rules transcript into a structured spec and an empty card-data table for Teto to fill. (Fable does this during the planning session; skip the step if `docs/extensions/politique/politique.md` and `docs/extensions/politique/politique-card-data.xlsx` already exist.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/31-pol-spec.md and follow it.`
@@ -483,7 +483,7 @@ The pilot extension: its spec and table are already complete.
 
 ## Phase 7 — Fantastique
 
-- [ ] **Step 36 — Fantastique — spec and fill-in table**
+- [x] **Step 36 — Fantastique — spec and fill-in table**
   - Goal: Turn the rules transcript into a structured spec and an empty card-data table for Teto to fill. (Fable does this during the planning session; skip the step if `docs/extensions/fantastique/fantastique.md` and `docs/extensions/fantastique/fantastique-card-data.xlsx` already exist.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/36-fan-spec.md and follow it.`
@@ -551,7 +551,7 @@ The pilot extension: its spec and table are already complete.
 
 The heaviest extension by far: four engine steps.
 
-- [ ] **Step 42 — Apocalypse — spec and fill-in table**
+- [x] **Step 42 — Apocalypse — spec and fill-in table**
   - Goal: Turn the rules transcript into a structured spec and an empty card-data table for Teto to fill. (Fable does this during the planning session; skip the step if `docs/extensions/apocalypse/apocalypse.md` and `docs/extensions/apocalypse/apocalypse-card-data.xlsx` already exist.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/42-apo-spec.md and follow it.`
