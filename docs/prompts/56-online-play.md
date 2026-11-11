@@ -18,7 +18,8 @@ The same game works when players are on different networks, including mobile dat
 
 ## What to do
 
-1. Implement the recommended path of NETWORKING.md for connecting across networks, and its fallback.
+1. Follow NETWORKING.md section 10 in its order: first ask Teto what happened when friends in other places (one on mobile data) tried to join with the game as it is. Build the connection diagnostics in every case. Build the Cloudflare relay fallback (`relay/` folder, `relay` transport, automatic switch when the direct link fails) only if someone could not connect.
+   Re-check the free-plan terms quoted in NETWORKING.md before relying on them, and update the document if they changed.
 2. Detect a failed connection within a few seconds and tell the player in plain French what to try.
 3. Nothing here may cost money or require a card number. If the free option needs an account, write the exact sign-up steps for Teto in the summary and in `docs/planning/NETWORKING.md`.
 
@@ -32,7 +33,7 @@ The same game works when players are on different networks, including mobile dat
 
 ## Done when
 
-Two phones on different networks (one on mobile data) complete a game.
+Two phones on different networks (one on mobile data) complete a game, or the player who cannot connect is told why in plain French and Teto has decided what to do about it.
 
 ## How Teto tests it
 

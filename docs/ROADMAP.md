@@ -87,7 +87,7 @@ The game link only shows the built game. Nothing in `docs/` is published. The on
 
 These are ticked when the document exists. If one is unticked, run its prompt with Opus before the phase that needs it: P4 before step 13, P5 before Phase 10, P6 before the first illustrations.
 
-- [ ] **Step P4 — AI player design**
+- [x] **Step P4 — AI player design**
   - Goal: Write `docs/planning/AI-PLAYER.md`. (Fable does this during the planning session; skip the step if the file already exists.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/P4-ai-player-design.md and follow it.`
@@ -95,7 +95,7 @@ These are ticked when the document exists. If one is unticked, run its prompt wi
   - How you test it: Read the document's summary: you should understand the recommendation and what it costs without reading the rest.
   - Prompt: [docs/prompts/P4-ai-player-design.md](prompts/P4-ai-player-design.md)
 
-- [ ] **Step P5 — Networking plan**
+- [x] **Step P5 — Networking plan**
   - Goal: Write `docs/planning/NETWORKING.md`. (Fable does this during the planning session; skip the step if the file already exists.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/P5-networking-design.md and follow it.`
@@ -103,7 +103,7 @@ These are ticked when the document exists. If one is unticked, run its prompt wi
   - How you test it: Read the document's summary: you should understand the recommendation and what it costs without reading the rest.
   - Prompt: [docs/prompts/P5-networking-design.md](prompts/P5-networking-design.md)
 
-- [ ] **Step P6 — Illustration style guide and risky-card prompts**
+- [x] **Step P6 — Illustration style guide and risky-card prompts**
   - Goal: Write `docs/art/STYLE-GUIDE.md and docs/art/RISKY-CARD-PROMPTS.md`. (Fable does this during the planning session; skip the step if the file already exists.)
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/P6-art-guides.md and follow it.`

@@ -19,7 +19,8 @@ A game is not lost when the host's phone drops out.
 
 ## What to do
 
-1. Implement what NETWORKING.md specifies for a host that disappears: resuming by the same host, and handing the game to another player if the design includes it.
+1. Implement choice A of NETWORKING.md section 9 (the host can always come back and resume; this may already exist from step 52: verify and harden it).
+   Then explain choice B (a sealed backup on a friend's phone, with its trust trade-off) to Teto in plain words and ask whether to build it. Build it only on a clear yes, and record the answer in NETWORKING.md.
 2. Test with the fake transport: host drops mid-flow (for example during an Anniversaire), game resumes with no card lost or revealed.
 
 ## Rules for this session
