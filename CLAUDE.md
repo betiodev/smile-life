@@ -32,3 +32,10 @@ Médium: the 13 cards only to the Médium, only while the pending is open. Journ
 Chef troc: protectedUid / oppPickedUid only to the Chef; everyone else gets pickCount (picks are by index, face down).
 Casino stake: only the staker sees the card; everyone else sees { by, hidden: true }.
 Card uids leak card types (buildDeck numbers them in order): a hidden card must never appear with its real uid anywhere in a view. Log messages must never name a hidden card.
+
+Planning documents (read before any large change)
+docs/ROADMAP.md — the ordered list of steps; each step has a prompt in docs/prompts/. Tick a step only when it is finished and tested.
+docs/planning/ARCHITECTURE.md — target engine design for the extensions (card definitions, queries and modifiers, flows, driver). docs/planning/AUDIT.md — how the code worked before the migration.
+docs/extensions/<name>/ — one folder per extension: rules transcript, spec (<name>.md) and card-data table. docs/extensions/INTERACTIONS.md — clashes between extensions.
+Rules authority: transcripts and Teto's recorded Decisions. Never invent a ruling: ask Teto, then record the answer in the spec.
+Nothing under docs/ is published. Never put rules text or leaflet photos in public/ (everything there is published).

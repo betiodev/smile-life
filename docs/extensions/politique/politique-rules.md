@@ -212,7 +212,7 @@ NB : contrairement aux maisons, les appartements ne sont pas gratuits avec l'arc
 
 ## Ambiguities
 
-Listed only, not resolved. "Base" = Smile Life base game; "GP" = Girl Power extension (see `extensions/girl-power.md`).
+Listed only, not resolved. "Base" = Smile Life base game; "GP" = Girl Power extension (see `docs/extensions/girl-power/girl-power.md`).
 
 ### Unclear in the leaflet itself
 

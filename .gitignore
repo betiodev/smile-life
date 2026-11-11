@@ -16,3 +16,5 @@ public/cards/distinction-*.webp
 # fichiers système macOS, dans tous les dossiers
 .DS_Store
 /.claude
+# fichiers de verrouillage Excel
+~$*

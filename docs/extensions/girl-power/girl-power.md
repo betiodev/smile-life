@@ -119,8 +119,14 @@ Active only when Girl Power is in the game, and only while their condition is me
 8. Dany is a Girl Power child; the Dragon can't burn children protected by Super bouclier.
 9. Four Women and Ladies Night: always-on bonus rules of this extension, active only while their conditions are met.
 10. Soirée entre filles: all revealed girls go in front of the player of the card (it's a steal).
+11. **Gender of the ten base-game children** (Teto, 2026-11-11): garçons = Mario, Luigi, Rocky, Luke, Harry; filles = Leïa, Lara, Hermione, Diana, Zelda.
+12. **The card-data table is correct as filled** (Teto, 2026-11-11), including the Notes of Crapaud, Dragon and the three Démontage de cliché rows. Notes are the text printed on the card.
+13. **Études sup'** are three cards worth 1, 2 and 3 study levels. Nothing is printed on the card to say so; the level is recorded in the table's Notes column. A 3-level study card is new compared with the base game.
+14. **Small powers printed only on a card** exist and are not in the leaflet. Known so far: Cléo — "Voyage au Caire vaut triple". Always read the Notes column of the table for these.
+15. Flirt "À la bibliothèque" allows a child (confirmed).
 
 ## 11. Remaining questions
 
 - **Four Women when already hit:** if a player already suffers Phallocratie or Plafond de verre and then reaches 4 Girl Power girls, does the malus stop applying? And if they drop below 4, does it come back?
+- **Crapaud / Dragon:** the table's Notes put the "burn a card… with Dany" text on the **Crapaud** row and the "Prince Charmant" joke on the **Dragon** row, while section 6 above (from the leaflet) says the Dragon burns. Teto confirmed the table is correct as filled. Before coding: which card, placed with Dany, triggers the burn?
 - **Ladies Night counts:** exactly 1+2 flirts, or at least (e.g. 2 bar + 2 nightclub also qualifies)?

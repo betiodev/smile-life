@@ -9,35 +9,34 @@ If the session resets: read `FABLE-BRIEF.md`, then this file, then continue from
 - **P1** → `docs/planning/ARCHITECTURE.md` (2026-11-11).
 - Teto exported the Girl Power table to `docs/extensions/girl-power/girl-power-card-data.xlsx` (the `.numbers` file is gone). Columns are recorded in ARCHITECTURE.md section 2.2.
 
+- **P2** → `docs/ROADMAP.md` + 61 files in `docs/prompts/` (2026-11-11). Steps 13, 51–57 and the art steps point at the P4/P5/P6 documents; if one of those is never written, prompts `P4-`, `P5-`, `P6-` let Opus write it. After writing P4 and P5, re-read prompts 13 and 51–57 and tighten them.
+- Housekeeping done by hand: `docs/extensions/vie-de-luxe/` renamed to `luxe/` (`luxe-rules.md`); planning pointers added to `CLAUDE.md`.
+
 ## Next
 
-1. P2 `docs/ROADMAP.md` + `docs/prompts/` — needs Teto's answers to questions 2, 3, 4, 6 below, or the defaults.
-2. P3 extension specs + fill-in tables + `docs/extensions/INTERACTIONS.md`
+1. P3 extension specs + fill-in tables + `docs/extensions/INTERACTIONS.md`
 3. P4 `docs/planning/AI-PLAYER.md`
 4. P5 `docs/planning/NETWORKING.md`
 5. P6 `docs/art/STYLE-GUIDE.md` + `docs/art/RISKY-CARD-PROMPTS.md`
 
-## Questions asked (2026-11-11), with the default taken if unanswered
+## Questions asked (2026-11-11) and Teto's answers
 
 1. ~~Girl Power table format~~ — answered: exported to `.xlsx`.
-2. Game length with many extensions → default: setup lets you pick extensions and a deck size; cards beyond it are set aside at random.
-3. Extension order → default: Girl Power, Luxe, Trash, Politique, Fantastique, Apocalypse last.
-4. Git workflow → default: one pull request per step, merged by Teto.
-5. Physical/social cards (Bombardement, Grève, Référendum, negotiation) → default: simple digital stand-ins, each listed as a rules question (options are in ARCHITECTURE.md section 9).
-6. Remove the standalone Rivière option and settle on 2–4 players in docs → default: yes to both, as a roadmap step.
+2. Game length → answered: you choose which extensions to add before starting. No deck-size limit asked for; step 49 measures game length and reports.
+3. Extension order → answered: OK (Girl Power, Luxe, Trash, Politique, Fantastique, Apocalypse).
+4. Git workflow → answered: OK, one pull request per step, merged by Teto.
+5. (still open, goes into the specs) Physical/social cards (Bombardement, Grève, Référendum, negotiation) → default: simple digital stand-ins, each listed as a rules question (options are in ARCHITECTURE.md section 9).
+6. Remove the standalone Rivière option, 2–4 players → answered: yes (roadmap step 00).
 
-## Things found in the Girl Power table, to raise with Teto in P3
+## Girl Power table — settled with Teto (recorded in girl-power.md Decisions 11–15)
 
-- Sheet "Enfants jeu de base" is empty. The gender of the ten base children is needed by four Girl Power cards and by Fantastique's Sorcière.
-- The Notes of the first two "Démontage de cliché" rows look swapped ("aucun accident" has the flirts text and the reverse).
-- The Notes of Crapaud and Dragon look swapped. Check whether their smiles (1 and 3) are swapped too.
-- Études sup': the level (1, 2, 3) is written in Notes; it needs its own column.
-- Cléo's note "Voyage au Caire vaut triple" is an effect that `girl-power.md` does not mention.
-- Flirt "À la bibliothèque" allows a child: confirm, since in the base game only Hôtel and Camping do.
-- `girl-power.md` section 11 still has two open questions (Four Women timing, Ladies Night counts).
+- Base children genders given. Table confirmed correct as filled. Études sup' are 1/2/3 levels with nothing printed. Small powers exist only on cards (Cléo). Bibliothèque allows a child.
+- One point still open, listed in girl-power.md section 11: the table puts the "burn with Dany" text on Crapaud, the leaflet says Dragon.
 
 ## Key decisions so far
 
 - Engine design: card definitions + behaviour registry, queries with modifiers and one precedence function, primitives and events, a flow stack replacing `pending`, a driver owning state/timers. See ARCHITECTURE.md section 0.
 - Behaviours are code, not a data language. Bots learn card effects by simulating, not by reading card data.
 - Migration is 10 engine steps before the first extension card; Girl Power is the pilot; Apocalypse is last.
+- Own change to Teto's build order: an easy bot and solo mode come right after the engine migration (step 13), so every extension can be tested alone; stronger levels stay after same-wifi play.
+- Pull requests get an automatic `npm test` check, set up in step 00.
