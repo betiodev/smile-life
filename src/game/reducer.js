@@ -44,6 +44,7 @@ function cloneState(state) {
     ...state,
     deck: [...state.deck],
     discard: [...state.discard],
+    removed: [...state.removed],
     river: [...state.river],
     log: [...state.log],
     players: state.players.map((p) => ({
@@ -587,6 +588,8 @@ export function gameReducer(prev, action) {
 
   // Chercheur qui perd son métier : seule sa défausse est attendue
   if ((prev.pending?.type === 'chercheur-discard') !== (action.type === 'CHERCHEUR_DISCARD')) return prev
+  // écran « passez le téléphone » : seul READY est attendu (et READY seulement là)
+  if ((prev.screen === 'transition') !== (action.type === 'READY')) return prev
 
   const s = cloneState(prev)
   // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
@@ -671,6 +674,8 @@ export function gameReducer(prev, action) {
     case 'PLAY_SELF': {
       if (s.phase !== 'play' || s.pending) return prev
       const fromForced = s.forced?.uid === action.uid
+      // une carte forcée attend : elle seule peut être jouée
+      if (s.forced && !fromForced) return prev
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || !canPoseSelf(s, s.current, card).ok) return prev
       if (!fromForced) removeFromHand(p, card.uid)
@@ -687,6 +692,7 @@ export function gameReducer(prev, action) {
     case 'PLAY_MALUS': {
       if (s.phase !== 'play' || s.pending) return prev
       const fromForced = s.forced?.uid === action.uid
+      if (s.forced && !fromForced) return prev
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || card.type !== 'malus') return prev
       if (!canPlayMalus(s, s.current, card, action.target).ok) return prev
@@ -701,6 +707,7 @@ export function gameReducer(prev, action) {
       const fromForced = s.forced?.uid === action.uid
       // une carte prise dans la défausse ou la rivière doit être réellement jouée
       if (fromForced && s.forcedConsumesPlay) return prev
+      if (s.forced && !fromForced) return prev
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card) return prev
       if (!fromForced) removeFromHand(p, card.uid)
@@ -712,7 +719,7 @@ export function gameReducer(prev, action) {
     }
     case 'CASINO_BET': {
       // jouer un salaire de sa main comme mise au casino
-      if (s.phase !== 'play' || s.pending || !s.casino) return prev
+      if (s.phase !== 'play' || s.pending || s.forced || !s.casino) return prev
       const card = p.hand.find((c) => c.uid === action.uid)
       if (!card || card.type !== 'salary') return prev
       if (s.casino.stake && s.casino.stake.by === s.current) return prev
@@ -742,7 +749,7 @@ export function gameReducer(prev, action) {
     }
     case 'END_PLAYS': {
       // bouton "Terminer" pendant un Arc-en-ciel
-      if (s.phase !== 'play' || s.pending || s.forced) return prev
+      if (s.phase !== 'play' || s.pending || s.forced || s.playsRemaining <= 1) return prev
       s.playsRemaining = 0
       endTurn(s)
       return s
@@ -888,7 +895,7 @@ export function gameReducer(prev, action) {
       // Pioche face cachée : l'ordre de la main est public (cartes ajoutées à la fin),
       // donc on ignore action.index et on tire au hasard, comme une main mélangée à la table.
       const pickable = p.hand.filter((c) => c.uid !== s.pending.protectedUid)
-      if (pickable.length === 0) return prev
+      if (!(Number.isInteger(action.index) && action.index >= 0 && action.index < pickable.length)) return prev
       const picked = pick(s, pickable)
       s.pending = { type: 'chef-troc', step: 'chef-pick', target: s.pending.target, oppPickedUid: picked.uid }
       return s
@@ -898,7 +905,7 @@ export function gameReducer(prev, action) {
       if (s.pending?.type !== 'chef-troc' || s.pending.step !== 'chef-pick') return prev
       const t = s.players[s.pending.target]
       // même raison : action.index est ignoré, tirage au hasard dans la main adverse
-      if (t.hand.length === 0) return prev
+      if (!(Number.isInteger(action.index) && action.index >= 0 && action.index < t.hand.length)) return prev
       const theirs = pick(s, t.hand)
       const mine = removeFromHand(p, s.pending.oppPickedUid)
       removeFromHand(t, theirs.uid)

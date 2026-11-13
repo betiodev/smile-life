@@ -8,6 +8,8 @@ import {
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import { whoMustAct } from '../src/game/turn.js'
+import { legalActions, actionKey } from '../src/game/legal.js'
+import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/cards.js'
 
 const deck = buildDeck()
@@ -15,8 +17,9 @@ const find = (pred) => deck.find(pred)
 const findAll = (pred) => deck.filter(pred)
 const JOBS_IN_DECK = [...new Map(findAll((c) => c.type === 'job').map((c) => [c.key, c])).values()]
 
+// partie neuve, écran « passez le téléphone » déjà passé
 function freshState() {
-  return gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
+  return { ...gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] }), screen: 'game' }
 }
 let passed = 0
 function check(label, cond) {
@@ -173,6 +176,7 @@ function check(label, cond) {
   const p0 = s.players[0]
   check('Héritage posé : 3 liasses, carte visible (non utilisée)', p0.heritage === 3 && unusedHeritage(p0).length === 1)
   s.current = 0
+  s.screen = 'game'
   s.phase = 'play'
   s.playsRemaining = 1
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
@@ -602,6 +606,7 @@ function check(label, cond) {
   const flirt = find((c) => c.type === 'flirt')
   const setup = () => {
     let s = freshState()
+    s.screen = 'transition' // on part de l'écran « passez le téléphone »
     s.players[0].adultery = adultere
     s.players[0].flirts = [flirt]
     return s
@@ -751,6 +756,83 @@ function check(label, cond) {
   check('Licorne + Arc-en-ciel seul : pas doublée', acq([arc]) === 3)
   check('Licorne + Étoile filante seule : pas doublée', acq([etoile]) === 3)
   check('Licorne + Arc-en-ciel + Étoile filante : doublée (6)', acq([arc, etoile]) === 6)
+}
+
+// --- Liste des actions permises (legalActions) et trous fermés dans le reducer ---
+{
+  const types = (l) => l.map((a) => a.type)
+  let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
+  check('legalActions : écran de transition → seulement « Prêt »', JSON.stringify(types(legalActions(s, 0))) === '["READY"]')
+  check('legalActions : rien pour un joueur qui n’a pas la main', legalActions(s, 1).length === 0)
+  check('legalActions : les actions sont signées', legalActions(s, 0).every((a) => a.by === 0))
+  check('Transition : piocher avant « Prêt » est refusé', gameReducer(s, { type: 'DRAW_DECK', by: 0 }) === s)
+  s = gameReducer(s, { type: 'READY', by: 0 })
+  check('« Prêt » refusé une fois en jeu', gameReducer(s, { type: 'READY', by: 0 }) === s)
+  check('legalActions : la pioche est proposée', types(legalActions(s, 0)).includes('DRAW_DECK'))
+  s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
+  check('legalActions : défausser chaque carte de la main est proposé',
+    s.players[0].hand.every((c) => legalActions(s, 0).some((a) => a.type === 'DISCARD_CARD' && a.uid === c.uid)))
+  check('Fin de tour sans jouer (un seul jeu) : refusée et absente de la liste',
+    gameReducer(s, { type: 'END_PLAYS', by: 0 }) === s && !types(legalActions(s, 0)).includes('END_PLAYS'))
+}
+{
+  // carte forcée : elle seule peut être jouée
+  const s = freshState()
+  s.phase = 'play'
+  const study = find((c) => c.type === 'study')
+  const sal = find((c) => c.type === 'salary')
+  s.forced = study
+  s.forcedConsumesPlay = true
+  s.players[0].hand[0] = sal
+  s.casino = { owner: 1, stake: null }
+  const other = s.players[0].hand[1]
+  check('Carte forcée : jouer une autre carte de la main est refusé',
+    gameReducer(s, { type: 'PLAY_SELF', uid: other.uid, by: 0 }) === s && gameReducer(s, { type: 'DISCARD_CARD', uid: other.uid, by: 0 }) === s)
+  check('Carte forcée : miser un salaire de la main au Casino est refusé', gameReducer(s, { type: 'CASINO_BET', uid: sal.uid, by: 0 }) === s)
+  check('Carte forcée : la liste ne propose que la carte forcée',
+    JSON.stringify(legalActions(s, 0).map((a) => [a.type, a.uid])) === JSON.stringify([['PLAY_SELF', study.uid]]))
+}
+{
+  // Troc du Chef : un index hors de la main est refusé
+  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
+  s.screen = 'game'
+  s.phase = 'play'
+  s.players[0].job = find((c) => c.key === 'chef_achats')
+  s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid: s.players[0].hand[0].uid }
+  const n = s.players[0].hand.length - 1
+  check('Chef troc : la liste propose une pioche par carte non protégée', legalActions(s, 1).length === n)
+  check('Chef troc : index hors de la main refusé', gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: n, by: 1 }) === s &&
+    gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: -1, by: 1 }) === s)
+  check('Chef troc : même liste sur la vue de l’adversaire',
+    legalActions(viewFor(s, 1), 1).map(actionKey).join() === legalActions(s, 1).map(actionKey).join())
+}
+{
+  // achat : la liste donne le paiement le moins cher ; toute autre combinaison valide reste acceptée
+  const s = freshState()
+  s.phase = 'play'
+  const travel = find((c) => c.acqType === 'travel' && c.cost === 3)
+  const lv = (n) => findAll((c) => c.type === 'salary' && c.level === n)
+  const [a1, b1] = lv(1), [a2] = lv(2), [a3] = lv(3)
+  s.players[0].job = find((c) => c.key === 'pizzaiolo')
+  s.players[0].salaries = [a1, b1, a2, a3].map((card) => ({ card, invested: false }))
+  s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
+  const pay = legalActions(s, 0).find((a) => a.type === 'PURCHASE_CONFIRM')
+  check('Achat : la liste propose le paiement le moins cher (le salaire de 3)', JSON.stringify(pay.salaryUids) === JSON.stringify([a3.uid]))
+  check('Achat : un autre paiement valide reste accepté (2 + 1)',
+    gameReducer(s, { type: 'PURCHASE_CONFIRM', salaryUids: [a2.uid, a1.uid], by: 0 }) !== s)
+  check('Achat : même liste sur la vue du joueur',
+    legalActions(viewFor(s, 0), 0).map(actionKey).join() === legalActions(s, 0).map(actionKey).join())
+}
+{
+  // un état n'est jamais modifié par une action essayée dessus (pile des cartes retirées comprise)
+  const s = freshState()
+  s.phase = 'play'
+  const attentat = find((c) => c.key === 'attentat')
+  s.players[0].hand[0] = attentat
+  const before = JSON.stringify(s)
+  const r = gameReducer(s, { type: 'PLAY_MALUS', uid: attentat.uid, target: 1, by: 0 })
+  check('Attentat : la carte est retirée du jeu', r.removed.some((c) => c.uid === attentat.uid))
+  check('Attentat : l’état de départ n’est pas modifié', JSON.stringify(s) === before && s.removed.length === 0)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

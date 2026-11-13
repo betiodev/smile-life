@@ -7,6 +7,7 @@ import usePlayIntent, { spots, useBirthdayGifts } from './usePlayIntent'
 import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, GhostLayer, ExchangeBanner } from './PlayChoices'
 import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
 import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
+import { legalActions } from '../game/legal'
 
 const rectOf = (el) => {
   if (!el) return null
@@ -253,6 +254,8 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   }
   const game = {
     state, viewer, p, act, locked, myTurn, isForced, hit,
+    // actions permises maintenant pour ce joueur (src/game/legal.js)
+    legal: legalActions(state, viewer),
     drawPhase: myTurn && state.phase === 'draw' && !it,
     takeDiscard: canTakeDiscardTop(state, state.current),
     // carte sortie de la main : en attente, agrandie, ou qui y retourne

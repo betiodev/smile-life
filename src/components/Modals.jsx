@@ -6,7 +6,8 @@ import { useState } from 'react'
 import Card from './Card'
 import { Countdown } from './PlayChoices'
 import { CHERCHEUR_TIMEOUT_MS } from './usePlayIntent'
-import { isPlayableFromDiscard, canPlayMalus, hasJob, houseCost, validatePayment } from '../game/rules'
+import { canPlayMalus, hasJob, houseCost, validatePayment } from '../game/rules'
+import { legalActions } from '../game/legal'
 
 function Modal({ title, children, wide }) {
   return (
@@ -110,7 +111,8 @@ function ChanceModal({ state, dispatch }) {
 
 // --- Étoile filante / Astronaute : piocher dans la défausse ------------------
 function DiscardPickModal({ state, dispatch }) {
-  const playable = state.discard.filter((e) => isPlayableFromDiscard(state, state.current, e.card))
+  const picks = new Set(legalActions(state, state.current).filter((a) => a.type === 'DISCARD_PICK').map((a) => a.uid))
+  const playable = state.discard.filter((e) => picks.has(e.card.uid))
   return (
     <Modal title={`🌠 ${state.pending.source} — choisissez une carte de la défausse à jouer immédiatement`} wide>
       <div className="flex gap-2 flex-wrap justify-center">
