@@ -31,3 +31,18 @@ export function whoMustAct(state) {
 export function canAct(state, by) {
   return whoMustAct(state).includes(by)
 }
+
+// ---------------------------------------------------------------------------
+// Action par défaut d'un joueur qui doit agir mais ne le fait pas à temps.
+// Le moteur ne connaît pas le temps : c'est le pilote (src/session/driver.js)
+// qui décide quand l'appliquer. null : pas d'action par défaut (on attend).
+//  - Anniversaire : uid null → le moteur offre le plus petit salaire libre ;
+//  - Chercheur qui perd son métier : uid null → une carte au hasard.
+// ---------------------------------------------------------------------------
+export function fallbackAction(state, seat) {
+  if (state?.status !== 'playing' || !canAct(state, seat)) return null
+  const pend = state.pending
+  if (pend?.type === 'birthday') return { type: 'BIRTHDAY_GIFT', uid: null, by: seat }
+  if (pend?.type === 'chercheur-discard') return { type: 'CHERCHEUR_DISCARD', uid: null, by: seat }
+  return null
+}

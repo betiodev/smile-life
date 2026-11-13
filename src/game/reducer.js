@@ -503,7 +503,7 @@ function endTurn(s) {
   s.forced = null
   s.pending = null
   s.riverUsedThisTurn = false
-  s.screen = 'transition'
+  s.turnCount += 1
 }
 
 function gameOver(s) {
@@ -520,7 +520,7 @@ function gameOver(s) {
     p.hand = []
   }
   log(s, `🏁 La pioche est vide : fin de partie !`)
-  s.screen = 'gameover'
+  s.status = 'over'
 }
 
 // Consommation d'un jeu de carte (forcé ou non)
@@ -538,8 +538,6 @@ function consumePlay(s, wasForced) {
 // ---------------------------------------------------------------------------
 // REDUCER
 // ---------------------------------------------------------------------------
-export const initialState = { screen: 'setup', log: [] }
-
 // Crée une partie. La rivière n'est pas proposée aux joueurs : option interne
 // (tests ; réutilisée plus tard par l'extension Fantastique).
 // seed : graine du hasard (nombre ou texte) ; tirée au hasard si absente.
@@ -551,7 +549,7 @@ export function newGameState(names, colors, { river = false, seed } = {}) {
       seed: s0,           // graine de la partie (jamais envoyée dans une vue)
       rng: s0,            // état du générateur (src/game/rng.js), jamais dans une vue
       nextLogId: 0,       // dernier id utilisé dans le journal
-      screen: 'transition',
+      status: 'playing',  // 'playing' | 'over' (écrans, passage du téléphone : src/session/)
       players: names.map((n, i) => makePlayer(n, colors?.[i] ?? null)),
       deck: [],
       discard: [],
@@ -569,7 +567,7 @@ export function newGameState(names, colors, { river = false, seed } = {}) {
       pending: null,
       casino: null,
       log: [],
-      turnCount: 1,
+      turnCount: 1,       // n° du tour (augmente à chaque changement de tour)
     }
     s.deck = shuffle(buildDeck(), rngOf(s))
     for (const p of s.players) for (let i = 0; i < 5; i++) p.hand.push(s.deck.pop())
@@ -581,15 +579,12 @@ export function newGameState(names, colors, { river = false, seed } = {}) {
 
 export function gameReducer(prev, action) {
   if (action.type === 'START_GAME') return newGameState(action.names, action.colors, { seed: action.seed })
-  if (action.type === 'RESTART') return { screen: 'setup', log: [] }
 
   // l'auteur de l'action doit être un joueur autorisé à agir maintenant
-  if (!prev?.players || !canAct(prev, action.by)) return prev
+  if (!prev?.players || prev.status !== 'playing' || !canAct(prev, action.by)) return prev
 
   // Chercheur qui perd son métier : seule sa défausse est attendue
   if ((prev.pending?.type === 'chercheur-discard') !== (action.type === 'CHERCHEUR_DISCARD')) return prev
-  // écran « passez le téléphone » : seul READY est attendu (et READY seulement là)
-  if ((prev.screen === 'transition') !== (action.type === 'READY')) return prev
 
   const s = cloneState(prev)
   // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
@@ -598,10 +593,6 @@ export function gameReducer(prev, action) {
   const p = s.players[s.current]
 
   switch (action.type) {
-    case 'READY':
-      s.screen = 'game'
-      return s
-
     // ----- PHASE DE PIOCHE ------------------------------------------------
     case 'DRAW_DECK': {
       if (s.phase !== 'draw') return prev

@@ -6,7 +6,7 @@
 import { useLayoutEffect, useRef, useState, useEffect } from 'react'
 import Card from './Card'
 import { Ghost, cardRect, prefersReducedMotion } from './flights'
-import { TOAST_MS, GIFT_TIMEOUT_MS } from './usePlayIntent'
+import { TOAST_MS } from './usePlayIntent'
 import { playerColor } from './theme'
 import { validatePayment, malusHasTarget } from '../game/rules'
 
@@ -148,18 +148,24 @@ export function BirthdaySheet({ intent, state, onCancel, onConfirm }) {
   )
 }
 
-export function Countdown({ since, total }) {
+// fin du délai d'un joueur (ms), donnée par le pilote dans la vue ; null si aucun
+export const deadlineOf = (view, seat) => view.deadlines?.find((d) => d.seat === seat)?.until ?? null
+
+// compte à rebours : affiche seulement le délai donné par le pilote
+// (c'est le pilote qui joue l'action par défaut à l'échéance)
+export function Countdown({ until }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(t)
   }, [])
-  return <span className="tabular-nums">{Math.max(0, Math.ceil((since + total - now) / 1000))} s</span>
+  if (until == null) return null
+  return <span className="tabular-nums">{Math.max(0, Math.ceil((until - now) / 1000))} s</span>
 }
 
-// gifts : { pending, asking, askedAt, give } (useBirthdayGifts)
+// gifts : { pending, asking, until, give } (useBirthdayGifts)
 export function GiftsOverlay({ gifts, state }) {
-  const { pending, asking, askedAt, give } = gifts
+  const { pending, asking, until, give } = gifts
   const me = state.players[state.current]
   const d = state.players[asking]
   const unused = d.salaries.filter((s) => !s.invested)
@@ -181,7 +187,7 @@ export function GiftsOverlay({ gifts, state }) {
           </ul>
           <div className="rounded-xl p-2.5" style={{ background: playerColor(d, asking) }}>
             <p className="font-bold text-sm mb-1.5">
-              {d.name}, choisis le salaire que tu offres à {me.name} <span className="opacity-75">· <Countdown key={asking} since={askedAt} total={GIFT_TIMEOUT_MS} /></span>
+              {d.name}, choisis le salaire que tu offres à {me.name} <span className="opacity-75">· <Countdown until={until} /></span>
             </p>
             <div className="flex flex-wrap gap-2">
               {unused.map((s) => (

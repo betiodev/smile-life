@@ -18,8 +18,6 @@ import {
 } from '../game/rules'
 
 export const TOAST_MS = 3000
-export const GIFT_TIMEOUT_MS = 30000
-export const CHERCHEUR_TIMEOUT_MS = 30000
 
 const q = (sel) => document.querySelector(`.game-root ${sel}`)
 const boxOf = (el) => {
@@ -88,7 +86,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
   const patch = useCallback((o) => setIntent((it) => (it ? { ...it, ...(typeof o === 'function' ? o(it) : o) } : it)), [])
 
   // nouveau tour / nouvelle phase : rien ne doit rester en attente
-  useEffect(() => { setIntent(null) }, [state.current, state.screen])
+  useEffect(() => { setIntent(null) }, [state.current, state.turnCount])
 
   // ---- démarrer -------------------------------------------------------------
   const start = useCallback((card, dir, from, { casino = false } = {}) => {
@@ -264,19 +262,16 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
 
 // ---------------------------------------------------------------------------
 // Anniversaire : sur un seul écran, les donateurs sont sollicités l'un après
-// l'autre (ordre des joueurs), chacun avec son compte à rebours. Le moteur
-// accepte les cadeaux dans n'importe quel ordre ; les délais restent ici
-// (le moteur est pur). Délai dépassé, ou joueur robot / déconnecté : on
-// envoie uid null, et le moteur offre son plus petit salaire libre.
+// l'autre (ordre des joueurs). Le moteur accepte les cadeaux dans n'importe
+// quel ordre. Le délai de chaque donateur est tenu par le pilote
+// (src/session/driver.js) : l'interface affiche seulement le compte à rebours
+// qu'il donne dans la vue (state.deadlines). Délai dépassé : le pilote offre
+// pour lui son plus petit salaire libre.
 // ---------------------------------------------------------------------------
 export function useBirthdayGifts({ state, act, remember, active }) {
   const pend = active && state.pending?.type === 'birthday' ? state.pending : null
   const asking = pend ? pend.donors.find((i) => !(i in pend.gifts)) ?? null : null
-  // début du délai du donateur sollicité
-  const asked = useRef(null)
-  if (asking == null) asked.current = null
-  else if (asked.current?.donor !== asking) asked.current = { donor: asking, at: Date.now() }
-  const askedAt = asked.current?.at ?? 0
+  const until = asking == null ? null : state.deadlines?.find((d) => d.seat === asking)?.until ?? null
 
   const cardUid = pend?.card.uid
   const give = useCallback((donor, uid) => {
@@ -286,38 +281,5 @@ export function useBirthdayGifts({ state, act, remember, active }) {
     act({ type: 'BIRTHDAY_GIFT', by: donor, uid })
   }, [act, remember, cardUid])
 
-  useEffect(() => {
-    if (asking == null) return
-    const q = state.players[asking]
-    const auto = () => give(asking, null)
-    const t = setTimeout(auto, q.bot || q.disconnected ? 600 : Math.max(0, askedAt + GIFT_TIMEOUT_MS - Date.now()))
-    return () => clearTimeout(t)
-  }, [asking, askedAt, give])
-
-  return pend ? { pending: pend, asking, askedAt, give } : null
-}
-
-// ---------------------------------------------------------------------------
-// Chercheur qui perd son métier : délai pour choisir la carte à défausser.
-// Le délai reste ici (le moteur est pur). Délai dépassé, ou joueur robot /
-// déconnecté : on envoie uid null, et le moteur défausse une carte au hasard.
-// Monté en permanence (App) : le délai court aussi pendant le passage d'écran.
-// ---------------------------------------------------------------------------
-export function useChercheurDiscard({ state, dispatch }) {
-  const pend = state.pending?.type === 'chercheur-discard' ? state.pending : null
-  const who = pend ? pend.player : null
-  const asked = useRef(null)
-  if (who == null) asked.current = null
-  else if (asked.current?.player !== who) asked.current = { player: who, at: Date.now() }
-  const askedAt = asked.current?.at ?? 0
-
-  useEffect(() => {
-    if (who == null) return
-    const q = state.players[who]
-    const auto = () => dispatch({ type: 'CHERCHEUR_DISCARD', by: who, uid: null })
-    const t = setTimeout(auto, q.bot || q.disconnected ? 600 : Math.max(0, askedAt + CHERCHEUR_TIMEOUT_MS - Date.now()))
-    return () => clearTimeout(t)
-  }, [who, askedAt, dispatch])
-
-  return askedAt
+  return pend ? { pending: pend, asking, until, give } : null
 }

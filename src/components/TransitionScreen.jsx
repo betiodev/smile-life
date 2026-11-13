@@ -2,7 +2,7 @@ import Card from './Card'
 import { playerColor } from './theme'
 
 // Passage de l'écran : tient sur un téléphone en paysage (390 px de haut ou moins)
-export default function TransitionScreen({ state, dispatch }) {
+export default function TransitionScreen({ state, onReady }) {
   const p = state.players[state.current]
   const color = playerColor(p, state.current)
   const recent = state.log.slice(-3)
@@ -32,7 +32,7 @@ export default function TransitionScreen({ state, dispatch }) {
           </h2>
           <p className="text-gray-500 text-sm mt-1">Les autres joueurs ne regardent pas !</p>
           <button
-            onClick={() => dispatch({ type: 'READY', by: state.current })}
+            onClick={onReady}
             className="mt-4 w-full rounded-2xl text-white font-black text-lg py-3 shadow-lg hover:scale-[1.02] active:scale-95 transition-transform"
             style={{ background: color }}
           >

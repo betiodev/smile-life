@@ -3,7 +3,7 @@ import { PLAYER_COLORS, enterLandscapeFullscreen } from './theme'
 
 const MAX_PLAYERS = 4
 
-export default function SetupScreen({ dispatch }) {
+export default function SetupScreen({ onStart }) {
   const [players, setPlayers] = useState([
     { name: '', color: PLAYER_COLORS[0].hex },
     { name: '', color: PLAYER_COLORS[1].hex },
@@ -24,7 +24,7 @@ export default function SetupScreen({ dispatch }) {
   const start = () => {
     if (!canStart) return
     enterLandscapeFullscreen()
-    dispatch({ type: 'START_GAME', names: players.map((p) => p.name.trim()), colors: players.map((p) => p.color) })
+    onStart({ names: players.map((p) => p.name.trim()), colors: players.map((p) => p.color) })
   }
 
   return (

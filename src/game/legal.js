@@ -150,11 +150,10 @@ function playActions(state) {
 }
 
 export function legalActions(state, actor) {
-  if (!state?.players || state.screen === 'gameover' || state.screen === 'setup') return []
+  if (!state?.players || state.status !== 'playing') return []
   if (!whoMustAct(state).includes(actor)) return []
   let list
-  if (state.screen === 'transition') list = [{ type: 'READY' }]
-  else if (state.pending) list = pendingActions(state, actor)
+  if (state.pending) list = pendingActions(state, actor)
   else {
     list = state.phase === 'draw' ? drawActions(state) : playActions(state)
     if (canStopAdultery(state, actor).ok) list.push({ type: 'STOP_ADULTERY' })

@@ -4,8 +4,7 @@
 // ---------------------------------------------------------------------------
 import { useState } from 'react'
 import Card from './Card'
-import { Countdown } from './PlayChoices'
-import { CHERCHEUR_TIMEOUT_MS } from './usePlayIntent'
+import { Countdown, deadlineOf } from './PlayChoices'
 import { canPlayMalus, hasJob, houseCost, validatePayment } from '../game/rules'
 import { legalActions } from '../game/legal'
 
@@ -354,10 +353,10 @@ function MediumModal({ state, dispatch }) {
 }
 
 // --- Chercheur qui perd son métier : choisir 1 carte de sa main à défausser ------
-function ChercheurDiscardModal({ state, dispatch, since }) {
+function ChercheurDiscardModal({ state, dispatch }) {
   const pend = state.pending
   const q = state.players[pend.player]
-  const left = <span className="font-normal text-gray-400 text-sm">· <Countdown key={pend.player} since={since} total={CHERCHEUR_TIMEOUT_MS} /></span>
+  const left = <span className="font-normal text-gray-400 text-sm">· <Countdown until={deadlineOf(state, pend.player)} /></span>
   // seul le Chercheur voit sa main (vue joueur) : les autres attendent
   if (state.viewer !== pend.player) {
     return (
@@ -378,7 +377,7 @@ function ChercheurDiscardModal({ state, dispatch, since }) {
   )
 }
 
-export default function Modals({ state, dispatch, chercheurSince }) {
+export default function Modals({ state, dispatch }) {
   if (!state.pending) return null
   switch (state.pending.type) {
     case 'purchase': return <PurchaseModal state={state} dispatch={dispatch} />
@@ -391,7 +390,7 @@ export default function Modals({ state, dispatch, chercheurSince }) {
     case 'casino-stake': return <CasinoStakeModal state={state} dispatch={dispatch} />
     case 'journalist': return <JournalistModal state={state} dispatch={dispatch} />
     case 'medium': return <MediumModal state={state} dispatch={dispatch} />
-    case 'chercheur-discard': return <ChercheurDiscardModal state={state} dispatch={dispatch} since={chercheurSince} />
+    case 'chercheur-discard': return <ChercheurDiscardModal state={state} dispatch={dispatch} />
     default: return null
   }
 }

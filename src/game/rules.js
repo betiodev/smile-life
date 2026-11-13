@@ -314,7 +314,7 @@ export function canTakeDiscardTop(state, pIdx) {
 export function canStopAdultery(state, pIdx) {
   const p = state.players[pIdx]
   if (!p?.adultery) return NO('Pas d’adultère en cours')
-  if (state.screen !== 'game' || state.current !== pIdx) return NO('Seulement pendant votre tour')
+  if (state.status !== 'playing' || state.current !== pIdx) return NO('Seulement pendant votre tour')
   if (state.phase !== 'draw' && state.phase !== 'play') return NO('Seulement pendant votre tour')
   if (state.pending || state.forced) return NO('Terminez d’abord l’action en cours')
   if (state.cardPlayed) return NO('Trop tard : une carte a déjà été jouée ce tour')

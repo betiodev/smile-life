@@ -132,7 +132,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play one full game. Playable cards and valid targets are highlighted exactly as before.
   - Prompt: [docs/prompts/02-legal-actions-invariants.md](prompts/02-legal-actions-invariants.md)
 
-- [ ] **Step 03 — A driver that owns the game: screens and timers leave the engine**
+- [x] **Step 03 — A driver that owns the game: screens and timers leave the engine**
   - Goal: Separate "the game" from "this device showing it", so the same engine can later serve a host phone, remote phones and bots.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/03-driver.md and follow it.`
