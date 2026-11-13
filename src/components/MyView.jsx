@@ -238,7 +238,7 @@ function Actions({ game }) {
               </div>
             </>
           )}
-          {state.playsRemaining > 1 && !isForced && (
+          {game.legal.some((a) => a.type === 'END_PLAYS') && (
             <Btn tone="ghost" onClick={() => act({ type: 'END_PLAYS' })}>🌈 Terminer mon tour</Btn>
           )}
         </>

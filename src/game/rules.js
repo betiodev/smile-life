@@ -336,6 +336,14 @@ export function canStopAdultery(state, pIdx) {
   return OK
 }
 
+// Arc-en-ciel : « jouez JUSQU'À 3 cartes ». Après l'avoir joué, le joueur peut
+// terminer son tour quand il veut (après 0, 1, 2 ou 3 cartes), tant qu'aucun
+// choix n'est en attente ni aucune carte forcée.
+export function canEndPlays(state) {
+  return state.status === 'playing' && state.phase === 'play' && !!state.rainbow &&
+    !state.pending && !state.forced && state.playsRemaining > 0
+}
+
 // ---------------------------------------------------------------------------
 // Aides pour l'interface (aucune règle nouvelle : on réutilise celles du dessus)
 // ---------------------------------------------------------------------------
