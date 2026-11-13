@@ -166,7 +166,10 @@ export function buildDeck() {
   return deck
 }
 
-export function shuffle(array, rng = Math.random) {
+// mélange de Fisher-Yates ; rng = fonction () → [0, 1[ (obligatoire : le moteur
+// passe le générateur à graine de la partie, voir src/game/rng.js)
+export function shuffle(array, rng) {
+  if (typeof rng !== 'function') throw new Error('shuffle : générateur aléatoire manquant')
   const a = [...array]
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))

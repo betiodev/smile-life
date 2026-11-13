@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/regles.test.mjs && node tests/sim.mjs && node tests/view.test.mjs",
-    "images": "node scripts/card-images.mjs"
+    "test": "node tests/regles.test.mjs && node tests/sim.mjs && node tests/view.test.mjs && node tests/rng.test.mjs && node tests/golden.test.mjs",
+    "images": "node scripts/card-images.mjs",
+    "golden:update": "node tests/golden.test.mjs --update"
   },
   "dependencies": {
     "react": "^18.3.1",

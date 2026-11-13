@@ -9,6 +9,7 @@ import {
   availableLiasses, validatePayment, canStopAdultery, birthdayDonors, lowestUnusedSalary,
 } from './rules.js'
 import { canAct } from './turn.js'
+import { seedFrom, randomSeed, rngOf, pick } from './rng.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -62,9 +63,10 @@ function cloneState(state) {
   }
 }
 
-let logId = 0
+// les id du journal sont numérotés dans l'état (partie rejouable à l'identique)
 function log(s, text, kind = 'info') {
-  s.log.push({ id: ++logId, text, kind })
+  s.nextLogId = (s.nextLogId ?? 0) + 1
+  s.log.push({ id: s.nextLogId, text, kind })
   if (s.log.length > 60) s.log.shift()
 }
 
@@ -405,7 +407,7 @@ function applySpecial(s, pIdx, card) {
       p.specials.push(card)
       let pool = []
       s.players.forEach((q) => { pool = pool.concat(q.hand); q.hand = [] })
-      pool = shuffle(pool)
+      pool = shuffle(pool, rngOf(s))
       // redistribution équitable : chacun vers sa taille de main cible
       const order = s.players.map((_, i) => (pIdx + i) % s.players.length)
       let active = true
@@ -539,12 +541,18 @@ export const initialState = { screen: 'setup', log: [] }
 
 // Crée une partie. La rivière n'est pas proposée aux joueurs : option interne
 // (tests ; réutilisée plus tard par l'extension Fantastique).
-export function newGameState(names, colors, { river = false } = {}) {
+// seed : graine du hasard (nombre ou texte) ; tirée au hasard si absente.
+// Même graine + mêmes actions → même partie.
+export function newGameState(names, colors, { river = false, seed } = {}) {
   {
+    const s0 = seedFrom(seed ?? randomSeed())
     const s = {
+      seed: s0,           // graine de la partie (jamais envoyée dans une vue)
+      rng: s0,            // état du générateur (src/game/rng.js), jamais dans une vue
+      nextLogId: 0,       // dernier id utilisé dans le journal
       screen: 'transition',
       players: names.map((n, i) => makePlayer(n, colors?.[i] ?? null)),
-      deck: shuffle(buildDeck()),
+      deck: [],
       discard: [],
       removed: [],
       river: [],
@@ -562,6 +570,7 @@ export function newGameState(names, colors, { river = false } = {}) {
       log: [],
       turnCount: 1,
     }
+    s.deck = shuffle(buildDeck(), rngOf(s))
     for (const p of s.players) for (let i = 0; i < 5; i++) p.hand.push(s.deck.pop())
     if (s.riverEnabled) for (let i = 0; i < 3; i++) s.river.push(s.deck.pop())
     log(s, `🎉 La partie commence ! ${s.players.map((p) => p.name).join(', ')}`)
@@ -570,7 +579,7 @@ export function newGameState(names, colors, { river = false } = {}) {
 }
 
 export function gameReducer(prev, action) {
-  if (action.type === 'START_GAME') return newGameState(action.names, action.colors)
+  if (action.type === 'START_GAME') return newGameState(action.names, action.colors, { seed: action.seed })
   if (action.type === 'RESTART') return { screen: 'setup', log: [] }
 
   // l'auteur de l'action doit être un joueur autorisé à agir maintenant
@@ -841,8 +850,8 @@ export function gameReducer(prev, action) {
       if (s.pending?.type !== 'troc') return prev
       const t = s.players[action.target]
       if (!t || action.target === s.current || t.hand.length === 0) return prev
-      const mine = p.hand[Math.floor(Math.random() * p.hand.length)]
-      const theirs = t.hand[Math.floor(Math.random() * t.hand.length)]
+      const mine = pick(s, p.hand)
+      const theirs = pick(s, t.hand)
       if (mine) removeFromHand(p, mine.uid)
       if (theirs) removeFromHand(t, theirs.uid)
       if (theirs) p.hand.push(theirs)
@@ -880,7 +889,7 @@ export function gameReducer(prev, action) {
       // donc on ignore action.index et on tire au hasard, comme une main mélangée à la table.
       const pickable = p.hand.filter((c) => c.uid !== s.pending.protectedUid)
       if (pickable.length === 0) return prev
-      const picked = pickable[Math.floor(Math.random() * pickable.length)]
+      const picked = pick(s, pickable)
       s.pending = { type: 'chef-troc', step: 'chef-pick', target: s.pending.target, oppPickedUid: picked.uid }
       return s
     }
@@ -890,7 +899,7 @@ export function gameReducer(prev, action) {
       const t = s.players[s.pending.target]
       // même raison : action.index est ignoré, tirage au hasard dans la main adverse
       if (t.hand.length === 0) return prev
-      const theirs = t.hand[Math.floor(Math.random() * t.hand.length)]
+      const theirs = pick(s, t.hand)
       const mine = removeFromHand(p, s.pending.oppPickedUid)
       removeFromHand(t, theirs.uid)
       if (mine) t.hand.push(mine)
@@ -956,7 +965,7 @@ export function gameReducer(prev, action) {
       const pend = s.pending
       const q = s.players[pend.player]
       const card = action.uid == null
-        ? q.hand[Math.floor(Math.random() * q.hand.length)]
+        ? pick(s, q.hand)
         : q.hand.find((c) => c.uid === action.uid)
       if (!card) return prev
       removeFromHand(q, card.uid)

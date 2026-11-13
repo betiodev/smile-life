@@ -1,18 +1,31 @@
-// Logique de simulation partagée (sim.mjs, view.test.mjs) : choisit au hasard
-// une action valide pour l'état courant
+// Logique de simulation partagée (sim.mjs, view.test.mjs, golden.test.mjs) :
+// choisit au hasard une action valide pour l'état courant.
+// Tout est à graine : newGame(g, seed) fixe à la fois le hasard de la partie
+// (state.rng) et celui des choix du simulateur. Même graine → même partie.
+// Une seule partie simulée à la fois (le générateur du simulateur est partagé).
 import { gameReducer as rawReducer, newGameState } from '../src/game/reducer.js'
 import { whoMustAct } from '../src/game/turn.js'
+import { makeRng } from '../src/game/rng.js'
 import { canPoseSelf, canPlayMalus, canTakeDiscardTop, isPlayableFromDiscard, canTakeRiverNow } from '../src/game/rules.js'
 
 export const stats = { birthdayGifts: 0, chercheurDiscards: 0 }
 
-const rand = (arr) => arr[Math.floor(Math.random() * arr.length)]
+// hasard des choix du simulateur, distinct de celui de la partie
+let random = makeRng('sim')
+const randInt = (n) => Math.floor(random() * n)
+const rand = (arr) => arr[randInt(arr.length)]
 
 // chaque action est signée par un joueur autorisé à agir (whoMustAct),
 // sauf si elle précise déjà son auteur
+// recorder.actions = [] : enregistre chaque action acceptée (pour rejouer une partie)
+export const recorder = { actions: null }
+
 export function gameReducer(s, action) {
   if (action.type === 'START_GAME') return rawReducer(s, action)
-  return rawReducer(s, { ...action, by: action.by ?? rand(whoMustAct(s)) })
+  const signed = { ...action, by: action.by ?? rand(whoMustAct(s)) }
+  const r = rawReducer(s, signed)
+  if (recorder.actions && r !== s) recorder.actions.push(signed)
+  return r
 }
 
 export function step(s) {
@@ -67,10 +80,10 @@ export function step(s) {
         if (s.pending.step === 'protect') return gameReducer(s, { type: 'CHEF_TROC_PROTECT', uid: rand(p.hand).uid })
         if (s.pending.step === 'opp-pick') {
           const n = p.hand.filter((c) => c.uid !== s.pending.protectedUid).length
-          return gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: Math.floor(Math.random() * n) })
+          return gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: randInt(n) })
         }
         const t = s.players[s.pending.target]
-        return gameReducer(s, { type: 'CHEF_TROC_CHEF_PICK', index: Math.floor(Math.random() * t.hand.length) })
+        return gameReducer(s, { type: 'CHEF_TROC_CHEF_PICK', index: randInt(t.hand.length) })
       }
       case 'vengeance': {
         const opts = []
@@ -84,7 +97,7 @@ export function step(s) {
       }
       case 'casino-stake': {
         const sal = p.hand.filter((c) => c.type === 'salary')
-        if (sal.length > 0 && Math.random() < 0.7) return gameReducer(s, { type: 'CASINO_STAKE', uid: rand(sal).uid })
+        if (sal.length > 0 && random() < 0.7) return gameReducer(s, { type: 'CASINO_STAKE', uid: rand(sal).uid })
         return gameReducer(s, { type: 'CASINO_STAKE', uid: null })
       }
       case 'journalist':
@@ -96,13 +109,13 @@ export function step(s) {
         const by = rand(whoMustAct(s))
         const unused = s.players[by].salaries.filter((x) => !x.invested)
         stats.birthdayGifts++
-        return gameReducer(s, { type: 'BIRTHDAY_GIFT', by, uid: Math.random() < 0.3 ? null : rand(unused).card.uid })
+        return gameReducer(s, { type: 'BIRTHDAY_GIFT', by, uid: random() < 0.3 ? null : rand(unused).card.uid })
       }
       case 'chercheur-discard': {
         // l'ex-Chercheur choisit sa carte, ou null (délai dépassé → au hasard)
         stats.chercheurDiscards++
         const hand = s.players[s.pending.player].hand
-        return gameReducer(s, { type: 'CHERCHEUR_DISCARD', uid: Math.random() < 0.3 ? null : rand(hand).uid })
+        return gameReducer(s, { type: 'CHERCHEUR_DISCARD', uid: random() < 0.3 ? null : rand(hand).uid })
       }
       default:
         throw new Error('pending inconnu : ' + s.pending.type)
@@ -119,8 +132,8 @@ export function step(s) {
         opts.push({ type: 'TAKE_RIVER', index: i, playNow: false })
         if (canTakeRiverNow(s, s.current, c)) opts.push({ type: 'TAKE_RIVER', index: i, playNow: true })
       })
-    if (p.job && Math.random() < 0.02) opts.push({ type: 'RESIGN' })
-    if (p.marriage && Math.random() < 0.02) opts.push({ type: 'DIVORCE_VOLUNTARY' })
+    if (p.job && random() < 0.02) opts.push({ type: 'RESIGN' })
+    if (p.marriage && random() < 0.02) opts.push({ type: 'DIVORCE_VOLUNTARY' })
     return gameReducer(s, rand(opts))
   }
 
@@ -154,9 +167,33 @@ export function step(s) {
   return gameReducer(s, rand(opts))
 }
 
-// nouvelle partie n° g : 2 à 4 joueurs, rivière une partie sur deux
-export function newGame(g) {
+// nouvelle partie n° g : 2 à 4 joueurs, rivière une partie sur deux.
+// seed : graine de la partie et des choix du simulateur (par défaut g)
+export function newGame(g, seed = g) {
   const n = 2 + (g % 3)
   const river = g % 2 === 0
-  return newGameState(Array.from({ length: n }, (_, i) => `J${i + 1}`), null, { river })
+  random = makeRng('sim-' + seed)
+  return newGameState(Array.from({ length: n }, (_, i) => `J${i + 1}`), null, { river, seed })
+}
+
+// joue une partie complète ; renvoie l'état final et le nombre d'étapes.
+// En cas d'erreur, le message donne la graine pour rejouer la partie.
+export function playGame(g, seed = g, { onStep } = {}) {
+  let s = newGame(g, seed)
+  let steps = 0
+  try {
+    while (s.screen !== 'gameover') {
+      onStep?.(s, steps)
+      const next = step(s)
+      if (next === s)
+        throw new Error(`action sans effet ! phase=${s.phase} pending=${s.pending?.type} forced=${s.forced?.name}`)
+      s = next
+      if (++steps > 20000) throw new Error('Partie infinie ?')
+    }
+    onStep?.(s, steps)
+  } catch (e) {
+    e.message = `Partie ${g} (graine ${seed}, étape ${steps}) : ${e.message}\n  → rejouer : SEED=${seed} GAME=${g} node tests/sim.mjs`
+    throw e
+  }
+  return { state: s, steps }
 }

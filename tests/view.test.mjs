@@ -39,7 +39,9 @@ const uidsIn = (json) => new Set([...json.matchAll(/"(c\d+)"/g)].map((m) => m[1]
 // la vue de `viewer` ne contient aucune carte cachée (ni son uid, ni l'objet carte,
 // qui contient forcément son uid)
 function assertNoLeak(s, viewer, where) {
-  const json = JSON.stringify(viewFor(s, viewer))
+  const view = viewFor(s, viewer)
+  if ('rng' in view || 'seed' in view) throw new Error(`FUITE (${where}, joueur ${viewer}) : générateur aléatoire`)
+  const json = JSON.stringify(view)
   const present = uidsIn(json)
   for (const u of hiddenUids(s, viewer)) {
     if (present.has(u)) throw new Error(`FUITE (${where}, joueur ${viewer}) : carte ${u}`)
@@ -203,6 +205,18 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   const v = viewFor(s, 0)
   check('la vue est un objet JSON simple', JSON.stringify(deep(v)) === JSON.stringify(v))
   check('écran de réglages : vue sans données', viewFor({ screen: 'setup', log: [] }, null).screen === 'setup')
+}
+
+// --- hasard à graine : l'état du générateur ne sort jamais -------------------------
+{
+  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 1234 })
+  check('l’état contient bien le générateur (rng, seed)', typeof s.rng === 'number' && s.seed === 1234)
+  for (const v of [0, 1, 2, null]) {
+    const view = viewFor(s, v)
+    check(`vue ${v ?? 'spectateur'} : ni rng ni seed`, !('rng' in view) && !('seed' in view))
+  }
+  const odd = viewFor({ screen: 'setup', log: [], rng: 5, seed: 5 }, null)
+  check('vue sans joueurs : ni rng ni seed', !('rng' in odd) && !('seed' in odd))
 }
 
 // --- fuite : 40 parties simulées, chaque étape, chaque joueur + spectateur -------------

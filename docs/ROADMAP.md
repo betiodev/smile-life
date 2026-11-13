@@ -116,7 +116,7 @@ These are ticked when the document exists. If one is unticked, run its prompt wi
 
 Twelve steps that change how the game works inside without changing how it plays. After each one the game must play exactly as before. Do them in order; never skip one.
 
-- [ ] **Step 01 — Repeatable randomness and golden games**
+- [x] **Step 01 — Repeatable randomness and golden games**
   - Goal: Make every game repeatable from a seed, and record reference games that later refactors must reproduce.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/01-seeded-rng-goldens.md and follow it.`
