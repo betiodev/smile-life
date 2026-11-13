@@ -18,7 +18,7 @@
 import { whoMustAct } from './turn.js'
 import { jobOf, isMarried, unspentMoney, malusOf } from './state.js'
 import {
-  canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery,
+  canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays,
   isPlayableFromDiscard, cheapestPayment, purchaseCost, architectFree, hasJob, hasTag, isGrandProf,
 } from './rules.js'
 
@@ -146,7 +146,7 @@ function playActions(state) {
     out.push({ type: 'DISCARD_CARD', uid: c.uid })
   }
   // Arc-en-ciel : on peut s'arrêter avant d'avoir joué toutes ses cartes
-  if (state.playsRemaining > 1) out.push({ type: 'END_PLAYS' })
+  if (canEndPlays(state)) out.push({ type: 'END_PLAYS' })
   return out
 }
 

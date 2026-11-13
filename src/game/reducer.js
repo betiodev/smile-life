@@ -6,7 +6,7 @@ import { buildDeck, shuffle } from '../data/index.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard, canTakeRiverNow,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost, hasTag, isGrandProf,
-  availableLiasses, validatePayment, canStopAdultery, birthdayDonors, lowestUnusedSalary,
+  availableLiasses, validatePayment, canStopAdultery, canEndPlays, birthdayDonors, lowestUnusedSalary,
 } from './rules.js'
 import { canAct } from './turn.js'
 import {
@@ -374,6 +374,7 @@ function applySpecial(s, pIdx, card) {
       p.specials.push(card)
       // +3 jeux : après consommation de la pose de l'Arc-en-ciel, il en reste 3
       s.playsRemaining += 3
+      s.rainbow = true // le joueur peut s'arrêter quand il veut (END_PLAYS)
       log(s, `🌈 ${p.name} joue Arc-en-ciel : jusqu’à 3 cartes d’un coup !`)
       return false
     case 'chance': {
@@ -502,6 +503,7 @@ function endTurn(s) {
   s.current = next
   s.phase = 'draw'
   s.playsRemaining = 1
+  s.rainbow = false
   s.cardPlayed = false
   s.forced = null
   s.pending = null
@@ -565,6 +567,7 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
       current: 0,
       phase: 'draw',
       playsRemaining: 1,
+      rainbow: false,     // Arc-en-ciel joué ce tour : « jusqu'à 3 cartes », on peut s'arrêter
       cardPlayed: false,  // une carte a-t-elle déjà été jouée ce tour ?
       forced: null,
       forcedConsumesPlay: false,
@@ -745,7 +748,7 @@ export function gameReducer(prev, action) {
     }
     case 'END_PLAYS': {
       // bouton "Terminer" pendant un Arc-en-ciel
-      if (s.phase !== 'play' || s.pending || s.forced || s.playsRemaining <= 1) return prev
+      if (!canEndPlays(s)) return prev
       s.playsRemaining = 0
       endTurn(s)
       return s

@@ -856,4 +856,30 @@ function check(label, cond) {
   check('Sélecteurs : une seule carte dans chaque liste', jobOf(p) === pizzaiolo && marriageOf(p) === m1 && isMarried(p))
 }
 
+// --- Arc-en-ciel : « jouez JUSQU'À 3 cartes », on peut s'arrêter avant ------
+{
+  const arc = find((c) => c.key === 'arcenciel')
+  const peutTerminer = (st) => legalActions(st, 0).some((a) => a.type === 'END_PLAYS')
+  let s = gameReducer(freshState(), { type: 'DRAW_DECK', by: 0 })
+  check('Tour normal : pas de bouton Terminer', !peutTerminer(s) &&
+    gameReducer(s, { type: 'END_PLAYS', by: 0 }) === s)
+  s.players[0].hand[0] = arc
+  s = gameReducer(s, { type: 'PLAY_SELF', uid: arc.uid, by: 0 })
+  check('Arc-en-ciel : 3 jeux, on peut terminer tout de suite', s.playsRemaining === 3 && peutTerminer(s))
+  const apres = (st, n) => {
+    for (let i = 0; i < n; i++) st = gameReducer(st, { type: 'DISCARD_CARD', uid: st.players[0].hand[0].uid, by: 0 })
+    return st
+  }
+  for (const n of [1, 2]) {
+    const r = apres(s, n)
+    check(`Arc-en-ciel : après ${n} carte(s), on peut terminer`, r.current === 0 && r.playsRemaining === 3 - n && peutTerminer(r))
+    const fin = gameReducer(r, { type: 'END_PLAYS', by: 0 })
+    check(`Arc-en-ciel : terminer après ${n} carte(s) passe au joueur suivant`, fin.current === 1 &&
+      fin.phase === 'draw' && fin.players[0].hand.length === 5 && !fin.rainbow && !peutTerminer(fin))
+  }
+  const trois = apres(s, 3)
+  check('Arc-en-ciel : après 3 cartes, le tour se termine seul', trois.current === 1 && !trois.rainbow)
+  check('Arc-en-ciel : un autre joueur ne peut pas terminer', gameReducer(s, { type: 'END_PLAYS', by: 1 }) === s)
+}
+
 console.log(`\n✅ ${passed} vérifications OK`)
