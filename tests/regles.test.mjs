@@ -492,7 +492,8 @@ function check(label, cond) {
   const lastPickable = chefHand.length - 2
   const oppTaken = new Map()
   for (let i = 0; i < RUNS; i++) {
-    const r = gameReducer(oppState, { type: 'CHEF_TROC_OPP_PICK', index: lastPickable, by: 1 })
+    // hasard à graine : une graine différente à chaque essai
+    const r = gameReducer({ ...oppState, rng: i }, { type: 'CHEF_TROC_OPP_PICK', index: lastPickable, by: 1 })
     oppTaken.set(r.pending.oppPickedUid, (oppTaken.get(r.pending.oppPickedUid) ?? 0) + 1)
   }
   check('Chef troc opp-pick : la carte protégée n’est jamais prise', !oppTaken.has(protectedUid))
@@ -507,7 +508,7 @@ function check(label, cond) {
   const known = oppHand[oppHand.length - 1]
   const chefTaken = new Map()
   for (let i = 0; i < RUNS; i++) {
-    const r = gameReducer(chefState, { type: 'CHEF_TROC_CHEF_PICK', index: oppHand.length - 1, by: 0 })
+    const r = gameReducer({ ...chefState, rng: i }, { type: 'CHEF_TROC_CHEF_PICK', index: oppHand.length - 1, by: 0 })
     const got = r.players[0].hand[r.players[0].hand.length - 1]
     chefTaken.set(got.uid, (chefTaken.get(got.uid) ?? 0) + 1)
   }
@@ -676,6 +677,80 @@ function check(label, cond) {
   check('Rivière : Chance jouable s’il reste une carte après le remplacement', canTakeRiverNow(s, 0, chance))
   const joue = gameReducer(s, { type: 'TAKE_RIVER', index: 0, playNow: true, by: 0 })
   check('Rivière : Chance prise et forcée', joue.forced?.uid === chance.uid && joue.deck.length === 1)
+}
+
+// --- Règles vérifiées (CLAUDE.md) sans test jusqu'ici --------------------------
+
+// Flirts : jamais retournés ; seul le flirt du dessus peut être volé
+{
+  const bars = findAll((c) => c.type === 'flirt' && c.place === 'Au bar')
+  const zoo = find((c) => c.type === 'flirt' && c.place === 'Au zoo')
+  const parc = findAll((c) => c.type === 'flirt' && c.place !== 'Au bar' && c.place !== 'Au zoo')
+  const play = (setup) => {
+    const s = freshState()
+    s.screen = 'game'
+    s.phase = 'play'
+    setup(s)
+    return s
+  }
+
+  // le flirt du dessus de Ben est d'un autre lieu : son flirt « Au bar » dessous n'est pas volé
+  const s1 = play((s) => { s.players[1].flirts = [bars[0], zoo]; s.players[0].hand[0] = bars[1] })
+  const r1 = gameReducer(s1, { type: 'PLAY_SELF', uid: bars[1].uid, by: 0 })
+  check('Vol de flirt (reducer) : un flirt sous le dessus n’est jamais volé',
+    r1.players[1].flirts.map((c) => c.uid).join() === [bars[0].uid, zoo.uid].join() &&
+    r1.players[0].flirts.map((c) => c.uid).join() === bars[1].uid)
+
+  // le flirt du dessus est du même lieu : lui seul est volé
+  const s2 = play((s) => { s.players[1].flirts = [zoo, bars[0]]; s.players[0].hand[0] = bars[1] })
+  const r2 = gameReducer(s2, { type: 'PLAY_SELF', uid: bars[1].uid, by: 0 })
+  check('Vol de flirt (reducer) : seul le flirt du dessus est volé',
+    r2.players[1].flirts.map((c) => c.uid).join() === zoo.uid &&
+    r2.players[0].flirts.map((c) => c.uid).sort().join() === [bars[0].uid, bars[1].uid].sort().join())
+
+  // mariage, adultère, divorce : les flirts restent posés, face visible, avec leurs smiles
+  const marriage = find((c) => c.type === 'marriage')
+  const s3 = play((s) => { s.players[0].flirts = parc.slice(0, 3); s.players[0].hand[0] = marriage })
+  const before = JSON.stringify(s3.players[0].flirts)
+  const r3 = gameReducer(s3, { type: 'PLAY_SELF', uid: marriage.uid, by: 0 })
+  check('Mariage : les flirts restent posés, inchangés (jamais retournés)',
+    r3.players[0].marriage?.uid === marriage.uid && JSON.stringify(r3.players[0].flirts) === before)
+  check('Mariage : les flirts comptent toujours leurs smiles', computeScore(r3.players[0]).cat['Flirts 💕'] === 3)
+  check('Flirts : jamais rangés parmi les cartes retournées',
+    !r3.players[0].specials.some((c) => c.type === 'flirt') && !r3.players[0].malusKept.some((c) => c.type === 'flirt'))
+}
+
+// Piston : jamais pour la promotion Grand Prof
+{
+  const piston = find((c) => c.key === 'piston')
+  const grandProf = find((c) => c.isGrandProf)
+  const medecin = find((c) => c.key === 'medecin')
+  const s = freshState()
+  s.screen = 'game'
+  s.phase = 'play'
+  s.players[0].hand = [piston, grandProf]
+  check('Piston : injouable avec le seul Grand Prof en main', !canPlayFromHand(s, 0, piston).ok)
+  s.players[0].hand = [piston, grandProf, medecin]
+  check('Piston : jouable avec un autre métier en main', canPlayFromHand(s, 0, piston).ok)
+  const r = gameReducer(s, { type: 'PLAY_SELF', uid: piston.uid, by: 0 })
+  check('Piston : le choix du métier s’ouvre', r.pending?.type === 'piston')
+  check('Piston : le Grand Prof est refusé', gameReducer(r, { type: 'PISTON_PICK', uid: grandProf.uid, by: 0 }) === r)
+  const ok = gameReducer(r, { type: 'PISTON_PICK', uid: medecin.uid, by: 0 })
+  check('Piston : un métier normal est accepté', ok.players[0].job?.uid === medecin.uid)
+}
+
+// Licorne : doublée seulement avec l'Arc-en-ciel ET l'Étoile filante
+{
+  const licorne = find((c) => c.key === 'licorne')
+  const arc = find((c) => c.key === 'arcenciel')
+  const etoile = find((c) => c.key === 'etoile')
+  const p = freshState().players[0]
+  p.acquisitions = [licorne]
+  const acq = (specials) => computeScore({ ...p, specials }).cat['Acquisitions 🏠']
+  check('Licorne seule : 3 smiles', acq([]) === 3)
+  check('Licorne + Arc-en-ciel seul : pas doublée', acq([arc]) === 3)
+  check('Licorne + Étoile filante seule : pas doublée', acq([etoile]) === 3)
+  check('Licorne + Arc-en-ciel + Étoile filante : doublée (6)', acq([arc, etoile]) === 6)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

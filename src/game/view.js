@@ -58,9 +58,13 @@ function pendingFor(pending, state, viewer) {
 }
 
 export function viewFor(state, viewer) {
-  if (!state.players) return { ...copy(state), viewer, mayAct: false }
+  if (!state.players) {
+    const { rng, seed, ...rest } = state
+    return { ...copy(rest), viewer, mayAct: false }
+  }
 
-  const { deck, players, pending, casino, ...rest } = state
+  // rng et seed : jamais dans une vue (ils permettraient de prédire la pioche)
+  const { deck, players, pending, casino, rng, seed, ...rest } = state
   const view = copy(rest)
   view.deckCount = deck.length
   view.players = players.map((p, i) => {
