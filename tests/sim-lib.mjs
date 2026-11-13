@@ -1,6 +1,6 @@
 // Logique de simulation partagée (sim.mjs, view.test.mjs) : choisit au hasard
 // une action valide pour l'état courant
-import { gameReducer as rawReducer } from '../src/game/reducer.js'
+import { gameReducer as rawReducer, newGameState } from '../src/game/reducer.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { canPoseSelf, canPlayMalus, canTakeDiscardTop, isPlayableFromDiscard, canTakeRiverNow } from '../src/game/rules.js'
 
@@ -154,9 +154,9 @@ export function step(s) {
   return gameReducer(s, rand(opts))
 }
 
-// nouvelle partie n° g : 2 à 5 joueurs, rivière une partie sur deux
+// nouvelle partie n° g : 2 à 4 joueurs, rivière une partie sur deux
 export function newGame(g) {
-  const n = 2 + (g % 4)
+  const n = 2 + (g % 3)
   const river = g % 2 === 0
-  return gameReducer(null, { type: 'START_GAME', names: Array.from({ length: n }, (_, i) => `J${i + 1}`), river })
+  return newGameState(Array.from({ length: n }, (_, i) => `J${i + 1}`), null, { river })
 }

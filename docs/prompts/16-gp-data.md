@@ -12,7 +12,7 @@ Smile Life is a private web adaptation of the French card game, built by Teto to
 - `docs/ROADMAP.md` — find step 16 and the steps just before it
 - docs/extensions/girl-power/girl-power.md
 - docs/extensions/girl-power/girl-power-card-data.xlsx
-- docs/extensions/girl-power/girl-power-rules.md
+- docs/extensions/girl-power/girl-power.md
 - docs/extensions/INTERACTIONS.md
 - docs/planning/ARCHITECTURE.md §2
 
