@@ -9,7 +9,7 @@ import {
 import { computeScore } from '../src/game/scoring.js'
 import {
   jobOf, setJob, marriageOf, setMarriage, adulteryOf, setAdultery, moneyOf, unspentMoney, setMoney, addMoney,
-  malusOf, setMalus, outOfGameCards,
+  malusOf, setMalus, outOfGameCards, isMarried,
 } from '../src/game/state.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
@@ -839,6 +839,21 @@ function check(label, cond) {
   const r = gameReducer(s, { type: 'PLAY_MALUS', uid: attentat.uid, target: 1, by: 0 })
   check('Attentat : la carte est retirée du jeu', outOfGameCards(r).some((c) => c.uid === attentat.uid))
   check('Attentat : l’état de départ n’est pas modifié', JSON.stringify(s) === before && outOfGameCards(s).length === 0)
+  check('Hors jeu : chaque carte garde sa cause et son auteur',
+    r.outOfGame.length > 0 && r.outOfGame.every((e) => e.cause === 'attentat' && e.by === 0))
+}
+{
+  // les zones sont des listes, mais le jeu de base garde un seul métier et un seul mariage
+  const s = freshState()
+  const p = s.players[0]
+  const [pizzaiolo, serveur] = [find((c) => c.key === 'pizzaiolo'), find((c) => c.key === 'serveur')]
+  const [m1, m2] = findAll((c) => c.type === 'marriage')
+  setJob(p, pizzaiolo)
+  check('Un seul métier : un 2e métier est refusé', !canPoseSelf(s, 0, serveur).ok)
+  p.flirts.push(find((c) => c.type === 'flirt'))
+  setMarriage(p, m1)
+  check('Un seul mariage : un 2e mariage est refusé', !canPoseSelf(s, 0, m2).ok)
+  check('Sélecteurs : une seule carte dans chaque liste', jobOf(p) === pizzaiolo && marriageOf(p) === m1 && isMarried(p))
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

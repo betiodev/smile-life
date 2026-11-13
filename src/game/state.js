@@ -13,44 +13,38 @@
 
 const byUid = (uid) => (c) => c.uid === uid
 
-// --- métiers ---------------------------------------------------------------
-export const jobs = (p) => (p.job ? [p.job] : [])
-// le seul métier (ou le premier), null sans métier
-export const jobOf = (p) => jobs(p)[0] ?? null
-export function addJob(p, card) { p.job = card }
-export function removeJob(p, uid) {
-  if (p.job?.uid !== uid) return null
-  const c = p.job
-  p.job = null
-  return c
+// Toutes les zones sont des listes de cartes (ARCHITECTURE.md §3.1).
+// Entrées de money : { card, invested, paidFor } jusqu'à l'étape 06 (state.meta).
+
+// petits outils communs aux zones « liste de cartes »
+function take(zone, uid) {
+  const i = zone.findIndex(byUid(uid))
+  return i >= 0 ? zone.splice(i, 1)[0] : null
 }
+
+// --- métiers ---------------------------------------------------------------
+export const jobs = (p) => p.jobs
+// le seul métier (ou le premier), null sans métier
+export const jobOf = (p) => p.jobs[0] ?? null
+export function addJob(p, card) { p.jobs.push(card) }
+export const removeJob = (p, uid) => take(p.jobs, uid)
 // mise en place (tests) : remplace tous les métiers
-export function setJob(p, card) { p.job = card ?? null }
+export function setJob(p, card) { p.jobs = card ? [card] : [] }
 
 // --- mariages --------------------------------------------------------------
-export const marriages = (p) => (p.marriage ? [p.marriage] : [])
-export const marriageOf = (p) => marriages(p)[0] ?? null
-export const isMarried = (p) => marriages(p).length > 0
-export function addMarriage(p, card) { p.marriage = card }
-export function removeMarriage(p, uid) {
-  if (p.marriage?.uid !== uid) return null
-  const c = p.marriage
-  p.marriage = null
-  return c
-}
-export function setMarriage(p, card) { p.marriage = card ?? null }
+export const marriages = (p) => p.marriages
+export const marriageOf = (p) => p.marriages[0] ?? null
+export const isMarried = (p) => p.marriages.length > 0
+export function addMarriage(p, card) { p.marriages.push(card) }
+export const removeMarriage = (p, uid) => take(p.marriages, uid)
+export function setMarriage(p, card) { p.marriages = card ? [card] : [] }
 
-// --- adultère (au plus une carte) -----------------------------------------
-export const adulteries = (p) => (p.adultery ? [p.adultery] : [])
-export const adulteryOf = (p) => adulteries(p)[0] ?? null
-export function addAdultery(p, card) { p.adultery = card }
-export function removeAdultery(p, uid) {
-  if (p.adultery?.uid !== uid) return null
-  const c = p.adultery
-  p.adultery = null
-  return c
-}
-export function setAdultery(p, card) { p.adultery = card ?? null }
+// --- adultère (liste d'au plus une carte) ---------------------------------
+export const adulteries = (p) => p.adultery
+export const adulteryOf = (p) => p.adultery[0] ?? null
+export function addAdultery(p, card) { p.adultery.push(card) }
+export const removeAdultery = (p, uid) => take(p.adultery, uid)
+export function setAdultery(p, card) { p.adultery = card ? [card] : [] }
 
 // --- flirts ----------------------------------------------------------------
 // le flirt du dessus (le plus récent), le seul qui peut être volé
@@ -58,43 +52,43 @@ export const topFlirt = (p) => p.flirts[p.flirts.length - 1] ?? null
 
 // --- argent (salaires) -----------------------------------------------------
 // Toutes les cartes d'argent du joueur, investies ou non
-export const moneyOf = (p) => p.salaries.map((s) => s.card)
+export const moneyOf = (p) => p.money.map((m) => m.card)
 // non investies : peuvent payer, être offertes, être imposées
-export const unspentMoney = (p) => p.salaries.filter((s) => !s.invested).map((s) => s.card)
+export const unspentMoney = (p) => p.money.filter((m) => !m.invested).map((m) => m.card)
 // posées sous l'acquisition acqUid (elles l'ont payée)
 export const moneyPaidFor = (p, acqUid) =>
-  p.salaries.filter((s) => s.invested && s.paidFor === acqUid).map((s) => s.card)
+  p.money.filter((m) => m.invested && m.paidFor === acqUid).map((m) => m.card)
 // investies dans une acquisition qui a quitté le jeu
 export const spentMoney = (p) =>
-  p.salaries.filter((s) => s.invested && !p.acquisitions.some((a) => a.uid === s.paidFor)).map((s) => s.card)
+  p.money.filter((m) => m.invested && !p.acquisitions.some((a) => a.uid === m.paidFor)).map((m) => m.card)
 export function addMoney(p, card, { invested = false, paidFor } = {}) {
-  p.salaries.push(invested ? { card, invested, paidFor } : { card, invested })
+  p.money.push(invested ? { card, invested, paidFor } : { card, invested })
 }
 // retire une carte d'argent NON investie → la carte, ou null
 export function takeMoney(p, uid) {
-  const i = p.salaries.findIndex((s) => s.card.uid === uid && !s.invested)
-  return i >= 0 ? p.salaries.splice(i, 1)[0].card : null
+  const i = p.money.findIndex((m) => m.card.uid === uid && !m.invested)
+  return i >= 0 ? p.money.splice(i, 1)[0].card : null
 }
 export function investMoney(p, uid, acqUid) {
-  const s = p.salaries.find((x) => x.card.uid === uid && !x.invested)
-  if (s) { s.invested = true; s.paidFor = acqUid }
+  const m = p.money.find((x) => x.card.uid === uid && !x.invested)
+  if (m) { m.invested = true; m.paidFor = acqUid }
 }
 // mise en place (tests) : cartes d'argent, toutes non investies
-export function setMoney(p, cards) { p.salaries = cards.map((card) => ({ card, invested: false })) }
+export function setMoney(p, cards) { p.money = cards.map((card) => ({ card, invested: false })) }
 
 // --- malus reçus -----------------------------------------------------------
-export const malusOf = (p) => p.malusKept
-export function addMalus(p, card) { p.malusKept.push(card) }
-export function takeMalus(p, uid) {
-  const i = p.malusKept.findIndex(byUid(uid))
-  return i >= 0 ? p.malusKept.splice(i, 1)[0] : null
-}
-export function setMalus(p, cards) { p.malusKept = [...cards] }
+export const malusOf = (p) => p.malus
+export function addMalus(p, card) { p.malus.push(card) }
+export const takeMalus = (p, uid) => take(p.malus, uid)
+export function setMalus(p, cards) { p.malus = [...cards] }
 
 // --- hors jeu (zone partagée, publique) -----------------------------------
-// cause : ce qui a sorti la carte du jeu ('attentat'…), by : qui l'a causé
-export const outOfGameCards = (s) => s.removed
-export function putOutOfGame(s, card, cause, by = null) { s.removed.push(card) }
+// Chaque entrée : { card, cause, by } — cause : ce qui a sorti la carte du jeu
+// ('attentat'…), by : le joueur qui l'a causé (ou null). Quelles cartes peuvent
+// en revenir est une décision propre à chaque extension.
+export const outOfGame = (s) => s.outOfGame
+export const outOfGameCards = (s) => s.outOfGame.map((e) => e.card)
+export function putOutOfGame(s, card, cause, by = null) { s.outOfGame.push({ card, cause, by }) }
 
 // --- tout le plateau -------------------------------------------------------
 // Toutes les cartes posées devant le joueur (hors main), dans l'ordre du

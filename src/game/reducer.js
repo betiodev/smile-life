@@ -23,16 +23,16 @@ function makePlayer(name, color = null) {
     color,              // couleur choisie dans le salon (affichage seulement)
     hand: [],
     studies: [],
-    job: null,
-    salaries: [],       // [{ card, invested, paidFor }] paidFor = uid de l'acquisition payée
+    jobs: [],           // métiers (jeu de base : un seul, règle dans rules.js)
+    money: [],          // [{ card, invested, paidFor }] paidFor = uid de l'acquisition payée
     flirts: [],         // dernier élément = dessus de la pile
-    marriage: null,
-    adultery: null,
+    marriages: [],      // mariages (jeu de base : un seul)
+    adultery: [],       // au plus une carte
     children: [],
     acquisitions: [],
     distinctions: [],   // [{ card, active }]
     specials: [],       // cartes spéciales utilisées (retournées)
-    malusKept: [],      // malus reçus (retournés)
+    malus: [],          // malus reçus (retournés)
     skipTurns: 0,
     wasBandit: false,
     didAttentat: false,
@@ -48,21 +48,24 @@ function cloneState(state) {
     ...state,
     deck: [...state.deck],
     discard: [...state.discard],
-    removed: [...state.removed],
+    outOfGame: state.outOfGame.map((e) => ({ ...e })),
     river: [...state.river],
     log: [...state.log],
     players: state.players.map((p) => ({
       ...p,
       hand: [...p.hand],
       studies: [...p.studies],
-      salaries: p.salaries.map((s) => ({ ...s })),
+      jobs: [...p.jobs],
+      money: p.money.map((m) => ({ ...m })),
       flirts: [...p.flirts],
+      marriages: [...p.marriages],
+      adultery: [...p.adultery],
       children: [...p.children],
       acquisitions: [...p.acquisitions],
       distinctions: p.distinctions.map((d) => ({ ...d })),
       specials: [...p.specials],
       heritageFor: { ...p.heritageFor },
-      malusKept: [...p.malusKept],
+      malus: [...p.malus],
     })),
     casino: state.casino ? { ...state.casino, stake: state.casino.stake ? { ...state.casino.stake } : null } : null,
   }
@@ -554,7 +557,7 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
       players: names.map((n, i) => makePlayer(n, colors?.[i] ?? null)),
       deck: [],
       discard: [],
-      removed: [],
+      outOfGame: [],      // cartes retirées du jeu : [{ card, cause, by }], public
       river: [],
       riverEnabled: river,
       riverIdle: 0,

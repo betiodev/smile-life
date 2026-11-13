@@ -4,7 +4,10 @@
 import { gameReducer } from '../src/game/reducer.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/index.js'
-import { setJob } from '../src/game/state.js'
+import {
+  setJob, setMarriage, setAdultery, setMoney, setMalus, putOutOfGame,
+  jobOf, marriageOf, adulteryOf, moneyOf, malusOf, outOfGameCards,
+} from '../src/game/state.js'
 import { step, newGame } from './sim-lib.mjs'
 
 let passed = 0
@@ -209,6 +212,37 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   check('Casino : les autres voient une mise face cachée avec son auteur',
     vo.casino.stake.by === 0 && vo.casino.stake.hidden && !('card' in vo.casino.stake))
   ;[1, 2, null].forEach((v) => assertNoLeak(s, v, 'Casino'))
+}
+
+// --- plateaux et hors jeu : publics, lus par les sélecteurs ---------------------------
+{
+  const [job, marriage, adultery, salary, malus, child, attentat] = [
+    find((c) => c.key === 'pizzaiolo'), find((c) => c.type === 'marriage'), find((c) => c.type === 'adultery'),
+    find((c) => c.type === 'salary'), find((c) => c.key === 'accident'), find((c) => c.type === 'child'),
+    find((c) => c.key === 'attentat'),
+  ]
+  const s = gameAt()
+  const placed = take(s, [job, marriage, adultery, salary, malus, child, attentat])
+  const [pj, pm, pa, ps, pk, pc, pt] = placed
+  const ben = s.players[1]
+  setJob(ben, pj); setMarriage(ben, pm); setAdultery(ben, pa); setMoney(ben, [ps]); setMalus(ben, [pk])
+  putOutOfGame(s, pc, 'attentat', 2)
+  putOutOfGame(s, pt, 'attentat', 2)
+  const uid = (c) => c?.uid
+  for (const viewer of [0, 1, null]) {
+    const q = viewFor(s, viewer).players[1]
+    check(`plateau de Ben vu par ${viewer ?? 'le spectateur'} : métier, mariage, adultère, argent, malus`,
+      uid(jobOf(q)) === pj.uid && uid(marriageOf(q)) === pm.uid && uid(adulteryOf(q)) === pa.uid &&
+      moneyOf(q).map(uid).join() === ps.uid && malusOf(q).map(uid).join() === pk.uid)
+  }
+  check('zones en listes : jobs, marriages, adultery, money, malus',
+    ['jobs', 'marriages', 'adultery', 'money', 'malus'].every((z) => Array.isArray(viewFor(s, 0).players[1][z])))
+  const v = viewFor(s, null)
+  check('hors jeu : public, chaque carte avec sa cause et son auteur',
+    outOfGameCards(v).map(uid).join() === [pc.uid, pt.uid].join() &&
+    v.outOfGame.every((e) => e.cause === 'attentat' && e.by === 2))
+  check('plus d’anciens noms de zones dans la vue',
+    !('removed' in v) && ['job', 'marriage', 'salaries', 'malusKept'].every((z) => !(z in v.players[1])))
 }
 
 // --- pureté ---------------------------------------------------------------------------
