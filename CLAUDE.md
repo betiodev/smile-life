@@ -1,6 +1,6 @@
 Smile Life — digital adaptation
 
-Web version of the French card game Smile Life (Alexandre Seba / Blackrock Games). Goal: friends play together from a shared link. Currently local multiplayer (2–5 players, shared screen).
+Web version of the French card game Smile Life (Alexandre Seba / Blackrock Games). Goal: friends play together from a shared link. Currently local multiplayer (2–4 players, shared screen).
 
 Stack & commands
 React 18 + Tailwind CSS 4 + Vite. All game state lives in memory (useReducer).

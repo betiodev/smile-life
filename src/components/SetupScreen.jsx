@@ -8,7 +8,6 @@ export default function SetupScreen({ dispatch }) {
     { name: '', color: PLAYER_COLORS[0].hex },
     { name: '', color: PLAYER_COLORS[1].hex },
   ])
-  const [river, setRiver] = useState(false)
 
   const setName = (i, v) => setPlayers(players.map((p, j) => (j === i ? { ...p, name: v } : p)))
   // une couleur par joueur : choisir celle d'un autre joueur les échange
@@ -25,7 +24,7 @@ export default function SetupScreen({ dispatch }) {
   const start = () => {
     if (!canStart) return
     enterLandscapeFullscreen()
-    dispatch({ type: 'START_GAME', names: players.map((p) => p.name.trim()), colors: players.map((p) => p.color), river })
+    dispatch({ type: 'START_GAME', names: players.map((p) => p.name.trim()), colors: players.map((p) => p.color) })
   }
 
   return (
@@ -85,13 +84,6 @@ export default function SetupScreen({ dispatch }) {
           </button>
         )}
 
-        <label className="flex items-center gap-3 mt-5 cursor-pointer bg-teal-50 rounded-xl p-3 border-2 border-teal-100">
-          <input type="checkbox" checked={river} onChange={(e) => setRiver(e.target.checked)} className="w-5 h-5 accent-teal-500" />
-          <div>
-            <div className="font-bold text-teal-800">🌊 Variante Rivière</div>
-            <div className="text-xs text-teal-600">3 cartes face visible à côté de la pioche, prenables à la place de piocher</div>
-          </div>
-        </label>
 
         <button
           onClick={start}

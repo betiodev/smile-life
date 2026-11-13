@@ -1,5 +1,5 @@
 // Tests ciblés des 5 corrections signalées
-import { gameReducer } from '../src/game/reducer.js'
+import { gameReducer, newGameState } from '../src/game/reducer.js'
 import {
   canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
   flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
@@ -16,7 +16,7 @@ const findAll = (pred) => deck.filter(pred)
 const JOBS_IN_DECK = [...new Map(findAll((c) => c.type === 'job').map((c) => [c.key, c])).values()]
 
 function freshState() {
-  return gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: false })
+  return gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
 }
 let passed = 0
 function check(label, cond) {
@@ -216,7 +216,7 @@ function check(label, cond) {
   const lv = (n) => find((c) => c.type === 'salary' && c.level === n)
   const [b1, b3, c2, c4] = [lv(1), lv(3), lv(2), lv(4)]
   const setup = () => {
-    const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+    const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
     s.screen = 'game'
     s.phase = 'play'
     s.players[0].hand[0] = anniv
@@ -444,7 +444,7 @@ function check(label, cond) {
 
 // --- Auteur des actions : seul un joueur autorisé peut agir ----------------
 {
-  let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+  let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
   check('whoMustAct : le joueur courant au début du tour', JSON.stringify(whoMustAct(s)) === '[0]')
   check('Transition : un autre joueur ne peut pas dire « Prêt »', gameReducer(s, { type: 'READY', by: 1 }) === s)
   check('Action sans auteur ignorée', gameReducer(s, { type: 'READY' }) === s)
@@ -459,7 +459,7 @@ function check(label, cond) {
 
 // --- Troc du Chef : à l'étape opp-pick, c'est l'adversaire qui choisit ------
 {
-  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
   s.screen = 'game'
   s.phase = 'play'
   s.players[0].job = find((c) => c.key === 'chef_achats')
@@ -479,7 +479,7 @@ function check(label, cond) {
 // --- Troc du Chef : les pioches face cachée ne dépendent pas de la position ---
 {
   const RUNS = 200
-  const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: false })
+  const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
   base.screen = 'game'
   base.phase = 'play'
   base.players[0].job = find((c) => c.key === 'chef_achats')
@@ -659,7 +659,7 @@ function check(label, cond) {
 
 // --- Rivière : Chance jouée tout de suite, le remplacement vide la pioche ---
 {
-  let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], river: true })
+  let s = newGameState(['Ana', 'Ben'], null, { river: true })
   s = gameReducer(s, { type: 'READY', by: 0 })
   const chance = find((c) => c.key === 'chance')
   s.river[0] = chance

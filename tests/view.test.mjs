@@ -62,7 +62,7 @@ const findAll = (pred) => deck.filter(pred)
 
 // partie à 3 joueurs, joueur 0 en phase de jeu ; `hand` remplace sa main
 function gameAt(hand = null) {
-  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], river: false })
+  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
   s.screen = 'game'
   s.phase = 'play'
   if (hand) s.players[0].hand = take(s, hand)

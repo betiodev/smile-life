@@ -74,7 +74,7 @@ The game link only shows the built game. Nothing in `docs/` is published. The on
 
 ## Phase 0 — Housekeeping
 
-- [ ] **Step 00 — Housekeeping before the migration**
+- [x] **Step 00 — Housekeeping before the migration**
   - Goal: Remove leftovers so later sessions start from accurate docs and a single game mode.
   - Where: New Claude Code session · Model: Sonnet 5.5
   - Paste: `Read docs/prompts/00-housekeeping.md and follow it.`

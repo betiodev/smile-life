@@ -537,16 +537,18 @@ function consumePlay(s, wasForced) {
 // ---------------------------------------------------------------------------
 export const initialState = { screen: 'setup', log: [] }
 
-export function gameReducer(prev, action) {
-  if (action.type === 'START_GAME') {
+// Crée une partie. La rivière n'est pas proposée aux joueurs : option interne
+// (tests ; réutilisée plus tard par l'extension Fantastique).
+export function newGameState(names, colors, { river = false } = {}) {
+  {
     const s = {
       screen: 'transition',
-      players: action.names.map((n, i) => makePlayer(n, action.colors?.[i] ?? null)),
+      players: names.map((n, i) => makePlayer(n, colors?.[i] ?? null)),
       deck: shuffle(buildDeck()),
       discard: [],
       removed: [],
       river: [],
-      riverEnabled: action.river,
+      riverEnabled: river,
       riverIdle: 0,
       riverUsedThisTurn: false,
       current: 0,
@@ -565,6 +567,10 @@ export function gameReducer(prev, action) {
     log(s, `🎉 La partie commence ! ${s.players.map((p) => p.name).join(', ')}`)
     return s
   }
+}
+
+export function gameReducer(prev, action) {
+  if (action.type === 'START_GAME') return newGameState(action.names, action.colors)
   if (action.type === 'RESTART') return { screen: 'setup', log: [] }
 
   // l'auteur de l'action doit être un joueur autorisé à agir maintenant
