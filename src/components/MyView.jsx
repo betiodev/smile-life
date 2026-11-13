@@ -9,6 +9,7 @@ import useElementSize from './useElementSize'
 import { playerColor, enterLandscapeFullscreen } from './theme'
 import { computeScore } from '../game/scoring'
 import { isInterim } from '../game/rules'
+import { jobOf, isMarried } from '../game/state'
 
 const Btn = ({ onClick, disabled, children, tone = 'light', title }) => {
   const tones = {
@@ -205,13 +206,13 @@ function Actions({ game }) {
           {!takeDiscard.ok && discardTop && (
             <p className="text-[10px] leading-tight opacity-60 text-center">♻️ {takeDiscard.reason}</p>
           )}
-          {p.job && (
+          {jobOf(p) && (
             <Btn tone="ghost" onClick={() => act({ type: 'RESIGN' })}
               title={isInterim(p) ? 'Intérimaire : vous jouez quand même ce tour' : 'Vous passez votre tour'}>
               📤 Démissionner
             </Btn>
           )}
-          {p.marriage && (
+          {isMarried(p) && (
             <Btn tone="ghost" onClick={() => act({ type: 'DIVORCE_VOLUNTARY' })} title="Vous passez votre tour, enfants conservés">
               💔 Divorcer
             </Btn>

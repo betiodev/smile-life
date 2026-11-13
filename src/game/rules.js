@@ -4,17 +4,26 @@
 // ---------------------------------------------------------------------------
 
 import { hasTag } from '../data/index.js'
+import {
+  jobs, jobOf, marriages, isMarried, adulteryOf, topFlirt, unspentMoney, moneyPaidFor, spentMoney, malusOf,
+} from './state.js'
 
 const OK = { ok: true }
 const NO = (reason) => ({ ok: false, reason })
 
 export const studyLevel = (p) => p.studies.reduce((s, c) => s + c.levels, 0)
-export const hasJob = (p, key) => p.job?.key === key
+export const hasJob = (p, key) => jobs(p).some((j) => j.key === key)
+// Jeu de base : un seul métier, un seul mariage (des extensions changeront ces limites)
+export const maxJobs = (p) => 1
+export const maxMarriages = (p) => 1
+// tous les emplacements de métier occupés ?
+const jobsFull = (p) => jobs(p).length >= maxJobs(p)
 // groupes de cartes : tags des définitions (src/data/base.js)
 export { hasTag }
-export const isProf = (p) => hasTag(p.job, 'prof')
-export const isFonctionnaire = (p) => hasTag(p.job, 'fonctionnaire')
-export const isInterim = (p) => hasTag(p.job, 'interim')
+const anyJobTagged = (p, tag) => jobs(p).some((j) => hasTag(j, tag))
+export const isProf = (p) => anyJobTagged(p, 'prof')
+export const isFonctionnaire = (p) => anyJobTagged(p, 'fonctionnaire')
+export const isInterim = (p) => anyJobTagged(p, 'interim')
 // Grand Prof : promotion de Prof (carte unique)
 export const isGrandProf = (card) => card?.key === 'grand_prof'
 
@@ -25,31 +34,31 @@ export const isGrandProf = (card) => card?.key === 'grand_prof'
 // est obligatoire).
 export function interimReplaced(p, card) {
   if (!isInterim(p)) return null
-  if (card.type === 'study' || (card.type === 'job' && !isGrandProf(card))) return p.job
-  if (card.type === 'special' && card.key === 'piston') return p.job
+  const interim = jobs(p).find((j) => hasTag(j, 'interim'))
+  if (card.type === 'study' || (card.type === 'job' && !isGrandProf(card))) return interim
+  if (card.type === 'special' && card.key === 'piston') return interim
   return null
 }
 
 // Niveau de salaire effectif : niveau du métier, ou 4 si Grand Prix actif
 export function effectiveSalaryLevel(p) {
-  if (!p.job) return 0
+  const job = jobOf(p)
+  if (!job) return 0
   const gp = p.distinctions.find((d) => d.card.key === 'grandprix' && d.active)
-  return gp ? 4 : p.job.salaryLevel
+  return gp ? 4 : job.salaryLevel
 }
 
 export const handTarget = (p) => (hasJob(p, 'chercheur') ? 6 : 5)
 
 // Liasses disponibles (salaires non investis), hors héritage
-export const availableLiasses = (p) => p.salaries.filter((s) => !s.invested).reduce((t, s) => t + s.card.level, 0)
+export const availableLiasses = (p) => unspentMoney(p).reduce((t, c) => t + c.level, 0)
 
 // Salaires investis dans une acquisition (posés sous elle)
-export const paidSalaries = (p, acqUid) =>
-  p.salaries.filter((s) => s.invested && s.paidFor === acqUid).map((s) => s.card)
+export const paidSalaries = moneyPaidFor
 
 // Salaires dépensés dont l'acquisition a quitté le jeu : ils restent au joueur,
 // retournés (comptent leurs smiles, ne peuvent plus payer ni être offerts)
-export const spentSalaries = (p) =>
-  p.salaries.filter((s) => s.invested && !p.acquisitions.some((a) => a.uid === s.paidFor)).map((s) => s.card)
+export const spentSalaries = spentMoney
 
 // Héritage : posé face visible tant qu'il n'a rien payé
 export const unusedHeritage = (p) => p.specials.filter((c) => c.key === 'heritage' && !p.heritageFor?.[c.uid])
@@ -65,7 +74,7 @@ export const spentCards = (p) => [
 ]
 
 export function houseCost(p, card) {
-  return p.marriage ? Math.ceil(card.cost / 2) : card.cost
+  return isMarried(p) ? Math.ceil(card.cost / 2) : card.cost
 }
 
 // Validation d'un paiement (achat voyage/maison) : le total doit couvrir le
@@ -88,8 +97,8 @@ const anyMilitaire = (state) => state.players.some((p) => hasJob(p, 'militaire')
 
 // Un enfant est-il posable ?
 function canHaveChild(p) {
-  if (p.marriage) return OK
-  const top = p.flirts[p.flirts.length - 1]
+  if (isMarried(p)) return OK
+  const top = topFlirt(p)
   if (top?.allowsChild) {
     if (p.children.length >= 1) return NO('1 seul enfant maximum sans mariage')
     return OK
@@ -106,7 +115,7 @@ export function canPoseSelf(state, pIdx, card) {
     case 'study': {
       // Médecin/Chirurgien : études continues, même au-delà des 6 cartes de base
       const continues = hasJob(p, 'medecin') || hasJob(p, 'chirurgien')
-      if (p.job && !continues && !isInterim(p)) return NO('Un métier bloque les études (démissionnez d’abord)')
+      if (jobOf(p) && !continues && !isInterim(p)) return NO('Un métier bloque les études (démissionnez d’abord)')
       // le plafond porte sur le nombre de CARTES études, pas le nombre de niveaux
       if (!continues && p.studies.length >= 6) return NO('Maximum 6 cartes études')
       return OK
@@ -116,7 +125,7 @@ export function canPoseSelf(state, pIdx, card) {
         if (!isProf(p)) return NO('Promotion réservée : il faut déjà être Prof')
         return OK
       }
-      if (p.job && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
+      if (jobsFull(p) && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
       if (hasTag(card, 'outlaw') && anyPolicier(state))
         return NO('Un Policier est en poste : ni Bandit ni Gourou')
       if (studyLevel(p) < card.studyReq)
@@ -124,25 +133,25 @@ export function canPoseSelf(state, pIdx, card) {
       return OK
     }
     case 'salary': {
-      if (!p.job) return NO('Il faut un métier pour poser un salaire')
+      if (!jobOf(p)) return NO('Il faut un métier pour poser un salaire')
       const max = effectiveSalaryLevel(p)
       if (card.level > max) return NO(`Votre métier autorise le niveau ${max} maximum`)
       return OK
     }
     case 'flirt': {
-      if (p.marriage && !p.adultery) return NO('Interdit de flirter une fois marié (sans Adultère)')
-      const unlimited = p.adultery || (hasJob(p, 'barmaid') && !p.marriage)
+      if (isMarried(p) && !adulteryOf(p)) return NO('Interdit de flirter une fois marié (sans Adultère)')
+      const unlimited = adulteryOf(p) || (hasJob(p, 'barmaid') && !isMarried(p))
       if (!unlimited && p.flirts.length >= 5) return NO('Maximum 5 flirts')
       return OK
     }
     case 'marriage': {
-      if (p.marriage) return NO('Déjà marié (divorcez d’abord)')
+      if (marriages(p).length >= maxMarriages(p)) return NO('Déjà marié (divorcez d’abord)')
       if (p.flirts.length === 0) return NO('Il faut au moins 1 flirt pour se marier')
       return OK
     }
     case 'adultery': {
-      if (!p.marriage) return NO('L’adultère nécessite d’être marié')
-      if (p.adultery) return NO('Adultère déjà en cours')
+      if (!isMarried(p)) return NO('L’adultère nécessite d’être marié')
+      if (adulteryOf(p)) return NO('Adultère déjà en cours')
       return OK
     }
     case 'child':
@@ -159,7 +168,7 @@ export function canPoseSelf(state, pIdx, card) {
       if (hasJob(p, 'architecte') && !p.architectFreeUsed) return OK
       const cost = houseCost(p, card)
       if (availableLiasses(p) + p.heritage < cost)
-        return NO(`Coût : ${cost} liasses${p.marriage ? ' (prix marié)' : ''} — vous avez ${availableLiasses(p) + p.heritage}`)
+        return NO(`Coût : ${cost} liasses${isMarried(p) ? ' (prix marié)' : ''} — vous avez ${availableLiasses(p) + p.heritage}`)
       return OK
     }
     case 'distinction': {
@@ -169,7 +178,7 @@ export function canPoseSelf(state, pIdx, card) {
         return OK
       }
       // grand prix
-      if (!hasTag(p.job, 'trophy')) return NO('Réservé aux métiers 🏆 : Écrivain, Chercheur, Journaliste')
+      if (!anyJobTagged(p, 'trophy')) return NO('Réservé aux métiers 🏆 : Écrivain, Chercheur, Journaliste')
       if (p.distinctions.some((d) => d.card.key === 'grandprix' && d.active))
         return NO('Un seul Grand Prix par métier exercé')
       return OK
@@ -209,10 +218,10 @@ export function canPlaySpecial(state, pIdx, card) {
       return OK
     }
     case 'piston': {
-      if (p.job && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
-      const jobs = p.hand.filter((c) => c.type === 'job' && !isGrandProf(c) && c.uid !== card.uid)
-      if (jobs.length === 0) return NO('Aucun métier en main (Grand Prof exclu)')
-      if (!jobs.some((j) => !(hasTag(j, 'outlaw') && anyPolicier(state))))
+      if (jobsFull(p) && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
+      const inHand = p.hand.filter((c) => c.type === 'job' && !isGrandProf(c) && c.uid !== card.uid)
+      if (inHand.length === 0) return NO('Aucun métier en main (Grand Prof exclu)')
+      if (!inHand.some((j) => !(hasTag(j, 'outlaw') && anyPolicier(state))))
         return NO('Un Policier est en poste : ni Bandit ni Gourou')
       return OK
     }
@@ -222,8 +231,8 @@ export function canPlaySpecial(state, pIdx, card) {
       return OK
     }
     case 'vengeance': {
-      if (p.malusKept.length === 0) return NO('Aucun malus reçu à renvoyer')
-      const some = p.malusKept.some((m) =>
+      if (malusOf(p).length === 0) return NO('Aucun malus reçu à renvoyer')
+      const some = malusOf(p).some((m) =>
         state.players.some((_, ti) => ti !== pIdx && canPlayMalus(state, pIdx, m, ti).ok)
       )
       if (!some) return NO('Aucune cible valide pour vos malus reçus')
@@ -246,27 +255,27 @@ export function canPlayMalus(state, attackerIdx, card, targetIdx) {
       return OK
     case 'maladie':
       if (hasJob(t, 'pharmacien') || hasJob(t, 'medecin') || hasJob(t, 'chirurgien'))
-        return NO(`${t.job.name} : immunisé contre la maladie`)
+        return NO(`${jobOf(t).name} : immunisé contre la maladie`)
       return OK
     case 'burnout':
-      if (!t.job) return NO('La cible doit avoir un métier')
+      if (!jobOf(t)) return NO('La cible doit avoir un métier')
       return OK
     case 'licenciement':
-      if (!t.job) return NO('La cible doit avoir un métier')
+      if (!jobOf(t)) return NO('La cible doit avoir un métier')
       if (isFonctionnaire(t)) return NO('Un fonctionnaire ne peut pas être licencié')
       if (hasJob(t, 'bandit')) return NO('Le Bandit : ni impôt, ni licenciement')
       return OK
     case 'impot':
-      if (!t.job) return NO('La cible doit avoir un métier')
+      if (!jobOf(t)) return NO('La cible doit avoir un métier')
       if (hasJob(t, 'bandit')) return NO('Le Bandit : ni impôt, ni licenciement')
-      if (!t.salaries.some((s) => !s.invested)) return NO('Aucun salaire non-investi à imposer')
+      if (unspentMoney(t).length === 0) return NO('Aucun salaire non-investi à imposer')
       return OK
     case 'divorce':
-      if (!t.marriage) return NO('La cible doit être mariée')
+      if (!isMarried(t)) return NO('La cible doit être mariée')
       if (hasJob(t, 'avocat')) return NO('L’Avocat ne subit aucun divorce')
       return OK
     case 'redoublement':
-      if (t.job) return NO('La cible ne doit pas avoir de métier (étudiant)')
+      if (jobOf(t)) return NO('La cible ne doit pas avoir de métier (étudiant)')
       if (t.studies.length === 0) return NO('La cible doit avoir des études posées')
       return OK
     case 'prison':
@@ -319,7 +328,7 @@ export function canTakeDiscardTop(state, pIdx) {
 // qu'aucun choix n'est en attente ni aucune carte forcée. Ne consomme pas le jeu.
 export function canStopAdultery(state, pIdx) {
   const p = state.players[pIdx]
-  if (!p?.adultery) return NO('Pas d’adultère en cours')
+  if (!p || !adulteryOf(p)) return NO('Pas d’adultère en cours')
   if (state.status !== 'playing' || state.current !== pIdx) return NO('Seulement pendant votre tour')
   if (state.phase !== 'draw' && state.phase !== 'play') return NO('Seulement pendant votre tour')
   if (state.pending || state.forced) return NO('Terminez d’abord l’action en cours')
@@ -352,7 +361,7 @@ export function flirtStealVictims(state, pIdx, card) {
   if (card.type !== 'flirt') return []
   return state.players
     .map((q, i) => ({ q, i }))
-    .filter(({ q, i }) => i !== pIdx && q.flirts[q.flirts.length - 1]?.place === card.place)
+    .filter(({ q, i }) => i !== pIdx && topFlirt(q)?.place === card.place)
     .map(({ i }) => i)
 }
 
@@ -369,7 +378,7 @@ export const architectFree = (p, card) => hasTag(card, 'house') && hasJob(p, 'ar
 // Paiement valide le moins cher : moins de liasses dépensées, puis moins de
 // salaires investis. → { salaryUids, useHeritage, total } ou null
 export function cheapestPayment(p, cost) {
-  const sal = p.salaries.filter((s) => !s.invested).map((s) => s.card).slice(0, 14)
+  const sal = unspentMoney(p).slice(0, 14)
   let best = null
   for (const h of p.heritage > 0 ? [false, true] : [false]) {
     const heritage = h ? p.heritage : 0
@@ -388,15 +397,15 @@ export function cheapestPayment(p, cost) {
 
 // Vengeance : malus reçus qui ont au moins une cible valide
 export const vengeanceChoices = (state, pIdx) =>
-  state.players[pIdx].malusKept.filter((m) => malusHasTarget(state, pIdx, m))
+  malusOf(state.players[pIdx]).filter((m) => malusHasTarget(state, pIdx, m))
 
 // Anniversaire : adversaires ayant au moins un salaire non investi
 export const birthdayDonors = (state, pIdx) =>
-  state.players.map((q, i) => i).filter((i) => i !== pIdx && state.players[i].salaries.some((s) => !s.invested))
+  state.players.map((q, i) => i).filter((i) => i !== pIdx && unspentMoney(state.players[i]).length > 0)
 
 // Salaire non investi le plus petit (cadeau par défaut)
 export function lowestUnusedSalary(p) {
   let best = null
-  for (const s of p.salaries) if (!s.invested && (!best || s.card.level < best.card.level)) best = s
-  return best?.card ?? null
+  for (const c of unspentMoney(p)) if (!best || c.level < best.level) best = c
+  return best
 }

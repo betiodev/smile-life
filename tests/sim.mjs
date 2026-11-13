@@ -3,6 +3,7 @@
 import { playGame, stats } from './sim-lib.mjs'
 import { computeScore } from '../src/game/scoring.js'
 import { buildDeck } from '../src/data/index.js'
+import { boardCards, outOfGameCards } from '../src/game/state.js'
 
 const deck = buildDeck()
 console.log('Total cartes :', deck.length)
@@ -23,12 +24,10 @@ for (const { g, seed } of games) {
   const river = s.riverEnabled
   totalTurns += guard
   // vérifications d'intégrité : toutes les cartes comptabilisées
-  let count = s.deck.length + s.discard.length + s.removed.length + s.river.length
+  let count = s.deck.length + s.discard.length + outOfGameCards(s).length + s.river.length
   if (s.casino?.stake) count += 1
   for (const p of s.players) {
-    count += p.hand.length + p.studies.length + (p.job ? 1 : 0) + p.salaries.length + p.flirts.length +
-      (p.marriage ? 1 : 0) + (p.adultery ? 1 : 0) + p.children.length + p.acquisitions.length +
-      p.distinctions.length + p.specials.length + p.malusKept.length
+    count += p.hand.length + boardCards(p).length
     const sc = computeScore(p)
     if (sc.total < 0 || isNaN(sc.total)) throw new Error(`Partie ${g} (graine ${seed}) : score invalide`)
     if (p.hand.length !== 0) throw new Error(`Partie ${g} (graine ${seed}) : main non défaussée en fin de partie`)

@@ -15,6 +15,7 @@ import { whoMustAct } from '../src/game/turn.js'
 import { viewFor } from '../src/game/view.js'
 import { makeRng } from '../src/game/rng.js'
 import { buildDeck } from '../src/data/index.js'
+import { boardCards, moneyOf, malusOf, outOfGameCards } from '../src/game/state.js'
 
 const DECK_SIZE = buildDeck().length
 const random = makeRng('invariants')
@@ -32,7 +33,7 @@ export function cardPlaces(s) {
   }
   s.deck.forEach((c) => put(c, 'pioche'))
   s.discard.forEach((e) => put(e.card, 'défausse'))
-  s.removed.forEach((c) => put(c, 'retirées'))
+  outOfGameCards(s).forEach((c) => put(c, 'hors jeu'))
   s.river.forEach((c) => put(c, 'rivière'))
   put(s.forced, 'carte forcée')
   put(s.casino?.stake?.card, 'mise du casino')
@@ -43,17 +44,7 @@ export function cardPlaces(s) {
   s.players.forEach((p, i) => {
     const at = (z) => `J${i + 1} ${z}`
     p.hand.forEach((c) => put(c, at('main')))
-    p.studies.forEach((c) => put(c, at('études')))
-    put(p.job, at('métier'))
-    p.salaries.forEach((x) => put(x.card, at('salaires')))
-    p.flirts.forEach((c) => put(c, at('flirts')))
-    put(p.marriage, at('mariage'))
-    put(p.adultery, at('adultère'))
-    p.children.forEach((c) => put(c, at('enfants')))
-    p.acquisitions.forEach((c) => put(c, at('acquisitions')))
-    p.distinctions.forEach((d) => put(d.card, at('distinctions')))
-    p.specials.forEach((c) => put(c, at('spéciales')))
-    p.malusKept.forEach((c) => put(c, at('malus reçus')))
+    boardCards(p).forEach((c) => put(c, at('plateau')))
   })
   if (places.size !== DECK_SIZE) fail(`${places.size} cartes trouvées au lieu de ${DECK_SIZE}`)
   return places
@@ -69,8 +60,8 @@ function candidates(s) {
   const add = (c) => c && uids.add(c.uid)
   s.players.forEach((p) => {
     p.hand.forEach(add)
-    p.salaries.forEach((x) => add(x.card))
-    p.malusKept.forEach(add)
+    moneyOf(p).forEach(add)
+    malusOf(p).forEach(add)
   })
   add(s.forced)
   s.discard.slice(-4).forEach((e) => add(e.card))

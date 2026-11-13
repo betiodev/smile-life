@@ -16,6 +16,7 @@ import {
   needsPayment, purchaseCost, architectFree, cheapestPayment, vengeanceChoices,
   birthdayDonors, flirtStealVictims, canPlayMalus, interimReplaced,
 } from '../game/rules'
+import { topFlirt, malusOf } from '../game/state'
 
 export const TOAST_MS = 3000
 
@@ -106,7 +107,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
       const steals = flow === 'simple' ? flirtStealVictims(state, me, card) : []
       steals.forEach((vi, k) => {
         const victim = state.players[vi]
-        ghosts.push({ card: victim.flirts[victim.flirts.length - 1], from: spots.table(), to: spots.played(viewer, k + 1), victim: vi })
+        ghosts.push({ card: topFlirt(victim), from: spots.table(), to: spots.played(viewer, k + 1), victim: vi })
       })
       // intérimaire : le métier part à la défausse (montré tout de suite, annulable)
       const replaced = flow === 'simple' ? interimReplaced(p, card) : null
@@ -251,7 +252,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
     if (it.flow === 'malus') return canPlayMalus(state, state.current, it.card, i)
     if (it.flow === 'troc') return state.players[i].hand.length > 0 ? { ok: true } : { ok: false, reason: 'Aucune carte en main' }
     if (it.flow === 'vengeance') {
-      const m = state.players[state.current].malusKept.find((c) => c.uid === it.malusUid)
+      const m = malusOf(state.players[state.current]).find((c) => c.uid === it.malusUid)
       return m ? canPlayMalus(state, state.current, m, i) : { ok: false }
     }
     return { ok: false }

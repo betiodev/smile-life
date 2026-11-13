@@ -148,7 +148,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Open the card gallery (add `#cartes` to your game link): all cards and illustrations are still there. Play a few turns.
   - Prompt: [docs/prompts/04-card-definitions.md](prompts/04-card-definitions.md)
 
-- [ ] **Step 05 — Selectors, then zones as arrays**
+- [x] **Step 05 — Selectors, then zones as arrays**
   - Goal: Let a player hold more than one job or marriage, and give money and malus their final zones, without breaking anything that reads the board.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/05-zones-selectors.md and follow it.`
