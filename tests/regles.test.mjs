@@ -17,9 +17,9 @@ const find = (pred) => deck.find(pred)
 const findAll = (pred) => deck.filter(pred)
 const JOBS_IN_DECK = [...new Map(findAll((c) => c.type === 'job').map((c) => [c.key, c])).values()]
 
-// partie neuve, écran « passez le téléphone » déjà passé
+// partie neuve (Ana commence)
 function freshState() {
-  return { ...gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] }), screen: 'game' }
+  return gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
 }
 let passed = 0
 function check(label, cond) {
@@ -62,7 +62,7 @@ function check(label, cond) {
   s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: redoublement.uid, target: 1 })
   const top = s.discard[s.discard.length - 1]
   check('Redoublement : l’étude défaussée est au nom de la victime', top.card.uid === study.uid && top.by === 1)
-  s.screen = 'game'; s.current = 1; s.phase = 'draw'
+  s.current = 1; s.phase = 'draw'
   check('La victime ne peut pas reprendre son étude de la défausse', !canTakeDiscardTop(s, 1).ok)
   check('Un autre joueur peut la reprendre', canTakeDiscardTop(s, 0).ok)
 
@@ -87,7 +87,6 @@ function check(label, cond) {
   let s = freshState()
   const chance = find((c) => c.key === 'chance')
   s.players[0].hand[0] = chance
-  s.screen = 'game'
   s.phase = 'play'
   const before = s.players[0].hand.length // 5
   s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: chance.uid })
@@ -97,7 +96,7 @@ function check(label, cond) {
   const p = s.players[0]
   check('La carte gardée est en main', p.hand.some((c) => c.uid === kept.uid))
   check('Pas de carte forcée après Chance', !s.forced)
-  check('Le joueur doit encore jouer sa carte du tour', s.phase === 'play' && s.playsRemaining === 1 && s.screen === 'game')
+  check('Le joueur doit encore jouer sa carte du tour', s.phase === 'play' && s.playsRemaining === 1 && s.status === 'playing')
   check('Main = 5 (a joué Chance, gardé 1)', p.hand.length === before)
   check('Les 2 autres cartes sont défaussées à son nom', s.discard.slice(-2).every((e) => e.by === 0))
 }
@@ -139,7 +138,6 @@ function check(label, cond) {
   const travel = find((c) => c.acqType === 'travel')
   const sal2 = findAll((c) => c.type === 'salary' && c.level === 2)
   const sal1 = find((c) => c.type === 'salary' && c.level === 1)
-  s.screen = 'game'
   s.phase = 'play'
   s.players[0].salaries = [sal2[0], sal2[1], sal1].map((card) => ({ card, invested: false }))
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
@@ -167,7 +165,6 @@ function check(label, cond) {
 // --- Héritage : visible jusqu'à l'achat, puis sous l'acquisition --------------
 {
   let s = freshState()
-  s.screen = 'game'
   s.phase = 'play'
   const her = find((c) => c.key === 'heritage')
   const travel = find((c) => c.acqType === 'travel')
@@ -176,7 +173,6 @@ function check(label, cond) {
   const p0 = s.players[0]
   check('Héritage posé : 3 liasses, carte visible (non utilisée)', p0.heritage === 3 && unusedHeritage(p0).length === 1)
   s.current = 0
-  s.screen = 'game'
   s.phase = 'play'
   s.playsRemaining = 1
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
@@ -192,7 +188,6 @@ function check(label, cond) {
 // --- Grand Prix d'excellence : métier perdu → sans effet, smiles conservés ---
 {
   const s = freshState()
-  s.screen = 'game'
   s.phase = 'play'
   const lic = find((c) => c.key === 'licenciement')
   const gp = find((c) => c.key === 'grandprix')
@@ -221,7 +216,6 @@ function check(label, cond) {
   const [b1, b3, c2, c4] = [lv(1), lv(3), lv(2), lv(4)]
   const setup = () => {
     const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
-    s.screen = 'game'
     s.phase = 'play'
     s.players[0].hand[0] = anniv
     s.players[1].salaries = [b1, b3].map((card) => ({ card, invested: false }))
@@ -266,7 +260,7 @@ function check(label, cond) {
   check('Anniversaire : journal dans l’ordre des joueurs', texts(r2, 2).join('|') ===
     '🎂 Ben offre un salaire niveau 3 à Ana|🎂 Cléo offre un salaire niveau 2 à Ana')
   check('Anniversaire : le tour se termine ensuite normalement', r2.pending === null &&
-    r2.current === 1 && r2.screen === 'transition' && whoMustAct(r2).join() === '1')
+    r2.current === 1 && r2.turnCount === p.turnCount + 1 && whoMustAct(r2).join() === '1')
 
   // Cléo puis Ben : même résultat
   const q2 = gift(gift(p, 2, null), 1, b3.uid)
@@ -308,7 +302,6 @@ function check(label, cond) {
 // --- Aides d'interface : jouabilité, défausse forcée, vol de flirt, paiement --
 {
   const s = freshState()
-  s.screen = 'game'
   s.phase = 'play'
   const sal = find((c) => c.type === 'salary' && c.level === 1)
   check('Salaire sans métier : injouable, avec la raison du moteur', canPlayFromHand(s, 0, sal).reason === 'Il faut un métier pour poser un salaire')
@@ -345,7 +338,6 @@ function check(label, cond) {
   const barmaid = find((c) => c.key === 'barmaid')
   const setup = (card) => {
     const s = freshState()
-    s.screen = 'game'
     s.phase = 'play'
     const p = s.players[0]
     p.job = barmaid
@@ -421,7 +413,6 @@ function check(label, cond) {
   const lic = find((c) => c.key === 'licenciement')
   const setup = (job) => {
     const s = freshState()
-    s.screen = 'game'
     s.phase = 'play'
     s.players[0].hand[0] = lic
     s.players[1].job = job ? find((c) => c.key === job) : null
@@ -450,9 +441,8 @@ function check(label, cond) {
 {
   let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
   check('whoMustAct : le joueur courant au début du tour', JSON.stringify(whoMustAct(s)) === '[0]')
-  check('Transition : un autre joueur ne peut pas dire « Prêt »', gameReducer(s, { type: 'READY', by: 1 }) === s)
-  check('Action sans auteur ignorée', gameReducer(s, { type: 'READY' }) === s)
-  s = gameReducer(s, { type: 'READY', by: 0 })
+  check('« Prêt » n’existe plus dans le moteur (passage d’écran : src/session/)', gameReducer(s, { type: 'READY', by: 0 }) === s)
+  check('Action sans auteur ignorée', gameReducer(s, { type: 'DRAW_DECK' }) === s)
   check('Tour normal : pioche d’un autre joueur ignorée', gameReducer(s, { type: 'DRAW_DECK', by: 1 }) === s)
   check('Tour normal : pioche d’un 3e joueur ignorée', gameReducer(s, { type: 'DRAW_DECK', by: 2 }) === s)
   s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
@@ -464,7 +454,6 @@ function check(label, cond) {
 // --- Troc du Chef : à l'étape opp-pick, c'est l'adversaire qui choisit ------
 {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
-  s.screen = 'game'
   s.phase = 'play'
   s.players[0].job = find((c) => c.key === 'chef_achats')
   const protectedUid = s.players[0].hand[0].uid
@@ -484,7 +473,6 @@ function check(label, cond) {
 {
   const RUNS = 200
   const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
-  base.screen = 'game'
   base.phase = 'play'
   base.players[0].job = find((c) => c.key === 'chef_achats')
   const chefHand = base.players[0].hand
@@ -528,7 +516,6 @@ function check(label, cond) {
   // Ana (0) joue, Ben (1) est Chercheur avec 6 cartes en main
   const setup = () => {
     const s = freshState()
-    s.screen = 'game'
     s.phase = 'play'
     s.players[1].job = chercheur
     s.players[1].hand.push(s.deck.pop())
@@ -542,7 +529,7 @@ function check(label, cond) {
   check('Chercheur licencié : le choix s’ouvre pour Ben', r.pending?.type === 'chercheur-discard' && r.pending.player === 1 &&
     r.players[1].job === null && r.players[1].hand.length === 6)
   check('Chercheur licencié : seul Ben peut agir', JSON.stringify(whoMustAct(r)) === '[1]')
-  check('Chercheur licencié : le tour d’Ana attend le choix', r.current === 0 && r.screen === 'game')
+  check('Chercheur licencié : le tour d’Ana attend le choix', r.current === 0 && r.turnCount === s.turnCount)
   const chosen = r.players[1].hand[2]
   check('Chercheur licencié : Ana ne peut pas choisir à sa place',
     gameReducer(r, { type: 'CHERCHEUR_DISCARD', uid: chosen.uid, by: 0 }) === r)
@@ -554,7 +541,7 @@ function check(label, cond) {
     d.discard[d.discard.length - 1].by === 1 && d.players[1].hand.length === 5 && !d.players[1].hand.some((c) => c.uid === chosen.uid))
   check('Chercheur licencié : le métier est défaussé', d.discard.some((e) => e.card.uid === chercheur.uid))
   check('Chercheur licencié : puis le tour d’Ana se termine normalement', d.pending === null && d.current === 1 &&
-    d.screen === 'transition' && d.players[0].hand.length === 5)
+    d.turnCount === r.turnCount + 1 && d.players[0].hand.length === 5)
   check('Chercheur licencié : action sans choix en attente refusée',
     gameReducer(d, { type: 'CHERCHEUR_DISCARD', uid: d.players[1].hand[0].uid, by: 1 }) === d)
 
@@ -577,12 +564,11 @@ function check(label, cond) {
 
   // Démission volontaire pendant son propre tour
   const m = freshState()
-  m.screen = 'game'
   m.players[0].job = chercheur
   m.players[0].hand.push(m.deck.pop())
   const rm = gameReducer(m, { type: 'RESIGN', by: 0 })
   check('Chercheur démissionnaire : le choix s’ouvre, le tour n’est pas fini', rm.pending?.type === 'chercheur-discard' &&
-    rm.pending.player === 0 && rm.current === 0 && rm.screen === 'game' && rm.players[0].hand.length === 6)
+    rm.pending.player === 0 && rm.current === 0 && rm.turnCount === m.turnCount && rm.players[0].hand.length === 6)
   check('Chercheur démissionnaire : pas de pioche avant le choix', gameReducer(rm, { type: 'DRAW_DECK', by: 0 }) === rm)
   check('Chercheur démissionnaire : un autre joueur est refusé',
     gameReducer(rm, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 }) === rm)
@@ -590,7 +576,7 @@ function check(label, cond) {
   const dm = gameReducer(rm, { type: 'CHERCHEUR_DISCARD', uid: pick.uid, by: 0 })
   check('Chercheur démissionnaire : la carte choisie est défaussée, puis il passe son tour',
     dm.discard[dm.discard.length - 1].card.uid === pick.uid && dm.pending === null && dm.current === 1 &&
-    dm.screen === 'transition' && dm.players[0].hand.length === 5)
+    dm.turnCount === rm.turnCount + 1 && dm.players[0].hand.length === 5)
 
   // main vide : aucun choix
   const e = setup()
@@ -606,15 +592,14 @@ function check(label, cond) {
   const flirt = find((c) => c.type === 'flirt')
   const setup = () => {
     let s = freshState()
-    s.screen = 'transition' // on part de l'écran « passez le téléphone »
     s.players[0].adultery = adultere
     s.players[0].flirts = [flirt]
     return s
   }
   let s = setup()
-  check('Adultère : refusé sur l’écran de transition', !canStopAdultery(s, 0).ok &&
-    gameReducer(s, { type: 'STOP_ADULTERY', by: 0 }) === s)
-  s = gameReducer(s, { type: 'READY', by: 0 })
+  const autreTour = { ...s, current: 1 }
+  check('Adultère : refusé pendant le tour d’un autre joueur', !canStopAdultery(autreTour, 0).ok &&
+    gameReducer(autreTour, { type: 'STOP_ADULTERY', by: 0 }) === autreTour)
   check('Adultère : un autre joueur ne peut pas l’arrêter', gameReducer(s, { type: 'STOP_ADULTERY', by: 1 }) === s)
 
   // avant la pioche
@@ -653,7 +638,7 @@ function check(label, cond) {
     gameReducer(ch, { type: 'STOP_ADULTERY', by: 0 }) === ch)
 
   // au tour suivant, de nouveau autorisé
-  const tourSuivant = gameReducer(gameReducer(arcJoue, { type: 'END_PLAYS', by: 0 }), { type: 'READY', by: 1 })
+  const tourSuivant = gameReducer(arcJoue, { type: 'END_PLAYS', by: 0 })
   check('Adultère : le marqueur est remis à zéro au tour suivant', tourSuivant.cardPlayed === false)
 
   // refusé pendant un choix en attente ou avec une carte forcée
@@ -666,7 +651,6 @@ function check(label, cond) {
 // --- Rivière : Chance jouée tout de suite, le remplacement vide la pioche ---
 {
   let s = newGameState(['Ana', 'Ben'], null, { river: true })
-  s = gameReducer(s, { type: 'READY', by: 0 })
   const chance = find((c) => c.key === 'chance')
   s.river[0] = chance
   // une seule carte en pioche : elle remplacera la Chance dans la rivière
@@ -693,7 +677,6 @@ function check(label, cond) {
   const parc = findAll((c) => c.type === 'flirt' && c.place !== 'Au bar' && c.place !== 'Au zoo')
   const play = (setup) => {
     const s = freshState()
-    s.screen = 'game'
     s.phase = 'play'
     setup(s)
     return s
@@ -731,7 +714,6 @@ function check(label, cond) {
   const grandProf = find((c) => c.isGrandProf)
   const medecin = find((c) => c.key === 'medecin')
   const s = freshState()
-  s.screen = 'game'
   s.phase = 'play'
   s.players[0].hand = [piston, grandProf]
   check('Piston : injouable avec le seul Grand Prof en main', !canPlayFromHand(s, 0, piston).ok)
@@ -762,12 +744,9 @@ function check(label, cond) {
 {
   const types = (l) => l.map((a) => a.type)
   let s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
-  check('legalActions : écran de transition → seulement « Prêt »', JSON.stringify(types(legalActions(s, 0))) === '["READY"]')
   check('legalActions : rien pour un joueur qui n’a pas la main', legalActions(s, 1).length === 0)
   check('legalActions : les actions sont signées', legalActions(s, 0).every((a) => a.by === 0))
-  check('Transition : piocher avant « Prêt » est refusé', gameReducer(s, { type: 'DRAW_DECK', by: 0 }) === s)
-  s = gameReducer(s, { type: 'READY', by: 0 })
-  check('« Prêt » refusé une fois en jeu', gameReducer(s, { type: 'READY', by: 0 }) === s)
+  check('« Prêt » refusé (n’existe plus)', gameReducer(s, { type: 'READY', by: 0 }) === s)
   check('legalActions : la pioche est proposée', types(legalActions(s, 0)).includes('DRAW_DECK'))
   s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
   check('legalActions : défausser chaque carte de la main est proposé',
@@ -812,7 +791,6 @@ function check(label, cond) {
 {
   // Troc du Chef : un index hors de la main est refusé
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
-  s.screen = 'game'
   s.phase = 'play'
   s.players[0].job = find((c) => c.key === 'chef_achats')
   s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid: s.players[0].hand[0].uid }

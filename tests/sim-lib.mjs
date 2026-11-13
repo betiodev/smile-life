@@ -66,7 +66,7 @@ export function playGame(g, seed = g, { onStep, invariants = false } = {}) {
   let s = newGame(g, seed)
   let steps = 0
   try {
-    while (s.screen !== 'gameover') {
+    while (s.status !== 'over') {
       onStep?.(s, steps)
       const action = chooseAction(s)
       const next = gameReducer(s, action)

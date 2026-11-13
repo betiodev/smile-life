@@ -65,7 +65,6 @@ const findAll = (pred) => deck.filter(pred)
 // partie à 3 joueurs, joueur 0 en phase de jeu ; `hand` remplace sa main
 function gameAt(hand = null) {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
-  s.screen = 'game'
   s.phase = 'play'
   if (hand) s.players[0].hand = take(s, hand)
   return s
@@ -204,7 +203,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   check('viewFor ne modifie pas l’état (état gelé, identique après)', JSON.stringify(s) === before)
   const v = viewFor(s, 0)
   check('la vue est un objet JSON simple', JSON.stringify(deep(v)) === JSON.stringify(v))
-  check('écran de réglages : vue sans données', viewFor({ screen: 'setup', log: [] }, null).screen === 'setup')
+  check('aucun écran dans l’état ni dans la vue (seulement status)', !('screen' in v) && v.status === 'playing')
 }
 
 // --- hasard à graine : l'état du générateur ne sort jamais -------------------------
@@ -215,7 +214,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
     const view = viewFor(s, v)
     check(`vue ${v ?? 'spectateur'} : ni rng ni seed`, !('rng' in view) && !('seed' in view))
   }
-  const odd = viewFor({ screen: 'setup', log: [], rng: 5, seed: 5 }, null)
+  const odd = viewFor({ log: [], rng: 5, seed: 5 }, null)
   check('vue sans joueurs : ni rng ni seed', !('rng' in odd) && !('seed' in odd))
 }
 
@@ -238,7 +237,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
       for (const v of viewers) { assertNoLeak(s, v, `partie ${g}, étape ${guard}`); views++ }
       if (JSON.stringify(s) !== snapshot) throw new Error(`viewFor a modifié l’état (partie ${g})`)
       if (s.pending) pendings[s.pending.type] = (pendings[s.pending.type] || 0) + 1
-      if (s.screen === 'gameover') break
+      if (s.status === 'over') break
       s = step(s)
       if (++guard > 20000) throw new Error('Partie infinie ?')
     }

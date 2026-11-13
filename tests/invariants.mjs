@@ -80,6 +80,7 @@ function candidates(s) {
   const indexes = [0, 1, 2, 5, 6, -1]
 
   const out = []
+  // READY n'existe plus (passage d'écran : src/session/hotseat.js) : toujours refusé
   for (const type of ['READY', 'DRAW_DECK', 'TAKE_DISCARD', 'RESIGN', 'DIVORCE_VOLUNTARY', 'STOP_ADULTERY',
     'END_PLAYS', 'PURCHASE_CANCEL', 'CLOSE_PENDING']) out.push({ type })
   out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
@@ -120,7 +121,7 @@ export function checkInvariants(s, action, next) {
   const legalBy = new Map(s.players.map((_, i) => [i, legalActions(s, i)]))
 
   // 2. quelqu'un peut agir, sauf si la partie est finie
-  if (s.screen === 'gameover') {
+  if (s.status === 'over') {
     if ([...legalBy.values()].some((l) => l.length > 0)) fail('une action est proposée alors que la partie est finie')
     return
   }
