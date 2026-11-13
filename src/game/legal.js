@@ -129,13 +129,15 @@ function playActions(state) {
   const p = state.players[me]
   // carte forcée (prise dans la défausse / la rivière, Étoile filante, Astronaute) :
   // elle seule peut être jouée ; défaussable seulement si elle ne consomme pas le jeu
+  // (un salaire forcé peut aussi être misé au Casino)
+  const casinoOpen = state.casino && (!state.casino.stake || state.casino.stake.by !== me)
   if (state.forced) {
     const c = state.forced
     const out = playsOf(state, me, c)
+    if (c.type === 'salary' && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
     if (!state.forcedConsumesPlay) out.push({ type: 'DISCARD_CARD', uid: c.uid })
     return out
   }
-  const casinoOpen = state.casino && (!state.casino.stake || state.casino.stake.by !== me)
   const out = []
   for (const c of p.hand) {
     out.push(...playsOf(state, me, c))

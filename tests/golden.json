@@ -11,9 +11,9 @@
     "seed": 2,
     "players": 4,
     "river": true,
-    "steps": 565,
-    "scores": [19, 18, 18, 13],
-    "hash": "7f28f925c847d863"
+    "steps": 548,
+    "scores": [17, 15, 14, 14],
+    "hash": "ee694bbb1773ace0"
   },
   {
     "seed": 3,
@@ -27,33 +27,33 @@
     "seed": 4,
     "players": 3,
     "river": true,
-    "steps": 534,
-    "scores": [25, 22, 17],
-    "hash": "7ebe5a2a1255b756"
+    "steps": 554,
+    "scores": [26, 18, 11],
+    "hash": "e684dd95763d83fb"
   },
   {
     "seed": 5,
     "players": 4,
     "river": false,
-    "steps": 640,
-    "scores": [12, 18, 15, 9],
-    "hash": "d09c76f01d5ca87d"
+    "steps": 646,
+    "scores": [11, 19, 14, 7],
+    "hash": "d3291c194ae1d9ce"
   },
   {
     "seed": 6,
     "players": 2,
     "river": true,
-    "steps": 529,
-    "scores": [19, 26],
-    "hash": "242013938a5dbeda"
+    "steps": 515,
+    "scores": [27, 19],
+    "hash": "497bb3f5613634fb"
   },
   {
     "seed": 7,
     "players": 3,
     "river": false,
-    "steps": 687,
-    "scores": [30, 22, 26],
-    "hash": "b6da18538c7bf3e4"
+    "steps": 681,
+    "scores": [40, 11, 29],
+    "hash": "a89ccc495b1b8a0f"
   },
   {
     "seed": 8,
@@ -123,9 +123,9 @@
     "seed": 16,
     "players": 3,
     "river": true,
-    "steps": 560,
-    "scores": [22, 15, 29],
-    "hash": "ee155ce9d7386163"
+    "steps": 578,
+    "scores": [22, 24, 37],
+    "hash": "bc51524805429b5e"
   },
   {
     "seed": 17,
@@ -147,17 +147,17 @@
     "seed": 19,
     "players": 3,
     "river": false,
-    "steps": 651,
-    "scores": [20, 25, 17],
-    "hash": "e92d82f5cc22d778"
+    "steps": 637,
+    "scores": [15, 24, 18],
+    "hash": "1632abbe5507e745"
   },
   {
     "seed": 20,
     "players": 4,
     "river": true,
-    "steps": 561,
-    "scores": [16, 15, 13, 11],
-    "hash": "53a16793ddb3a0e6"
+    "steps": 545,
+    "scores": [19, 15, 6, 10],
+    "hash": "ced685e49dba6c5b"
   },
   {
     "seed": 21,
@@ -171,9 +171,9 @@
     "seed": 22,
     "players": 3,
     "river": true,
-    "steps": 538,
-    "scores": [24, 10, 24],
-    "hash": "5c7efd3c9d0758ed"
+    "steps": 539,
+    "scores": [23, 10, 26],
+    "hash": "1a0f4bb2e51b9cfe"
   },
   {
     "seed": 23,
@@ -204,8 +204,8 @@
     "players": 4,
     "river": true,
     "steps": 556,
-    "scores": [14, 25, 15, 23],
-    "hash": "1dc375ce67a8ff77"
+    "scores": [14, 25, 13, 23],
+    "hash": "abef877a9be361e3"
   },
   {
     "seed": 27,
@@ -227,9 +227,9 @@
     "seed": 29,
     "players": 4,
     "river": false,
-    "steps": 652,
-    "scores": [13, 12, 24, 17],
-    "hash": "286a15235ab4efde"
+    "steps": 654,
+    "scores": [23, 15, 22, 12],
+    "hash": "9eabc5c0d5b406a7"
   },
   {
     "seed": 30,
@@ -253,87 +253,87 @@
     "river": true,
     "steps": 561,
     "scores": [11, 11, 15, 7],
-    "hash": "4f8743440885b330"
+    "hash": "07679ff721ccd545"
   },
   {
     "seed": 33,
     "players": 2,
     "river": false,
     "steps": 687,
-    "scores": [37, 27],
-    "hash": "7ac44044ee5d4abe"
+    "scores": [38, 26],
+    "hash": "ea3154f10fabc60e"
   },
   {
     "seed": 34,
     "players": 3,
     "river": true,
-    "steps": 572,
-    "scores": [19, 20, 38],
-    "hash": "68c72e6e0a4a879e"
+    "steps": 549,
+    "scores": [17, 21, 32],
+    "hash": "0206bd8e443b2f70"
   },
   {
     "seed": 35,
     "players": 4,
     "river": false,
-    "steps": 681,
-    "scores": [24, 12, 17, 15],
-    "hash": "5a908c887989391b"
+    "steps": 661,
+    "scores": [17, 21, 15, 19],
+    "hash": "b4b5abb599a2a0bc"
   },
   {
     "seed": 36,
     "players": 2,
     "river": true,
     "steps": 499,
-    "scores": [29, 32],
-    "hash": "2f710795296c9f83"
+    "scores": [26, 35],
+    "hash": "e7ba9eab8b3d87d6"
   },
   {
     "seed": 37,
     "players": 3,
     "river": false,
-    "steps": 656,
-    "scores": [19, 14, 30],
-    "hash": "c9b0f016acf2f640"
+    "steps": 668,
+    "scores": [23, 12, 29],
+    "hash": "3ec077d5532af56f"
   },
   {
     "seed": 38,
     "players": 4,
     "river": true,
     "steps": 552,
-    "scores": [17, 14, 12, 20],
-    "hash": "791d12202a2639fd"
+    "scores": [22, 8, 10, 23],
+    "hash": "43e35f5e023db03c"
   },
   {
     "seed": 39,
     "players": 2,
     "river": false,
-    "steps": 661,
-    "scores": [42, 32],
-    "hash": "c2c18c08c9a6a6eb"
+    "steps": 667,
+    "scores": [45, 22],
+    "hash": "04ac5b11d8bfcb9a"
   },
   {
     "seed": 40,
     "players": 3,
     "river": true,
     "steps": 555,
-    "scores": [27, 18, 18],
-    "hash": "b52b183f40a80032"
+    "scores": [28, 17, 18],
+    "hash": "49e063ea76bf3230"
   },
   {
     "seed": 41,
     "players": 4,
     "river": false,
-    "steps": 666,
-    "scores": [9, 19, 22, 14],
-    "hash": "8fb670cc80ac5b4d"
+    "steps": 683,
+    "scores": [13, 20, 24, 13],
+    "hash": "6ef273571160cdcd"
   },
   {
     "seed": 42,
     "players": 2,
     "river": true,
     "steps": 511,
-    "scores": [18, 18],
-    "hash": "a77f9f222eff5bd7"
+    "scores": [16, 21],
+    "hash": "fe0d0c156756414e"
   },
   {
     "seed": 43,
@@ -347,9 +347,9 @@
     "seed": 44,
     "players": 4,
     "river": true,
-    "steps": 561,
-    "scores": [23, 13, 15, 14],
-    "hash": "3fcfa139bcce0ded"
+    "steps": 557,
+    "scores": [18, 18, 12, 17],
+    "hash": "02a842096f99f8c0"
   },
   {
     "seed": 45,
@@ -379,17 +379,17 @@
     "seed": 48,
     "players": 2,
     "river": true,
-    "steps": 515,
-    "scores": [28, 40],
-    "hash": "be8e8915863c9738"
+    "steps": 497,
+    "scores": [29, 28],
+    "hash": "7a4cb2566c861542"
   },
   {
     "seed": 49,
     "players": 3,
     "river": false,
-    "steps": 684,
-    "scores": [13, 24, 26],
-    "hash": "8f02b0ed1e690b20"
+    "steps": 680,
+    "scores": [10, 21, 26],
+    "hash": "552be18b64208605"
   },
   {
     "seed": 50,

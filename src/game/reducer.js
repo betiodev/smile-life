@@ -718,12 +718,16 @@ export function gameReducer(prev, action) {
       return s
     }
     case 'CASINO_BET': {
-      // jouer un salaire de sa main comme mise au casino
-      if (s.phase !== 'play' || s.pending || s.forced || !s.casino) return prev
-      const card = p.hand.find((c) => c.uid === action.uid)
+      // jouer un salaire comme mise au casino : de sa main, ou le salaire forcé
+      // (pris dans la défausse : la mise compte comme le jouer). Une carte
+      // forcée attend : elle seule peut être misée.
+      if (s.phase !== 'play' || s.pending || !s.casino) return prev
+      const fromForced = s.forced?.uid === action.uid
+      if (s.forced && !fromForced) return prev
+      const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || card.type !== 'salary') return prev
       if (s.casino.stake && s.casino.stake.by === s.current) return prev
-      removeFromHand(p, card.uid)
+      if (!fromForced) removeFromHand(p, card.uid)
       if (!s.casino.stake) {
         s.casino.stake = { card, by: s.current }
         log(s, `🎰 ${p.name} mise un salaire au Casino`)
@@ -742,8 +746,7 @@ export function gameReducer(prev, action) {
         s.players[winnerIdx].salaries.push({ card, invested: false })
         s.casino.stake = null
       }
-      s.playsRemaining -= 1
-      s.cardPlayed = true
+      consumePlay(s, fromForced)
       finishPlay(s)
       return s
     }

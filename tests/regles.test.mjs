@@ -793,6 +793,23 @@ function check(label, cond) {
     JSON.stringify(legalActions(s, 0).map((a) => [a.type, a.uid])) === JSON.stringify([['PLAY_SELF', study.uid]]))
 }
 {
+  // Casino : le salaire pris dans la défausse peut être misé (règle vérifiée par Teto)
+  let s = freshState()
+  const sal = find((c) => c.type === 'salary')
+  s.players[1].salaries = []
+  s.discard = [{ card: sal, by: 1 }]
+  s.casino = { owner: 1, stake: null }
+  s.players[0].job = find((c) => c.key === 'pizzaiolo')
+  s = gameReducer(s, { type: 'TAKE_DISCARD', by: 0 })
+  check('Casino : salaire pris dans la défausse, mise proposée', s.forced?.uid === sal.uid &&
+    legalActions(s, 0).some((a) => a.type === 'CASINO_BET' && a.uid === sal.uid))
+  const r = gameReducer(s, { type: 'CASINO_BET', uid: sal.uid, by: 0 })
+  check('Casino : salaire de la défausse misé, le tour se termine', r !== s && r.casino.stake?.card.uid === sal.uid &&
+    r.forced === null && r.current === 1 && r.phase === 'draw')
+  check('Casino : la carte misée n’est plus nulle part ailleurs',
+    !r.players[0].hand.some((c) => c.uid === sal.uid) && !r.discard.some((e) => e.card.uid === sal.uid))
+}
+{
   // Troc du Chef : un index hors de la main est refusé
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
   s.screen = 'game'
