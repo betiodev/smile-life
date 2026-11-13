@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 import { useLayoutEffect, useRef, useState } from 'react'
 import Card from './Card'
+import { boardCards } from '../game/state'
 
 export const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -21,10 +22,7 @@ export function locateCards(state) {
   state.players.forEach((p, i) => {
     p.hand.forEach((c) => put(c, `hand:${i}`))
     const b = `board:${i}`
-    ;[
-      ...p.studies, p.job, ...p.salaries.map((s) => s.card), ...p.flirts, p.marriage, p.adultery,
-      ...p.children, ...p.acquisitions, ...p.distinctions.map((d) => d.card), ...p.specials, ...p.malusKept,
-    ].forEach((c) => put(c, b))
+    boardCards(p).forEach((c) => put(c, b))
   })
   // Anniversaire en attente des cadeaux : la carte reste « dans le dock »,
   // elle ne s'envole vers le plateau qu'une fois les cadeaux reçus (comme avant)

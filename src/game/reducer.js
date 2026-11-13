@@ -9,6 +9,10 @@ import {
   availableLiasses, validatePayment, canStopAdultery, birthdayDonors, lowestUnusedSalary,
 } from './rules.js'
 import { canAct } from './turn.js'
+import {
+  jobOf, addJob, removeJob, marriageOf, addMarriage, removeMarriage, adulteryOf, addAdultery, removeAdultery,
+  topFlirt, unspentMoney, addMoney, takeMoney, investMoney, malusOf, addMalus, takeMalus, putOutOfGame,
+} from './state.js'
 import { seedFrom, randomSeed, rngOf, pick } from './rng.js'
 
 // --- helpers ---------------------------------------------------------------
@@ -100,9 +104,9 @@ function removeFromHand(p, uidToRemove) {
 // resume = ce qui reprend après ce choix ('finish-play' ou 'end-turn').
 function loseJob(s, pIdx, destination = 'discard', resume = 'finish-play') {
   const p = s.players[pIdx]
-  if (!p.job) return false
-  const job = p.job
-  p.job = null
+  const job = jobOf(p)
+  if (!job) return false
+  removeJob(p, job.uid)
   p.architectFreeUsed = false
   // Grand Prix : retourné mais conserve ses smiles
   for (const d of p.distinctions) {
@@ -132,45 +136,41 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
     case 'maladie':
     case 'burnout':
       t.skipTurns += 1
-      t.malusKept.push(card)
+      addMalus(t, card)
       log(s, `${a.name} inflige ${card.name} à ${t.name} : passe 1 tour`, 'malus')
       break
     case 'licenciement':
-      log(s, `${a.name} licencie ${t.name} (${t.job.name})`, 'malus')
+      log(s, `${a.name} licencie ${t.name} (${jobOf(t).name})`, 'malus')
       loseJob(s, targetIdx)
-      t.malusKept.push(card)
+      addMalus(t, card)
       break
     case 'impot': {
-      for (let i = t.salaries.length - 1; i >= 0; i--) {
-        if (!t.salaries[i].invested) {
-          const [sal] = t.salaries.splice(i, 1)
-          toDiscard(s, sal.card, targetIdx)
-          log(s, `${a.name} impose ${t.name} : salaire niveau ${sal.card.level} défaussé`, 'malus')
-          break
-        }
+      // le dernier salaire non investi
+      const last = unspentMoney(t).at(-1)
+      if (last) {
+        toDiscard(s, takeMoney(t, last.uid), targetIdx)
+        log(s, `${a.name} impose ${t.name} : salaire niveau ${last.level} défaussé`, 'malus')
       }
-      t.malusKept.push(card)
+      addMalus(t, card)
       break
     }
     case 'divorce': {
-      toDiscard(s, t.marriage, targetIdx)
-      t.marriage = null
-      if (t.adultery) {
-        toDiscard(s, t.adultery, targetIdx)
-        t.adultery = null
+      toDiscard(s, removeMarriage(t, marriageOf(t).uid), targetIdx)
+      if (adulteryOf(t)) {
+        toDiscard(s, removeAdultery(t, adulteryOf(t).uid), targetIdx)
         for (const child of t.children) toDiscard(s, child, targetIdx)
         t.children = []
         log(s, `${a.name} divorce ${t.name} en plein adultère : mariage, adultère et enfants perdus !`, 'malus')
       } else {
         log(s, `${a.name} inflige un Divorce à ${t.name} (enfants conservés)`, 'malus')
       }
-      t.malusKept.push(card)
+      addMalus(t, card)
       break
     }
     case 'redoublement': {
       const study = t.studies.pop()
       if (study) toDiscard(s, study, targetIdx)
-      t.malusKept.push(card)
+      addMalus(t, card)
       log(s, `${a.name} fait redoubler ${t.name} : 1 carte études défaussée`, 'malus')
       break
     }
@@ -181,13 +181,13 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
       toDiscard(s, card, attackerIdx)
       break
     case 'attentat': {
-      for (const child of a.children) s.removed.push(child)
-      for (const child of t.children) s.removed.push(child)
+      for (const child of a.children) putOutOfGame(s, child, 'attentat', attackerIdx)
+      for (const child of t.children) putOutOfGame(s, child, 'attentat', attackerIdx)
       const na = a.children.length, nt = t.children.length
       a.children = []
       t.children = []
       a.didAttentat = true
-      s.removed.push(card)
+      putOutOfGame(s, card, 'attentat', attackerIdx)
       log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${na + nt} enfant(s) retirés du jeu`, 'malus')
       break
     }
@@ -244,19 +244,20 @@ function poseSelf(s, pIdx, card) {
     case 'job': {
       if (isGrandProf(card)) {
         // promotion : le Prof est défaussé
-        toDiscard(s, p.job, pIdx)
-        p.job = card
+        const prof = jobOf(p)
+        toDiscard(s, removeJob(p, prof.uid), pIdx)
+        addJob(p, card)
         log(s, `${p.name} est promu Grand Prof !`)
         break
       }
-      p.job = card
+      addJob(p, card)
       if (card.key === 'bandit') p.wasBandit = true
       log(s, `${p.name} devient ${card.name}`)
       // Policier : purge les Bandits et Gourous déjà posés
       if (card.key === 'policier') {
         s.players.forEach((q, qi) => {
-          if (qi !== pIdx && hasTag(q.job, 'outlaw')) {
-            log(s, `👮 Le Policier fait défausser le ${q.job.name} de ${q.name}`, 'malus')
+          if (qi !== pIdx && hasTag(jobOf(q), 'outlaw')) {
+            log(s, `👮 Le Policier fait défausser le ${jobOf(q).name} de ${q.name}`, 'malus')
             loseJob(s, qi)
           }
         })
@@ -266,7 +267,7 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'salary':
-      p.salaries.push({ card, invested: false })
+      addMoney(p, card)
       log(s, `${p.name} pose un salaire niveau ${card.level}`)
       break
 
@@ -276,7 +277,7 @@ function poseSelf(s, pIdx, card) {
       // Vol de flirt : même lieu que le flirt du DESSUS d'un adversaire
       s.players.forEach((q, qi) => {
         if (qi === pIdx) return
-        const top = q.flirts[q.flirts.length - 1]
+        const top = topFlirt(q)
         if (top && top.place === card.place) {
           q.flirts.pop()
           p.flirts.push(top)
@@ -287,12 +288,12 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'marriage':
-      p.marriage = card
+      addMarriage(p, card)
       log(s, `💒 ${p.name} se marie à ${card.name} !`)
       break
 
     case 'adultery':
-      p.adultery = card
+      addAdultery(p, card)
       log(s, `😏 ${p.name} commence un adultère...`)
       break
 
@@ -336,12 +337,11 @@ function giveBirthdayGifts(s, pIdx, gifts) {
   let count = 0
   s.players.forEach((q, qi) => {
     if (qi === pIdx) return
-    const i = q.salaries.findIndex((sal) => sal.card.uid === gifts[qi] && !sal.invested)
-    if (i >= 0) {
-      const [sal] = q.salaries.splice(i, 1)
-      p.salaries.push(sal)
+    const gift = takeMoney(q, gifts[qi])
+    if (gift) {
+      addMoney(p, gift)
       count++
-      log(s, `🎂 ${q.name} offre un salaire niveau ${sal.card.level} à ${p.name}`)
+      log(s, `🎂 ${q.name} offre un salaire niveau ${gift.level} à ${p.name}`)
     } else {
       log(s, `🎂 ${q.name} n’a aucun salaire à offrir`)
     }
@@ -510,7 +510,7 @@ function gameOver(s) {
   // casino non résolu : le miseur récupère son salaire (avec son smile)
   if (s.casino?.stake) {
     const { card, by } = s.casino.stake
-    s.players[by].salaries.push({ card, invested: false })
+    addMoney(s.players[by], card)
     log(s, `🎰 Personne n’a relevé la mise : ${s.players[by].name} récupère son salaire`)
     s.casino.stake = null
   }
@@ -633,21 +633,19 @@ export function gameReducer(prev, action) {
       return s
     }
     case 'RESIGN': {
-      if (s.phase !== 'draw' || !p.job) return prev
+      if (s.phase !== 'draw' || !jobOf(p)) return prev
       const interim = isInterim(p)
-      log(s, `${p.name} démissionne de ${p.job.name}${interim ? ' (Intérimaire : joue quand même)' : ' et passe son tour'}`)
+      log(s, `${p.name} démissionne de ${jobOf(p).name}${interim ? ' (Intérimaire : joue quand même)' : ' et passe son tour'}`)
       // Chercheur : le tour ne se termine qu'après le choix de la carte défaussée
       const choosing = loseJob(s, s.current, 'discard', interim ? 'none' : 'end-turn')
       if (!interim && !choosing) endTurn(s)
       return s
     }
     case 'DIVORCE_VOLUNTARY': {
-      if (s.phase !== 'draw' || !p.marriage) return prev
-      toDiscard(s, p.marriage, s.current)
-      p.marriage = null
-      if (p.adultery) {
-        toDiscard(s, p.adultery, s.current)
-        p.adultery = null
+      if (s.phase !== 'draw' || !marriageOf(p)) return prev
+      toDiscard(s, removeMarriage(p, marriageOf(p).uid), s.current)
+      if (adulteryOf(p)) {
+        toDiscard(s, removeAdultery(p, adulteryOf(p).uid), s.current)
         log(s, `${p.name} divorce volontairement (adultère défaussé, enfants et flirts conservés) et passe son tour`)
       } else {
         log(s, `${p.name} divorce volontairement (enfants conservés) et passe son tour`)
@@ -657,8 +655,7 @@ export function gameReducer(prev, action) {
     }
     case 'STOP_ADULTERY': {
       if (!canStopAdultery(s, s.current).ok) return prev
-      toDiscard(s, p.adultery, s.current)
-      p.adultery = null
+      toDiscard(s, removeAdultery(p, adulteryOf(p).uid), s.current)
       log(s, `${p.name} met fin à son adultère (flirts conservés)`)
       return s
     }
@@ -735,8 +732,8 @@ export function gameReducer(prev, action) {
           winnerIdx = first.by
           log(s, `🎰 Niveaux différents (${first.card.level} vs ${card.level}) : ${firstP.name} remporte les deux salaires !`)
         }
-        s.players[winnerIdx].salaries.push({ card: first.card, invested: false })
-        s.players[winnerIdx].salaries.push({ card, invested: false })
+        addMoney(s.players[winnerIdx], first.card)
+        addMoney(s.players[winnerIdx], card)
         s.casino.stake = null
       }
       consumePlay(s, fromForced)
@@ -759,16 +756,17 @@ export function gameReducer(prev, action) {
       const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
       if (!isFree) {
         const chosen = []
+        const unspent = unspentMoney(p)
         for (const su of action.salaryUids || []) {
-          const sal = p.salaries.find((x) => x.card.uid === su && !x.invested)
-          if (sal) chosen.push(sal)
+          const sal = unspent.find((c) => c.uid === su)
+          if (sal && !chosen.includes(sal)) chosen.push(sal)
         }
         const heritage = action.useHeritage && p.heritage > 0 ? p.heritage : 0
         // pas de salaire superflu : impossible de sur-investir pour échapper à l'Impôt
-        if (!validatePayment(cost, chosen.map((x) => x.card.level), heritage).ok) return prev
-        const paid = chosen.reduce((t, x) => t + x.card.level, 0) + heritage
+        if (!validatePayment(cost, chosen.map((c) => c.level), heritage).ok) return prev
+        const paid = chosen.reduce((t, c) => t + c.level, 0) + heritage
         // les salaires passent sous l'acquisition qu'ils ont payée
-        for (const sal of chosen) { sal.invested = true; sal.paidFor = card.uid }
+        for (const sal of chosen) investMoney(p, sal.uid, card.uid)
         if (heritage > 0) {
           p.heritage = 0
           // l'Héritage (tout ou rien) passe sous l'acquisition, avec les salaires
@@ -827,9 +825,9 @@ export function gameReducer(prev, action) {
       const card = p.hand.find((c) => c.uid === action.uid)
       if (!card || card.type !== 'job' || isGrandProf(card)) return prev
       if (hasTag(card, 'outlaw') && s.players.some((q) => hasJob(q, 'policier'))) return prev
-      if (p.job) return prev
+      if (jobOf(p)) return prev
       removeFromHand(p, card.uid)
-      p.job = card
+      addJob(p, card)
       if (card.key === 'bandit') p.wasBandit = true
       log(s, `🤝 Grâce au Piston, ${p.name} devient ${card.name} sans les études !`)
       s.pending = null
@@ -840,8 +838,8 @@ export function gameReducer(prev, action) {
       // Policier pistonné : purge les Bandits et Gourous
       if (card.key === 'policier') {
         s.players.forEach((q, qi) => {
-          if (qi !== s.current && hasTag(q.job, 'outlaw')) {
-            log(s, `👮 Le Policier fait défausser le ${q.job.name} de ${q.name}`, 'malus')
+          if (qi !== s.current && hasTag(jobOf(q), 'outlaw')) {
+            log(s, `👮 Le Policier fait défausser le ${jobOf(q).name} de ${q.name}`, 'malus')
             loseJob(s, qi)
           }
         })
@@ -907,18 +905,17 @@ export function gameReducer(prev, action) {
       removeFromHand(t, theirs.uid)
       if (mine) t.hand.push(mine)
       p.hand.push(theirs)
-      log(s, `🔄 ${p.name} (${p.job.name}) troque une carte avec ${t.name} en en protégeant une`)
+      log(s, `🔄 ${p.name} (${jobOf(p).name}) troque une carte avec ${t.name} en en protégeant une`)
       s.pending = null
       finishPlay(s)
       return s
     }
     case 'VENGEANCE_PICK': {
       if (s.pending?.type !== 'vengeance') return prev
-      const i = p.malusKept.findIndex((c) => c.uid === action.uid)
-      if (i < 0) return prev
-      const malus = p.malusKept[i]
+      const malus = malusOf(p).find((c) => c.uid === action.uid)
+      if (!malus) return prev
       if (!canPlayMalus(s, s.current, malus, action.target).ok) return prev
-      p.malusKept.splice(i, 1)
+      takeMalus(p, malus.uid)
       log(s, `😈 ${p.name} se venge avec ${malus.name} !`)
       // avant applyMalus : un licenciement de Chercheur ouvre un nouveau choix
       s.pending = null
@@ -949,7 +946,7 @@ export function gameReducer(prev, action) {
       const donor = s.players[action.by]
       const gift = action.uid == null
         ? lowestUnusedSalary(donor)
-        : donor.salaries.find((x) => x.card.uid === action.uid && !x.invested)?.card
+        : unspentMoney(donor).find((c) => c.uid === action.uid)
       if (!gift) return prev
       // nouvel objet : cloneState ne copie pas le pending
       const gifts = { ...pend.gifts, [action.by]: gift.uid }

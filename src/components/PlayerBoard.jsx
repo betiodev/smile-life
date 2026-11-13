@@ -1,6 +1,7 @@
 import Card from './Card'
 import { computeScore } from '../game/scoring'
 import { studyLevel, effectiveSalaryLevel } from '../game/rules'
+import { jobOf, jobs, moneyOf, marriages, isMarried, adulteries, adulteryOf, malusOf, topFlirt } from '../game/state'
 
 function Zone({ title, children, empty, compact }) {
   return (
@@ -29,22 +30,20 @@ export default function PlayerBoard({ player, state, compact = false }) {
         <Zone compact={compact}
           title={compact
             ? `Vie pro · niv. ${studyLevel(p)}`
-            : `📚💼 Vie pro — ${p.studies.length}/6 cartes études (niv. ${studyLevel(p)})${p.job ? ` · salaire max ${effectiveSalaryLevel(p)}` : ''}`}
-          empty={!p.studies.length && !p.job && !p.salaries.length ? (compact ? '—' : 'Sans emploi ni diplôme') : null}>
+            : `📚💼 Vie pro — ${p.studies.length}/6 cartes études (niv. ${studyLevel(p)})${jobOf(p) ? ` · salaire max ${effectiveSalaryLevel(p)}` : ''}`}
+          empty={!p.studies.length && !jobs(p).length && !moneyOf(p).length ? (compact ? '—' : 'Sans emploi ni diplôme') : null}>
           {p.studies.map((c) => show({ card: c }))}
-          {p.job && show({ card: p.job })}
-          {p.salaries.map((s) => (
-            show({ card: s.card })
-          ))}
+          {jobs(p).map((c) => show({ card: c }))}
+          {moneyOf(p).map((c) => show({ card: c }))}
         </Zone>
 
         <Zone compact={compact} title={compact ? 'Vie perso' : '💕 Vie perso'}
-          empty={!p.flirts.length && !p.marriage && !p.children.length && !p.adultery ? (compact ? '—' : 'Célibataire sans histoire') : null}>
+          empty={!p.flirts.length && !isMarried(p) && !p.children.length && !adulteryOf(p) ? (compact ? '—' : 'Célibataire sans histoire') : null}>
           {p.flirts.map((c, i) => (
-            show({ card: c, className: i === p.flirts.length - 1 ? '' : 'opacity-60' })
+            show({ card: c, className: c.uid === topFlirt(p)?.uid ? '' : 'opacity-60' })
           ))}
-          {p.marriage && show({ card: p.marriage })}
-          {p.adultery && show({ card: p.adultery })}
+          {marriages(p).map((c) => show({ card: c }))}
+          {adulteries(p).map((c) => show({ card: c }))}
           {p.children.map((c) => show({ card: c }))}
         </Zone>
 
@@ -57,12 +56,12 @@ export default function PlayerBoard({ player, state, compact = false }) {
         </Zone>
 
         <Zone compact={compact} title={compact ? 'Distinctions · malus' : '🏅⭐⚡ Distinctions · Spéciales · Malus'}
-          empty={!p.distinctions.length && !p.specials.length && !p.malusKept.length && !casinoHere ? (compact ? '—' : 'Rien à signaler') : null}>
+          empty={!p.distinctions.length && !p.specials.length && !malusOf(p).length && !casinoHere ? (compact ? '—' : 'Rien à signaler') : null}>
           {p.distinctions.map((d) => (
             show({ card: d.card })
           ))}
           {p.specials.map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
-          {p.malusKept.map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
+          {malusOf(p).map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
           {casinoHere && (
             <span className="text-xs font-bold bg-amber-100 text-amber-700 rounded-lg px-2 py-1">
               🎰 Casino {state.casino.stake ? `— mise de ${state.players[state.casino.stake.by].name} 🂠` : '— ouvert'}

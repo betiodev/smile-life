@@ -16,6 +16,7 @@
 //   défaut quand le délai expire) fait partie de la liste.
 // ---------------------------------------------------------------------------
 import { whoMustAct } from './turn.js'
+import { jobOf, isMarried, unspentMoney, malusOf } from './state.js'
 import {
   canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery,
   isPlayableFromDiscard, cheapestPayment, purchaseCost, architectFree, hasJob, hasTag, isGrandProf,
@@ -55,7 +56,7 @@ function pendingActions(state, actor) {
         .filter((e) => isPlayableFromDiscard(state, me, e.card))
         .map((e) => ({ type: 'DISCARD_PICK', uid: e.card.uid }))
     case 'piston': {
-      if (p.job) return []
+      if (jobOf(p)) return []
       const policier = state.players.some((q) => hasJob(q, 'policier'))
       return p.hand
         .filter((c) => c.type === 'job' && !isGrandProf(c) && !(policier && hasTag(c, 'outlaw')))
@@ -80,7 +81,7 @@ function pendingActions(state, actor) {
           return []
       }
     case 'vengeance':
-      return p.malusKept.flatMap((m) =>
+      return malusOf(p).flatMap((m) =>
         range(state.players.length)
           .filter((i) => i !== me && canPlayMalus(state, me, m, i).ok)
           .map((i) => ({ type: 'VENGEANCE_PICK', uid: m.uid, target: i })))
@@ -95,7 +96,7 @@ function pendingActions(state, actor) {
     case 'birthday': {
       const donor = state.players[actor]
       return [
-        ...donor.salaries.filter((x) => !x.invested).map((x) => ({ type: 'BIRTHDAY_GIFT', uid: x.card.uid })),
+        ...unspentMoney(donor).map((c) => ({ type: 'BIRTHDAY_GIFT', uid: c.uid })),
         { type: 'BIRTHDAY_GIFT', uid: null },
       ]
     }
@@ -119,8 +120,8 @@ function drawActions(state) {
       out.push({ type: 'TAKE_RIVER', index, playNow: false })
       if (canTakeRiverNow(state, me, c)) out.push({ type: 'TAKE_RIVER', index, playNow: true })
     })
-  if (p.job) out.push({ type: 'RESIGN' })
-  if (p.marriage) out.push({ type: 'DIVORCE_VOLUNTARY' })
+  if (jobOf(p)) out.push({ type: 'RESIGN' })
+  if (isMarried(p)) out.push({ type: 'DIVORCE_VOLUNTARY' })
   return out
 }
 

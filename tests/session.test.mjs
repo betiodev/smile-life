@@ -3,6 +3,7 @@
 // Horloge factice : rien n'attend vraiment 30 s.
 import { gameReducer } from '../src/game/reducer.js'
 import { buildDeck } from '../src/data/index.js'
+import { setJob, setMoney, moneyOf } from '../src/game/state.js'
 import { createDriver, WAIT_MS } from '../src/session/driver.js'
 import { createHotseat } from '../src/session/hotseat.js'
 
@@ -56,8 +57,8 @@ function birthdayState() {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 3 })
   s.phase = 'play'
   s.players[0].hand[0] = anniv
-  s.players[1].salaries = [lv(3), lv(1)].map((card) => ({ card, invested: false }))
-  s.players[2].salaries = [{ card: lv(2), invested: false }]
+  setMoney(s.players[1], [lv(3), lv(1)])
+  setMoney(s.players[2], [lv(2)])
   return s
 }
 {
@@ -80,7 +81,7 @@ function birthdayState() {
   d.tick()
   const s = d.fullState()
   check('Anniversaire : à l’échéance, le pilote offre pour Cléo (plus petit salaire)', s.pending === null &&
-    s.players[0].salaries.some((x) => x.card.uid === lv(2).uid) && s.players[0].salaries.some((x) => x.card.uid === lv(3).uid))
+    moneyOf(s.players[0]).some((c) => c.uid === lv(2).uid) && moneyOf(s.players[0]).some((c) => c.uid === lv(3).uid))
   check('Anniversaire : l’action par défaut est signée par Cléo', d.history().at(-1).by === 2 && d.history().at(-1).uid === null)
   check('Anniversaire : plus aucun délai ensuite', d.deadlines().length === 0)
 }
@@ -111,7 +112,7 @@ const licenciement = find((c) => c.key === 'licenciement')
 function chercheurState() {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 5 })
   s.phase = 'play'
-  s.players[1].job = chercheur
+  setJob(s.players[1], chercheur)
   s.players[1].hand.push(s.deck.pop())
   s.players[0].hand[0] = licenciement
   return s

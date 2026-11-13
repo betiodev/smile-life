@@ -4,6 +4,7 @@
 import { gameReducer } from '../src/game/reducer.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/index.js'
+import { setJob } from '../src/game/state.js'
 import { step, newGame } from './sim-lib.mjs'
 
 let passed = 0
@@ -244,7 +245,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
     // pour que la défausse du Chercheur (pending public) soit bien vérifiée
     if (g % 2 === 0) {
       const i = s.deck.findIndex((c) => c.key === 'chercheur')
-      if (i >= 0) s.players[g % s.players.length].job = s.deck.splice(i, 1)[0]
+      if (i >= 0) setJob(s.players[g % s.players.length], s.deck.splice(i, 1)[0])
     }
     const viewers = [...s.players.keys(), null]
     let guard = 0

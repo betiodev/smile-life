@@ -7,6 +7,7 @@ import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
 import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf } from '../game/rules'
 import { legalActions } from '../game/legal'
+import { jobOf, isMarried, unspentMoney, malusOf } from '../game/state'
 
 function Modal({ title, children, wide }) {
   return (
@@ -40,15 +41,15 @@ function PurchaseModal({ state, dispatch }) {
   const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
   const architectFree = hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed
 
-  const available = p.salaries.filter((s) => !s.invested)
-  const levels = chosen.map((u) => available.find((s) => s.card.uid === u).card.level)
+  const available = unspentMoney(p)
+  const levels = chosen.map((u) => available.find((c) => c.uid === u).level)
   const heritage = useHeritage ? p.heritage : 0
   const total = levels.reduce((a, b) => a + b, 0) + heritage
   const check = validatePayment(cost, levels, heritage)
   const toggle = (u) => setChosen(chosen.includes(u) ? chosen.filter((x) => x !== u) : [...chosen, u])
 
   return (
-    <Modal title={`Acheter ${card.name} — coût ${cost} liasses${p.marriage && hasTag(card, 'house') ? ' (prix marié ÷2)' : ''}`} wide>
+    <Modal title={`Acheter ${card.name} — coût ${cost} liasses${isMarried(p) && hasTag(card, 'house') ? ' (prix marié ÷2)' : ''}`} wide>
       <div className="flex gap-3 flex-wrap items-start">
         <Card card={card} />
         <div className="flex-1 min-w-52">
@@ -59,13 +60,13 @@ function PurchaseModal({ state, dispatch }) {
           )}
           <div className="text-sm font-bold text-gray-600 mt-3 mb-1">Salaires à investir (retournés) :</div>
           <div className="flex flex-wrap gap-1.5">
-            {available.map((s) => (
+            {available.map((c) => (
               <Card
-                key={s.card.uid}
-                card={s.card}
+                key={c.uid}
+                card={c}
                 small
-                onClick={() => toggle(s.card.uid)}
-                className={chosen.includes(s.card.uid) ? 'ring-4 ring-green-400' : ''}
+                onClick={() => toggle(c.uid)}
+                className={chosen.includes(c.uid) ? 'ring-4 ring-green-400' : ''}
               />
             ))}
             {available.length === 0 && <span className="text-xs text-gray-400 italic">Aucun salaire disponible</span>}
@@ -180,7 +181,7 @@ function ChefTrocModal({ state, dispatch }) {
 
   if (pend.step === 'target') {
     return (
-      <Modal title={`🛡️ ${p.job.name} — troquez en protégeant 1 carte. Avec qui ?`}>
+      <Modal title={`🛡️ ${jobOf(p).name} — troquez en protégeant 1 carte. Avec qui ?`}>
         <div className="space-y-2">
           {state.players.map((q, i) => {
             if (i === state.current) return null
@@ -252,12 +253,12 @@ function ChefTrocModal({ state, dispatch }) {
 function VengeanceModal({ state, dispatch }) {
   const p = state.players[state.current]
   const [malusUid, setMalusUid] = useState(null)
-  const malus = p.malusKept.find((c) => c.uid === malusUid)
+  const malus = malusOf(p).find((c) => c.uid === malusUid)
   return (
     <Modal title="😈 Vengeance — renvoyez un de vos malus reçus" wide>
       <div className="text-sm font-bold text-gray-600 mb-1">1. Choisissez le malus :</div>
       <div className="flex gap-2 flex-wrap">
-        {p.malusKept.map((c) => (
+        {malusOf(p).map((c) => (
           <Card key={c.uid} card={c} small onClick={() => setMalusUid(c.uid)} className={malusUid === c.uid ? 'ring-4 ring-red-400' : ''} />
         ))}
       </div>

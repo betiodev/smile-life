@@ -6,6 +6,7 @@
 import { Fragment } from 'react'
 import Card from './Card'
 import { paidCards, spentCards, unusedHeritage } from '../game/rules'
+import { jobs, unspentMoney, marriages, adulteries, malusOf } from '../game/state'
 
 export const CARD_RATIO = 1417 / 968 // hauteur / largeur
 // au-delà de cette largeur, la carte affiche son texte d'effet complet
@@ -27,18 +28,18 @@ const peekFor = (w) => Math.max(3, Math.round(w * CARD_RATIO * PEEK))
 function boardStacks(p) {
   const entries = [
     ...p.studies.map((card) => ({ card, group: 'study' })),
-    p.job && { card: p.job, group: 'job' },
-    ...p.salaries.filter((s) => !s.invested).map((s) => ({ card: s.card, group: 'salary' })),
+    ...jobs(p).map((card) => ({ card, group: 'job' })),
+    ...unspentMoney(p).map((card) => ({ card, group: 'salary' })),
     ...p.flirts.map((card) => ({ card, group: 'flirt' })),
-    p.marriage && { card: p.marriage, group: 'marriage' },
-    p.adultery && { card: p.adultery, group: 'adultery' },
+    ...marriages(p).map((card) => ({ card, group: 'marriage' })),
+    ...adulteries(p).map((card) => ({ card, group: 'adultery' })),
     ...p.children.map((card) => ({ card, group: 'child' })),
     ...unusedHeritage(p).map((card) => ({ card, group: 'heritage', note: `${p.heritage} liasses pour un futur achat` })),
     ...p.acquisitions.map((card) => ({ card, group: 'acquisition', under: paidCards(p, card.uid) })),
     ...spentCards(p).map((card) => ({ card, group: 'spent', faceDown: true, note: card.type === 'salary' ? 'Salaire dépensé : compte ses smiles, ne peut plus servir' : 'Héritage dépensé' })),
     ...p.distinctions.map((d) => ({ card: d.card, group: 'distinction', badge: d.active ? null : 'Sans effet', note: d.active ? null : 'Sans effet : métier perdu (smiles conservés)' })),
     ...p.specials.filter((c) => c.key !== 'heritage').map((card) => ({ card, group: 'special', faceDown: true })),
-    ...p.malusKept.map((card) => ({ card, group: 'malus', faceDown: true })),
+    ...malusOf(p).map((card) => ({ card, group: 'malus', faceDown: true })),
   ].filter(Boolean)
   const stacks = new Map()
   for (const e of entries) {

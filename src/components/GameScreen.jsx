@@ -8,6 +8,7 @@ import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, G
 import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
 import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
 import { legalActions } from '../game/legal'
+import { malusOf } from '../game/state'
 
 const rectOf = (el) => {
   if (!el) return null
@@ -275,7 +276,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     onZoom: (cards, extras) => setZoom({ cards, extras, fromHand: false }),
   }
 
-  const vengeanceMalus = it?.flow === 'vengeance' && state.players[state.current].malusKept.find((m) => m.uid === it.malusUid)
+  const vengeanceMalus = it?.flow === 'vengeance' && malusOf(state.players[state.current]).find((m) => m.uid === it.malusUid)
   const targeting = targetingNow ? {
     title: it.flow === 'malus' ? `${it.card.name} : sur qui ?`
       : it.flow === 'troc' ? 'Troc : avec qui ?'
