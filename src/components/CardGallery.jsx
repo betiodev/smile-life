@@ -1,13 +1,12 @@
-// Galerie de toutes les cartes (une par nom) — ouvrir l'app avec #cartes
-import { buildDeck } from '../data/cards'
+// Galerie de toutes les cartes (une par définition) — ouvrir l'app avec #cartes
+import { BASE_DEFS } from '../data/base'
+import { instanceOf } from '../data'
 import Card from './Card'
 import { artKey } from './cardArt'
 
 export default function CardGallery() {
-  const seen = new Set()
-  // les mariages partagent une image mais affichent chacun leur lieu
-  const id = (c) => (c.type === 'marriage' ? `${artKey(c)}-${c.name}` : artKey(c))
-  const cards = buildDeck().filter((c) => !seen.has(id(c)) && seen.add(id(c)))
+  // une carte par sorte (les mariages partagent une image mais affichent chacun leur lieu)
+  const cards = BASE_DEFS.map((d) => instanceOf(d, d.id))
   return (
     <div className="p-4">
       <h1 className="font-black text-xl mb-1">Galerie des cartes ({cards.length})</h1>

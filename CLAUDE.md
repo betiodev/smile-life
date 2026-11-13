@@ -7,17 +7,18 @@ React 18 + Tailwind CSS 4 + Vite. All game state lives in memory (useReducer).
 npm run dev — local server · npm test — rule tests + 40 simulated games + 50 golden games · npm run golden:update — re-record the golden games (only on purpose)
 Deploys to GitHub Pages automatically on push to main.
 Where things are
-src/data/cards.js — all 200 cards (source of truth for card data)
+src/data/base.js — base-game card definitions (source of truth: 98 kinds, 200 cards; each has id `base.<slug>`, ext, count, tags) · index.js — CATALOGUE by id, buildDeck(extensions, rng), hasTag. A card in a game = its definition's fields + uid + def (the id)
 src/game/rules.js — placement/validation rules · reducer.js — game state machine · scoring.js — smiles count · view.js — viewFor (what each player sees) · rng.js — seeded randomness · legal.js — legalActions(state, actor): every action a player may send now (works on a view too)
 src/components/ — screens and card rendering (Card.jsx)
 src/session/ — driver.js: the only holder of the full state; dispatch(seat, action) stamps `by`, view(seat), 30-second deadlines that play the default action (fallbackAction in src/game/turn.js) · hotseat.js: shared-screen mode ("Passe l'écran" is UI, shown when the seat that must hold the screen changes)
-tests/ — regles.test.mjs (rule cases), session.test.mjs (driver, deadlines, hot-seat hand-over), sim.mjs (full random games picked from legalActions, step logic in sim-lib.mjs, integrity checks after every action in invariants.mjs), view.test.mjs (visibility + leak check), rng.test.mjs (seeded randomness, replay), golden.test.mjs + golden.json (reference games)
+tests/ — cartes.test.mjs (card definitions, totals, tags, opaque uids), regles.test.mjs (rule cases), session.test.mjs (driver, deadlines, hot-seat hand-over), sim.mjs (full random games picked from legalActions, step logic in sim-lib.mjs, integrity checks after every action in invariants.mjs), view.test.mjs (visibility + leak check), rng.test.mjs (seeded randomness, replay), golden.test.mjs + golden.json (reference games)
 Rules for working on this repo
 All player-facing text is in French. Code comments may be French.
 Keep game logic out of components: rules go in src/game/, display in src/components/.
 Run npm test before every commit. When fixing a rule, add a test case in tests/regles.test.mjs.
 No screens or timers in src/game/: the engine only knows status 'playing' | 'over'. Hand-over screens, deadlines and seats ({ name, color, kind: 'human' }) live in src/session/. A new wait with a default answer goes in fallbackAction (src/game/turn.js).
-Randomness: never Math.random() in src/game/ (a test fails); draw from state.rng via src/game/rng.js. START_GAME takes an optional seed; same seed + same actions = same game. rng and seed never appear in a view. Simulated games print their seed on failure (SEED=… GAME=… node tests/sim.mjs replays one).
+Randomness: never Math.random() in src/game/ (a test fails); draw from state.rng via src/game/rng.js. START_GAME takes an optional seed and extensions (list stored in state.extensions; only base exists for now); same seed + same actions = same game. rng and seed never appear in a view. Simulated games print their seed on failure (SEED=… GAME=… node tests/sim.mjs replays one).
+Groups of cards: rules use tags (hasTag(card, 'outlaw')…), never a list of card keys; a rule about one single card may use its key.
 Legal actions: when you add or change an action or a rule, update src/game/legal.js too. The simulator checks after every action that each listed action is accepted by the reducer and that actions outside the list are refused.
 Golden games: a pure refactor must keep tests/golden.json passing. A change that alters game results or the order of random draws re-records it with npm run golden:update and says so in the commit message.
 Small, focused commits with a clear French message.
@@ -37,7 +38,7 @@ Deck: never sent, only deckCount.
 Médium: the 13 cards only to the Médium, only while the pending is open. Journaliste: only the Journaliste sees the other hands (pending.hands), only while the pending is open. Chance: the 3 cards only to the current player.
 Chef troc: protectedUid / oppPickedUid only to the Chef; everyone else gets pickCount (picks are by index, face down).
 Casino stake: only the staker sees the card; everyone else sees { by, hidden: true }.
-Card uids leak card types (buildDeck numbers them in order): a hidden card must never appear with its real uid anywhere in a view. Log messages must never name a hidden card.
+Card uids are numbered after a seeded shuffle, but a uid still lets you follow a card: a hidden card must never appear with its real uid anywhere in a view. Log messages must never name a hidden card.
 
 Planning documents (read before any large change)
 docs/ROADMAP.md — the ordered list of steps; each step has a prompt in docs/prompts/. Tick a step only when it is finished and tested.

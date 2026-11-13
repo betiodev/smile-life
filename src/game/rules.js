@@ -3,14 +3,20 @@
 // Chaque fonction retourne { ok: boolean, reason?: string }
 // ---------------------------------------------------------------------------
 
+import { hasTag } from '../data/index.js'
+
 const OK = { ok: true }
 const NO = (reason) => ({ ok: false, reason })
 
 export const studyLevel = (p) => p.studies.reduce((s, c) => s + c.levels, 0)
 export const hasJob = (p, key) => p.job?.key === key
-export const isProf = (p) => !!p.job?.isProf
-export const isFonctionnaire = (p) => p.job?.status === 'fonctionnaire'
-export const isInterim = (p) => p.job?.status === 'interim'
+// groupes de cartes : tags des définitions (src/data/base.js)
+export { hasTag }
+export const isProf = (p) => hasTag(p.job, 'prof')
+export const isFonctionnaire = (p) => hasTag(p.job, 'fonctionnaire')
+export const isInterim = (p) => hasTag(p.job, 'interim')
+// Grand Prof : promotion de Prof (carte unique)
+export const isGrandProf = (card) => card?.key === 'grand_prof'
 
 // Intérimaire : poser des Études, un nouveau métier ou un Piston défausse
 // d'office le métier intérimaire (pas besoin de démissionner). → la carte
@@ -19,7 +25,7 @@ export const isInterim = (p) => p.job?.status === 'interim'
 // est obligatoire).
 export function interimReplaced(p, card) {
   if (!isInterim(p)) return null
-  if (card.type === 'study' || (card.type === 'job' && !card.isGrandProf)) return p.job
+  if (card.type === 'study' || (card.type === 'job' && !isGrandProf(card))) return p.job
   if (card.type === 'special' && card.key === 'piston') return p.job
   return null
 }
@@ -106,12 +112,12 @@ export function canPoseSelf(state, pIdx, card) {
       return OK
     }
     case 'job': {
-      if (card.isGrandProf) {
+      if (isGrandProf(card)) {
         if (!isProf(p)) return NO('Promotion réservée : il faut déjà être Prof')
         return OK
       }
       if (p.job && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
-      if ((card.key === 'bandit' || card.key === 'gourou') && anyPolicier(state))
+      if (hasTag(card, 'outlaw') && anyPolicier(state))
         return NO('Un Policier est en poste : ni Bandit ni Gourou')
       if (studyLevel(p) < card.studyReq)
         return NO(`Niveau d’études insuffisant (${studyLevel(p)}/${card.studyReq})`)
@@ -142,8 +148,8 @@ export function canPoseSelf(state, pIdx, card) {
     case 'child':
       return canHaveChild(p)
     case 'acquisition': {
-      if (card.acqType === 'animal') return OK
-      if (card.acqType === 'travel') {
+      if (hasTag(card, 'animal')) return OK
+      if (hasTag(card, 'travel')) {
         if (hasJob(p, 'pilote')) return OK
         if (availableLiasses(p) + p.heritage < card.cost)
           return NO(`Coût : ${card.cost} liasses (vous avez ${availableLiasses(p) + p.heritage})`)
@@ -163,7 +169,7 @@ export function canPoseSelf(state, pIdx, card) {
         return OK
       }
       // grand prix
-      if (!p.job?.trophy) return NO('Réservé aux métiers 🏆 : Écrivain, Chercheur, Journaliste')
+      if (!hasTag(p.job, 'trophy')) return NO('Réservé aux métiers 🏆 : Écrivain, Chercheur, Journaliste')
       if (p.distinctions.some((d) => d.card.key === 'grandprix' && d.active))
         return NO('Un seul Grand Prix par métier exercé')
       return OK
@@ -204,9 +210,9 @@ export function canPlaySpecial(state, pIdx, card) {
     }
     case 'piston': {
       if (p.job && !isInterim(p)) return NO('Un seul métier à la fois (démissionnez d’abord)')
-      const jobs = p.hand.filter((c) => c.type === 'job' && !c.isGrandProf && c.uid !== card.uid)
+      const jobs = p.hand.filter((c) => c.type === 'job' && !isGrandProf(c) && c.uid !== card.uid)
       if (jobs.length === 0) return NO('Aucun métier en main (Grand Prof exclu)')
-      if (!jobs.some((j) => !((j.key === 'bandit' || j.key === 'gourou') && anyPolicier(state))))
+      if (!jobs.some((j) => !(hasTag(j, 'outlaw') && anyPolicier(state))))
         return NO('Un Policier est en poste : ni Bandit ni Gourou')
       return OK
     }
@@ -352,13 +358,13 @@ export function flirtStealVictims(state, pIdx, card) {
 
 // Cette acquisition se paie-t-elle avec des salaires ?
 export function needsPayment(p, card) {
-  if (card.type !== 'acquisition' || card.acqType === 'animal') return false
-  if (card.acqType === 'travel' && hasJob(p, 'pilote')) return false
+  if (card.type !== 'acquisition' || hasTag(card, 'animal')) return false
+  if (hasTag(card, 'travel') && hasJob(p, 'pilote')) return false
   return true
 }
 
-export const purchaseCost = (p, card) => (card.acqType === 'house' ? houseCost(p, card) : card.cost)
-export const architectFree = (p, card) => card.acqType === 'house' && hasJob(p, 'architecte') && !p.architectFreeUsed
+export const purchaseCost = (p, card) => (hasTag(card, 'house') ? houseCost(p, card) : card.cost)
+export const architectFree = (p, card) => hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed
 
 // Paiement valide le moins cher : moins de liasses dépensées, puis moins de
 // salaires investis. → { salaryUids, useHeritage, total } ou null

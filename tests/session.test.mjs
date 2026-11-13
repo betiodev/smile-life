@@ -2,7 +2,7 @@
 // signature des actions, vues, délais avec action par défaut, écran de passage.
 // Horloge factice : rien n'attend vraiment 30 s.
 import { gameReducer } from '../src/game/reducer.js'
-import { buildDeck } from '../src/data/cards.js'
+import { buildDeck } from '../src/data/index.js'
 import { createDriver, WAIT_MS } from '../src/session/driver.js'
 import { createHotseat } from '../src/session/hotseat.js'
 

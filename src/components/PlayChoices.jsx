@@ -8,7 +8,7 @@ import Card from './Card'
 import { Ghost, cardRect, prefersReducedMotion } from './flights'
 import { TOAST_MS } from './usePlayIntent'
 import { playerColor } from './theme'
-import { validatePayment, malusHasTarget } from '../game/rules'
+import { validatePayment, malusHasTarget, hasTag } from '../game/rules'
 
 // carte en attente : arrive en volant depuis l'endroit où on l'a lâchée
 export function Dock({ card, from, width = 110 }) {
@@ -72,10 +72,10 @@ export function PaymentSheet({ intent, player, patch, onCancel, onConfirm }) {
       salaryUids: pay.salaryUids.includes(uid) ? pay.salaryUids.filter((u) => u !== uid) : [...pay.salaryUids, uid],
     },
   }))
-  const canArchitect = intent.card.acqType === 'house' && player.job?.key === 'architecte' && !player.architectFreeUsed
+  const canArchitect = hasTag(intent.card, 'house') && player.job?.key === 'architecte' && !player.architectFreeUsed
   return (
     <Sheet intent={intent} title={`Payer ${intent.card.name}`}>
-      <p className="text-sm opacity-80">Prix : <b>{cost} liasses</b>{player.marriage && intent.card.acqType === 'house' ? ' (prix marié)' : ''}</p>
+      <p className="text-sm opacity-80">Prix : <b>{cost} liasses</b>{player.marriage && hasTag(intent.card, 'house') ? ' (prix marié)' : ''}</p>
       <div className="flex flex-wrap gap-1.5">
         {canArchitect && (
           <button type="button" className={chip(free)}

@@ -18,7 +18,7 @@
 import { whoMustAct } from './turn.js'
 import {
   canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery,
-  isPlayableFromDiscard, cheapestPayment, purchaseCost, architectFree, hasJob,
+  isPlayableFromDiscard, cheapestPayment, purchaseCost, architectFree, hasJob, hasTag, isGrandProf,
 } from './rules.js'
 
 const range = (n) => Array.from({ length: n }, (_, i) => i)
@@ -58,7 +58,7 @@ function pendingActions(state, actor) {
       if (p.job) return []
       const policier = state.players.some((q) => hasJob(q, 'policier'))
       return p.hand
-        .filter((c) => c.type === 'job' && !c.isGrandProf && !(policier && (c.key === 'bandit' || c.key === 'gourou')))
+        .filter((c) => c.type === 'job' && !isGrandProf(c) && !(policier && hasTag(c, 'outlaw')))
         .map((c) => ({ type: 'PISTON_PICK', uid: c.uid }))
     }
     case 'troc':

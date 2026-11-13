@@ -2,7 +2,7 @@
 // avec les vérifications d'intégrité (tests/invariants.mjs) après chaque action
 import { playGame, stats } from './sim-lib.mjs'
 import { computeScore } from '../src/game/scoring.js'
-import { buildDeck } from '../src/data/cards.js'
+import { buildDeck } from '../src/data/index.js'
 
 const deck = buildDeck()
 console.log('Total cartes :', deck.length)

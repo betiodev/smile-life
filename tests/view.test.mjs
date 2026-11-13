@@ -3,7 +3,7 @@
 // des 40 parties simulées, pour chaque joueur et pour un spectateur.
 import { gameReducer } from '../src/game/reducer.js'
 import { viewFor } from '../src/game/view.js'
-import { buildDeck } from '../src/data/cards.js'
+import { buildDeck } from '../src/data/index.js'
 import { step, newGame } from './sim-lib.mjs'
 
 let passed = 0
@@ -70,10 +70,26 @@ function gameAt(hand = null) {
   return s
 }
 // sort des cartes de la pioche et des mains (pour les placer ailleurs)
+// Les uid de la partie sont tirés au hasard : on retire l'exemplaire de même
+// sorte (def), et la carte de la partie qui porterait l'uid de la carte de test
+// reprend l'uid libéré (chaque uid reste unique).
 function take(s, cards) {
-  const uids = new Set(cards.map((c) => c.uid))
-  s.deck = s.deck.filter((c) => !uids.has(c.uid))
-  for (const q of s.players) q.hand = q.hand.filter((c) => !uids.has(c.uid))
+  const zones = () => [s.deck, ...s.players.map((q) => q.hand)]
+  const locate = (pred) => {
+    for (const z of zones()) {
+      const i = z.findIndex(pred)
+      if (i >= 0) return [z, i]
+    }
+    return null
+  }
+  for (const c of cards) {
+    const found = locate((x) => x.uid === c.uid && x.def === c.def) ?? locate((x) => x.def === c.def)
+    if (!found) throw new Error(`take : plus d'exemplaire de ${c.def}`)
+    const [zone, i] = found
+    const [removed] = zone.splice(i, 1)
+    const clash = zones().flat().find((x) => x.uid === c.uid)
+    if (clash) clash.uid = removed.uid
+  }
   return cards.map((c) => ({ ...c }))
 }
 const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })

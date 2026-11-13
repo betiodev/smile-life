@@ -2,10 +2,10 @@
 // Smile Life — reducer principal (machine à états du jeu)
 // SETUP → TURN_TRANSITION → DRAW_PHASE → PLAY_PHASE → CHECK → ... → GAME_OVER
 // ---------------------------------------------------------------------------
-import { buildDeck, shuffle } from '../data/cards.js'
+import { buildDeck, shuffle } from '../data/index.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard, canTakeRiverNow,
-  canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost,
+  canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost, hasTag, isGrandProf,
   availableLiasses, validatePayment, canStopAdultery, birthdayDonors, lowestUnusedSalary,
 } from './rules.js'
 import { canAct } from './turn.js'
@@ -242,7 +242,7 @@ function poseSelf(s, pIdx, card) {
       break
 
     case 'job': {
-      if (card.isGrandProf) {
+      if (isGrandProf(card)) {
         // promotion : le Prof est défaussé
         toDiscard(s, p.job, pIdx)
         p.job = card
@@ -255,7 +255,7 @@ function poseSelf(s, pIdx, card) {
       // Policier : purge les Bandits et Gourous déjà posés
       if (card.key === 'policier') {
         s.players.forEach((q, qi) => {
-          if (qi !== pIdx && (hasJob(q, 'bandit') || hasJob(q, 'gourou'))) {
+          if (qi !== pIdx && hasTag(q.job, 'outlaw')) {
             log(s, `👮 Le Policier fait défausser le ${q.job.name} de ${q.name}`, 'malus')
             loseJob(s, qi)
           }
@@ -302,12 +302,12 @@ function poseSelf(s, pIdx, card) {
       break
 
     case 'acquisition': {
-      if (card.acqType === 'animal') {
+      if (hasTag(card, 'animal')) {
         p.acquisitions.push(card)
         log(s, `${p.name} adopte ${card.name} ${card.emoji || ''}`)
         break
       }
-      if (card.acqType === 'travel' && hasJob(p, 'pilote')) {
+      if (hasTag(card, 'travel') && hasJob(p, 'pilote')) {
         p.acquisitions.push(card)
         log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (Pilote)`)
         break
@@ -542,7 +542,7 @@ function consumePlay(s, wasForced) {
 // (tests ; réutilisée plus tard par l'extension Fantastique).
 // seed : graine du hasard (nombre ou texte) ; tirée au hasard si absente.
 // Même graine + mêmes actions → même partie.
-export function newGameState(names, colors, { river = false, seed } = {}) {
+export function newGameState(names, colors, { river = false, seed, extensions = [] } = {}) {
   {
     const s0 = seedFrom(seed ?? randomSeed())
     const s = {
@@ -550,6 +550,7 @@ export function newGameState(names, colors, { river = false, seed } = {}) {
       rng: s0,            // état du générateur (src/game/rng.js), jamais dans une vue
       nextLogId: 0,       // dernier id utilisé dans le journal
       status: 'playing',  // 'playing' | 'over' (écrans, passage du téléphone : src/session/)
+      extensions: [...extensions], // extensions en jeu (le jeu de base est toujours là)
       players: names.map((n, i) => makePlayer(n, colors?.[i] ?? null)),
       deck: [],
       discard: [],
@@ -569,7 +570,8 @@ export function newGameState(names, colors, { river = false, seed } = {}) {
       log: [],
       turnCount: 1,       // n° du tour (augmente à chaque changement de tour)
     }
-    s.deck = shuffle(buildDeck(), rngOf(s))
+    // uid numérotés au hasard (un uid ne révèle pas la carte), puis paquet mélangé
+    s.deck = shuffle(buildDeck(s.extensions, rngOf(s)), rngOf(s))
     for (const p of s.players) for (let i = 0; i < 5; i++) p.hand.push(s.deck.pop())
     if (s.riverEnabled) for (let i = 0; i < 3; i++) s.river.push(s.deck.pop())
     log(s, `🎉 La partie commence ! ${s.players.map((p) => p.name).join(', ')}`)
@@ -578,7 +580,7 @@ export function newGameState(names, colors, { river = false, seed } = {}) {
 }
 
 export function gameReducer(prev, action) {
-  if (action.type === 'START_GAME') return newGameState(action.names, action.colors, { seed: action.seed })
+  if (action.type === 'START_GAME') return newGameState(action.names, action.colors, { seed: action.seed, extensions: action.extensions })
 
   // l'auteur de l'action doit être un joueur autorisé à agir maintenant
   if (!prev?.players || prev.status !== 'playing' || !canAct(prev, action.by)) return prev
@@ -753,8 +755,8 @@ export function gameReducer(prev, action) {
     case 'PURCHASE_CONFIRM': {
       if (s.pending?.type !== 'purchase') return prev
       const card = s.pending.card
-      const isFree = card.acqType === 'house' && hasJob(p, 'architecte') && !p.architectFreeUsed && action.useArchitect
-      const cost = card.acqType === 'house' ? houseCost(p, card) : card.cost
+      const isFree = hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed && action.useArchitect
+      const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
       if (!isFree) {
         const chosen = []
         for (const su of action.salaryUids || []) {
@@ -823,8 +825,8 @@ export function gameReducer(prev, action) {
     case 'PISTON_PICK': {
       if (s.pending?.type !== 'piston') return prev
       const card = p.hand.find((c) => c.uid === action.uid)
-      if (!card || card.type !== 'job' || card.isGrandProf) return prev
-      if ((card.key === 'bandit' || card.key === 'gourou') && s.players.some((q) => hasJob(q, 'policier'))) return prev
+      if (!card || card.type !== 'job' || isGrandProf(card)) return prev
+      if (hasTag(card, 'outlaw') && s.players.some((q) => hasJob(q, 'policier'))) return prev
       if (p.job) return prev
       removeFromHand(p, card.uid)
       p.job = card
@@ -838,7 +840,7 @@ export function gameReducer(prev, action) {
       // Policier pistonné : purge les Bandits et Gourous
       if (card.key === 'policier') {
         s.players.forEach((q, qi) => {
-          if (qi !== s.current && (hasJob(q, 'bandit') || hasJob(q, 'gourou'))) {
+          if (qi !== s.current && hasTag(q.job, 'outlaw')) {
             log(s, `👮 Le Policier fait défausser le ${q.job.name} de ${q.name}`, 'malus')
             loseJob(s, qi)
           }

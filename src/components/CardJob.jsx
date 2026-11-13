@@ -3,6 +3,8 @@
 // couronne de laurier (études requises) et pile de billets (salaire max)
 // ---------------------------------------------------------------------------
 import CardIcon from './CardIcons'
+import { hasTag } from '../data'
+import { isGrandProf } from '../game/rules'
 
 const GREEN = '#3f7d34'
 const GOLD_DARK = '#6b4e0f'
@@ -19,7 +21,7 @@ for (const side of [-1, 1]) {
 
 export function LaurelBadge({ card }) {
   return (
-    <div className="sl-laurel" aria-label={card.isGrandProf ? 'Promotion réservée aux profs' : `${card.studyReq} niveau(x) d’études requis`}>
+    <div className="sl-laurel" aria-label={isGrandProf(card) ? 'Promotion réservée aux profs' : `${card.studyReq} niveau(x) d’études requis`}>
       <svg viewBox="-50 -50 100 100" aria-hidden="true">
         <defs>
           <linearGradient id="sl-gold" x1="0" y1="-1" x2="0" y2="1">
@@ -34,7 +36,7 @@ export function LaurelBadge({ card }) {
         ))}
         <circle r="30" fill="#fdf6e3" stroke={GOLD_DARK} strokeWidth="2" />
       </svg>
-      {card.isGrandProf
+      {isGrandProf(card)
         ? <CardIcon name="cap" className="sl-laurel__icon" />
         : <span className="sl-laurel__num">{card.studyReq}</span>}
     </div>
@@ -71,11 +73,11 @@ const PERK = { app: 'Avantage permanent', api: 'Avantage instantané' }
 export function JobText({ card }) {
   return (
     <div className="sl-job">
-      {(card.status || card.perk || card.trophy) && (
+      {(card.status || card.perk || hasTag(card, 'trophy')) && (
         <p className="sl-tags">
           {card.status && <span>{STATUS[card.status]}</span>}
           {card.perk && <span>{PERK[card.perk]}</span>}
-          {card.trophy && <span>Grand Prix</span>}
+          {hasTag(card, 'trophy') && <span>Grand Prix</span>}
         </p>
       )}
       <div className="sl-job__row">

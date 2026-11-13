@@ -7,6 +7,8 @@
 // metier_frame.png) : la partie opaque va de x 31→999 et y 49→1466 (badge
 // compris). Les positions CSS (index.css, .sl-card) sont en % de cette boîte.
 
+import { hasTag } from '../data'
+
 // catégorie de cadre : public/frames/<cat>_frame.png
 export function frameCategory(card) {
   switch (card.type) {
@@ -20,7 +22,7 @@ export function frameCategory(card) {
     case 'malus': return 'malus'
     case 'special': return 'speciale'
     case 'distinction': return 'distinction'
-    case 'acquisition': return card.acqType === 'animal' ? 'animal' : 'acquisition'
+    case 'acquisition': return hasTag(card, 'animal') ? 'animal' : 'acquisition'
     default: return 'speciale'
   }
 }
@@ -84,7 +86,7 @@ export const categoryLabel = (card) =>
 
 // clé d'icône pour le visuel de remplacement
 export function iconKey(card) {
-  if (card.type === 'acquisition') return card.acqType === 'animal' ? 'paw' : card.acqType === 'travel' ? 'plane' : 'house'
+  if (card.type === 'acquisition') return hasTag(card, 'animal') ? 'paw' : hasTag(card, 'travel') ? 'plane' : 'house'
   return {
     study: 'cap', job: 'briefcase', salary: 'bill', flirt: 'heart', marriage: 'rings',
     adultery: 'mask', child: 'baby', malus: 'bolt', special: 'star', distinction: 'medal',

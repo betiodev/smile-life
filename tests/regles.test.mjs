@@ -10,7 +10,7 @@ import { computeScore } from '../src/game/scoring.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
 import { viewFor } from '../src/game/view.js'
-import { buildDeck } from '../src/data/cards.js'
+import { buildDeck } from '../src/data/index.js'
 
 const deck = buildDeck()
 const find = (pred) => deck.find(pred)
@@ -193,7 +193,7 @@ function check(label, cond) {
   const gp = find((c) => c.key === 'grandprix')
   const legion = find((c) => c.key === 'legion')
   const ecrivain = JOBS_IN_DECK.find((c) => c.key === 'ecrivain')
-  const autre = JOBS_IN_DECK.find((c) => c.trophy && c.key !== 'ecrivain')
+  const autre = JOBS_IN_DECK.find((c) => c.tags.includes('trophy') && c.key !== 'ecrivain')
   s.players[1].job = ecrivain
   s.players[1].distinctions = [{ card: legion, active: true }, { card: gp, active: true }]
   s.players[0].hand[0] = lic
@@ -711,7 +711,7 @@ function check(label, cond) {
 // Piston : jamais pour la promotion Grand Prof
 {
   const piston = find((c) => c.key === 'piston')
-  const grandProf = find((c) => c.isGrandProf)
+  const grandProf = find((c) => c.key === 'grand_prof')
   const medecin = find((c) => c.key === 'medecin')
   const s = freshState()
   s.phase = 'play'

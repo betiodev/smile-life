@@ -5,9 +5,9 @@
 // information cachée pour ce joueur. viewer = index du joueur, ou null pour un
 // spectateur (aucune information privée).
 //
-// Les uid des cartes trahissent leur type (buildDeck les numérote dans
-// l'ordre : c1–c25 = Études, puis métiers, salaires…) : une carte cachée ne
-// doit JAMAIS apparaître avec son uid, ni ailleurs dans la vue.
+// Les uid sont numérotés au hasard (buildDeck) et ne révèlent plus le type,
+// mais ils permettent de suivre une carte d'une zone à l'autre : une carte
+// cachée ne doit JAMAIS apparaître avec son uid, ni ailleurs dans la vue.
 // ---------------------------------------------------------------------------
 import { whoMustAct } from './turn.js'
 

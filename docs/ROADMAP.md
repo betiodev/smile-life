@@ -140,7 +140,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play a 3-player game on one phone. The "pass the phone" screen still appears between turns; the Anniversaire and Chercheur countdowns still work.
   - Prompt: [docs/prompts/03-driver.md](prompts/03-driver.md)
 
-- [ ] **Step 04 — Card definitions with ids, extension tags and child gender**
+- [x] **Step 04 — Card definitions with ids, extension tags and child gender**
   - Goal: Turn card data into definitions that extensions can add to, and stop rules from naming cards where a group is meant.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/04-card-definitions.md and follow it.`

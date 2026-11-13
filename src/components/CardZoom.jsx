@@ -8,6 +8,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Card from './Card'
 import SwipeCard from './SwipeCard'
 import { categoryLabel } from './cardArt'
+import { hasTag } from '../data'
+import { isGrandProf } from '../game/rules'
 import { cardRect, prefersReducedMotion } from './flights'
 
 const STATUS = { fonctionnaire: 'Fonctionnaire', interim: 'Intérimaire' }
@@ -21,7 +23,7 @@ function details(card) {
       break
     case 'job':
       if (card.flavor) out.push(card.flavor)
-      out.push(card.isGrandProf ? 'Promotion réservée aux Profs' : `Études requises : ${card.studyReq}`)
+      out.push(isGrandProf(card) ? 'Promotion réservée aux Profs' : `Études requises : ${card.studyReq}`)
       out.push(`Salaire maximum : niveau ${card.salaryLevel}`)
       if (STATUS[card.status]) out.push(STATUS[card.status])
       break
@@ -42,7 +44,7 @@ function details(card) {
       out.push(card.desc)
       break
     case 'acquisition':
-      out.push(card.cost > 0 ? `Coût : ${card.cost} liasses${card.acqType === 'house' ? ' (÷2 si marié)' : ''}` : 'Gratuit')
+      out.push(card.cost > 0 ? `Coût : ${card.cost} liasses${hasTag(card, 'house') ? ' (÷2 si marié)' : ''}` : 'Gratuit')
       if (card.key === 'licorne') out.push('Vaut 6 smiles avec Arc-en-ciel et Étoile filante')
       break
     default:

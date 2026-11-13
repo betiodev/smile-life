@@ -14,7 +14,7 @@ import { legalActions, actionKey } from '../src/game/legal.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { viewFor } from '../src/game/view.js'
 import { makeRng } from '../src/game/rng.js'
-import { buildDeck } from '../src/data/cards.js'
+import { buildDeck } from '../src/data/index.js'
 
 const DECK_SIZE = buildDeck().length
 const random = makeRng('invariants')

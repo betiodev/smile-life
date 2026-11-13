@@ -8,6 +8,7 @@ import CardBack from './CardBack'
 import CardIcon from './CardIcons'
 import { frameCategory, artKey, TINTS, categoryLabel, iconKey } from './cardArt'
 import { LaurelBadge, JobText } from './CardJob'
+import { hasTag } from '../data'
 
 const BASE = import.meta.env.BASE_URL
 const frameUrl = (cat) => `${BASE}frames/${cat}_frame.webp`
@@ -94,7 +95,7 @@ function Effect({ card }) {
       return (
         <>
           <p className="sl-strong">
-            {card.cost > 0 ? `Coût : ${card.cost} liasses${card.acqType === 'house' ? ' (÷2 si marié)' : ''}` : 'Gratuit'}
+            {card.cost > 0 ? `Coût : ${card.cost} liasses${hasTag(card, 'house') ? ' (÷2 si marié)' : ''}` : 'Gratuit'}
           </p>
           {card.key === 'licorne' && <p>Vaut 6 smiles avec Arc-en-ciel et Étoile filante</p>}
         </>

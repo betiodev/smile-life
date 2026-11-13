@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
-import { canPlayMalus, hasJob, houseCost, validatePayment } from '../game/rules'
+import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf } from '../game/rules'
 import { legalActions } from '../game/legal'
 
 function Modal({ title, children, wide }) {
@@ -37,8 +37,8 @@ function PurchaseModal({ state, dispatch }) {
   const card = state.pending.card
   const [chosen, setChosen] = useState([])
   const [useHeritage, setUseHeritage] = useState(false)
-  const cost = card.acqType === 'house' ? houseCost(p, card) : card.cost
-  const architectFree = card.acqType === 'house' && hasJob(p, 'architecte') && !p.architectFreeUsed
+  const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
+  const architectFree = hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed
 
   const available = p.salaries.filter((s) => !s.invested)
   const levels = chosen.map((u) => available.find((s) => s.card.uid === u).card.level)
@@ -48,7 +48,7 @@ function PurchaseModal({ state, dispatch }) {
   const toggle = (u) => setChosen(chosen.includes(u) ? chosen.filter((x) => x !== u) : [...chosen, u])
 
   return (
-    <Modal title={`Acheter ${card.name} — coût ${cost} liasses${p.marriage && card.acqType === 'house' ? ' (prix marié ÷2)' : ''}`} wide>
+    <Modal title={`Acheter ${card.name} — coût ${cost} liasses${p.marriage && hasTag(card, 'house') ? ' (prix marié ÷2)' : ''}`} wide>
       <div className="flex gap-3 flex-wrap items-start">
         <Card card={card} />
         <div className="flex-1 min-w-52">
@@ -128,12 +128,12 @@ function DiscardPickModal({ state, dispatch }) {
 function PistonModal({ state, dispatch }) {
   const p = state.players[state.current]
   const policier = state.players.some((q) => hasJob(q, 'policier'))
-  const jobs = p.hand.filter((c) => c.type === 'job' && !c.isGrandProf)
+  const jobs = p.hand.filter((c) => c.type === 'job' && !isGrandProf(c))
   return (
     <Modal title="🤝 Piston — posez le métier de votre choix, sans condition d’études" wide>
       <div className="flex gap-2 flex-wrap justify-center">
         {jobs.map((c) => {
-          const blocked = (c.key === 'bandit' || c.key === 'gourou') && policier
+          const blocked = hasTag(c, 'outlaw') && policier
           return (
             <Card
               key={c.uid}
