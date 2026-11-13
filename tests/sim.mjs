@@ -1,4 +1,5 @@
-// Simulation headless : joue des parties complètes au hasard via le reducer
+// Simulation headless : joue des parties complètes au hasard via le reducer,
+// avec les vérifications d'intégrité (tests/invariants.mjs) après chaque action
 import { playGame, stats } from './sim-lib.mjs'
 import { computeScore } from '../src/game/scoring.js'
 import { buildDeck } from '../src/data/cards.js'
@@ -17,7 +18,7 @@ const games = only ? [{ g: Number(process.env.GAME ?? 0), seed: Number(process.e
 
 let totalTurns = 0
 for (const { g, seed } of games) {
-  const { state: s, steps: guard } = playGame(g, seed)
+  const { state: s, steps: guard } = playGame(g, seed, { invariants: true })
   const n = s.players.length
   const river = s.riverEnabled
   totalTurns += guard

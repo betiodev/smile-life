@@ -8,14 +8,15 @@ npm run dev — local server · npm test — rule tests + 40 simulated games + 5
 Deploys to GitHub Pages automatically on push to main.
 Where things are
 src/data/cards.js — all 200 cards (source of truth for card data)
-src/game/rules.js — placement/validation rules · reducer.js — game state machine · scoring.js — smiles count · view.js — viewFor (what each player sees) · rng.js — seeded randomness
+src/game/rules.js — placement/validation rules · reducer.js — game state machine · scoring.js — smiles count · view.js — viewFor (what each player sees) · rng.js — seeded randomness · legal.js — legalActions(state, actor): every action a player may send now (works on a view too)
 src/components/ — screens and card rendering (Card.jsx)
-tests/ — regles.test.mjs (rule cases), sim.mjs (full random games, step logic in sim-lib.mjs), view.test.mjs (visibility + leak check), rng.test.mjs (seeded randomness, replay), golden.test.mjs + golden.json (reference games)
+tests/ — regles.test.mjs (rule cases), sim.mjs (full random games picked from legalActions, step logic in sim-lib.mjs, integrity checks after every action in invariants.mjs), view.test.mjs (visibility + leak check), rng.test.mjs (seeded randomness, replay), golden.test.mjs + golden.json (reference games)
 Rules for working on this repo
 All player-facing text is in French. Code comments may be French.
 Keep game logic out of components: rules go in src/game/, display in src/components/.
 Run npm test before every commit. When fixing a rule, add a test case in tests/regles.test.mjs.
 Randomness: never Math.random() in src/game/ (a test fails); draw from state.rng via src/game/rng.js. START_GAME takes an optional seed; same seed + same actions = same game. rng and seed never appear in a view. Simulated games print their seed on failure (SEED=… GAME=… node tests/sim.mjs replays one).
+Legal actions: when you add or change an action or a rule, update src/game/legal.js too. The simulator checks after every action that each listed action is accepted by the reducer and that actions outside the list are refused.
 Golden games: a pure refactor must keep tests/golden.json passing. A change that alters game results or the order of random draws re-records it with npm run golden:update and says so in the commit message.
 Small, focused commits with a clear French message.
 Do not use official Blackrock Games artwork or logos — all visuals must be original.
@@ -23,6 +24,7 @@ Verified rules (from the physical game — do not "correct" these)
 Flirts are never flipped; only the top/most recent flirt can be stolen.
 Piston cannot be used for the Grand Prof promotion.
 Licorne doubles only with BOTH Arc-en-ciel AND Étoile filante.
+A salary taken from the discard pile (must be played immediately) may instead be bet at the Casino.
 Purchases: each salary invested must be necessary to reach the cost (no over-investing to dodge Impôt); overpaying for lack of change is allowed.
 Losing the Chercheur job (Licenciement, resignation): the player discards 1 extra card from their hand and THEY choose it, even during another player's turn (pending chercheur-discard). Empty hand → no extra discard.
 Ce que chaque joueur voit (src/game/view.js — verified, do not change)

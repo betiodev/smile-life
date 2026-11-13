@@ -8,7 +8,7 @@ import PlayedStacks, { CARD_RATIO } from './PlayedStacks'
 import useElementSize from './useElementSize'
 import { playerColor, enterLandscapeFullscreen } from './theme'
 import { computeScore } from '../game/scoring'
-import { canTakeRiverNow, isInterim, canStopAdultery } from '../game/rules'
+import { isInterim } from '../game/rules'
 
 const Btn = ({ onClick, disabled, children, tone = 'light', title }) => {
   const tones = {
@@ -79,7 +79,7 @@ function Piles({ game }) {
         <div className="flex flex-col items-center gap-1">
           <div className="flex gap-1 items-start">
             {state.river.map((c, i) => {
-              const playable = canTakeRiverNow(state, state.current, c)
+              const playable = game.legal.some((a) => a.type === 'TAKE_RIVER' && a.index === i && a.playNow)
               return (
                 <div key={c.uid} className="flex flex-col items-center gap-0.5">
                   <Card card={c} size="xs" style={{ width: Math.min(44, (width - 20) / 3) }} />
@@ -243,7 +243,7 @@ function Actions({ game }) {
         </>
       )}
 
-      {canStopAdultery(state, game.viewer).ok && (
+      {game.legal.some((a) => a.type === 'STOP_ADULTERY') && (
         <Btn tone="ghost" onClick={() => act({ type: 'STOP_ADULTERY' })} title="Défausse la carte Adultère, les flirts sont conservés">
           😇 Arrêter l’adultère
         </Btn>

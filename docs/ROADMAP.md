@@ -124,7 +124,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play one full 2-player game on your game link. Nothing should look or feel different.
   - Prompt: [docs/prompts/01-seeded-rng-goldens.md](prompts/01-seeded-rng-goldens.md)
 
-- [ ] **Step 02 — One list of legal actions, and invariant checks**
+- [x] **Step 02 — One list of legal actions, and invariant checks**
   - Goal: Give the engine one function that lists every legal action, and make the simulator check the game's integrity after every action.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/02-legal-actions-invariants.md and follow it.`
