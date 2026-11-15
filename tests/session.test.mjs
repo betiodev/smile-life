@@ -4,6 +4,9 @@
 import { gameReducer } from '../src/game/reducer.js'
 import { buildDeck } from '../src/data/index.js'
 import { moneyOf } from '../src/game/state.js'
+import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
+import { startFlow } from '../src/game/flows/index.js'
+import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn } from '../src/game/state.js'
 import { setJob, setMoney } from '../src/game/primitives.js'
 import { createDriver, WAIT_MS } from '../src/session/driver.js'
 import { createHotseat } from '../src/session/hotseat.js'
@@ -33,9 +36,9 @@ const clock = () => {
   check('Le moteur ne connaît pas d’écran : seulement status', !('screen' in d.fullState()) && d.fullState().status === 'playing')
   check('Ben ne peut pas piocher pendant le tour d’Ana', d.dispatch(1, { type: 'DRAW_DECK' }) === false)
   check('Signer au nom d’un autre est impossible : `by` vient du siège',
-    d.dispatch(1, { type: 'DRAW_DECK', by: 0 }) === false && d.fullState().phase === 'draw')
+    d.dispatch(1, { type: 'DRAW_DECK', by: 0 }) === false && phaseOf(d.fullState()) === 'draw')
   check('Siège inconnu refusé', d.dispatch(7, { type: 'DRAW_DECK' }) === false && d.dispatch(null, { type: 'DRAW_DECK' }) === false)
-  check('Ana pioche', d.dispatch(0, { type: 'DRAW_DECK' }) === true && d.fullState().phase === 'play')
+  check('Ana pioche', d.dispatch(0, { type: 'DRAW_DECK' }) === true && phaseOf(d.fullState()) === 'play')
   check('L’action enregistrée est signée par le siège', d.history().at(-1).by === 0 && d.history().length === 1)
   const v1 = d.view(1)
   check('Vue de Ben : sa main, pas celle d’Ana', v1.players[1].hand.every((c) => !c.hidden) && v1.players[0].hand.every((c) => c.hidden))
@@ -56,7 +59,7 @@ const anniv = find((c) => c.key === 'anniversaire')
 const lv = (n) => find((c) => c.type === 'salary' && c.level === n)
 function birthdayState() {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 3 })
-  s.phase = 'play'
+  setStep(s, 'play')
   s.players[0].hand[0] = anniv
   setMoney(s, s.players[1], [lv(3), lv(1)])
   setMoney(s, s.players[2], [lv(2)])
@@ -112,7 +115,7 @@ const chercheur = find((c) => c.key === 'chercheur')
 const licenciement = find((c) => c.key === 'licenciement')
 function chercheurState() {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 5 })
-  s.phase = 'play'
+  setStep(s, 'play')
   setJob(s, s.players[1], chercheur)
   s.players[1].hand.push(s.deck.pop())
   s.players[0].hand[0] = licenciement
@@ -168,7 +171,7 @@ function chercheurState() {
   const now = clock()
   const s = chercheurState()
   // Ana a 2 jeux (Arc-en-ciel) : son tour continue après la défausse du Chercheur
-  s.playsRemaining = 2
+  setPlays(s, 2)
   const h = createHotseat({ seats: seats3, state: s, now, timers: false })
   h.ready()
   h.dispatch({ type: 'PLAY_MALUS', uid: licenciement.uid, target: 1 })

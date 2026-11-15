@@ -73,3 +73,33 @@ export const boardCards = (p) => [
   ...p.flirts, ...marriages(p), ...adulteries(p), ...p.children,
   ...p.acquisitions, ...p.distinctions, ...p.specials, ...malusOf(p),
 ]
+
+// --- pile des flux (ARCHITECTURE.md §6.3, src/game/flows/) ----------------
+// state.stack = [cadre du tour, …cadres posés dessus]. Un cadre est une simple
+// donnée : { flow: 'turn' | 'purchase', step, data }. Le cadre du dessus
+// décide qui agit et ce qui est permis. Le tour est toujours tout en bas
+// (pile vide : partie finie). Le joueur du tour est state.current.
+export const topFrame = (s) => s.stack?.[s.stack.length - 1] ?? null
+export const turnFrame = (s) => (s.stack?.[0]?.flow === 'turn' ? s.stack[0] : null)
+// étape du tour : 'draw' (piocher, ou démission / divorce à la place) | 'play'
+export const phaseOf = (s) => turnFrame(s)?.step ?? null
+// jeux restant ce tour (1 ; Arc-en-ciel : jusqu'à 3 de plus)
+export const playsLeft = (s) => turnFrame(s)?.data.plays ?? 0
+// Arc-en-ciel joué ce tour : « jusqu'à 3 cartes », on peut s'arrêter
+export const isRainbow = (s) => !!turnFrame(s)?.data.rainbow
+// une carte a-t-elle déjà été jouée ce tour ?
+export const cardPlayedThisTurn = (s) => !!turnFrame(s)?.data.cardPlayed
+// carte forcée (prise dans la défausse / la rivière, Étoile filante,
+// Astronaute) : elle seule peut être jouée
+export const forcedOf = (s) => turnFrame(s)?.data.forced?.card ?? null
+// la carte forcée est-elle le jeu du tour ? (prise dans la défausse ou la
+// rivière : oui, elle doit être jouée ; Étoile filante, Astronaute : non)
+export const forcedConsumesPlay = (s) => !!turnFrame(s)?.data.forced?.consumesPlay
+// choix en cours au-dessus du tour : un flux (achat) sous la forme
+// { type: flow, …data }, sinon l'ancien state.pending (choix pas encore
+// portés en flux, étape 09), sinon null
+export function pendingOf(s) {
+  const top = topFrame(s)
+  if (top && top.flow !== 'turn') return { type: top.flow, ...top.data }
+  return s.pending ?? null
+}

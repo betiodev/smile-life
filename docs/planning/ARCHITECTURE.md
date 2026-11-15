@@ -311,6 +311,8 @@ end     refill to handSize, tick timers, fire turnEnd / roundEnd
 next    nextPlayer, consuming skipped turns; extraTurns keeps the same player
 ```
 
+As built in step 08: `start`, `end` and `next` wait for nobody, so they are functions (`beginTurn`, `endTurn`) rather than steps stored in the frame. The frame's waiting steps are `draw` and `play`. In the base game the "instead of drawing" options (démission, divorce) are offered in the same wait as drawing. The forced card is turn data (`data.forced`), and a purchase is a frame of its own.
+
 "Rejouez" exists in two strengths and the engine supports both: one more *play* in the same turn (`plays += 1`, as Arc-en-ciel does) and one more whole *turn* (`extraTurns += 1`). Which one each card means is a rules question per card.
 
 ### 6.5 One list of legal actions

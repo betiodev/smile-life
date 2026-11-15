@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // Smile Life — la liste de toutes les actions permises
 // legalActions(state, actor) renvoie chaque action que le joueur `actor` peut
-// envoyer maintenant, paramètres remplis (uid de carte, cible, index…) et
+// envoyer maintenant (le cadre du dessus de la pile des flux les liste :
+// src/game/flows/ ; les choix encore dans pending, ici), paramètres remplis (uid de carte, cible, index…) et
 // signée (`by: actor`). Une seule source pour le simulateur, les indices de
 // l'interface et, plus tard, les bots.
 //
@@ -16,22 +17,11 @@
 //   défaut quand le délai expire) fait partie de la liste.
 // ---------------------------------------------------------------------------
 import { whoMustAct } from './turn.js'
-import { jobOf, isMarried, unspentMoney, malusOf } from './state.js'
-import {
-  canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays,
-  isPlayableFromDiscard, cheapestPayment, purchaseCost, architectFree, hasJob, hasTag, isGrandProf,
-} from './rules.js'
+import { jobOf, unspentMoney, malusOf } from './state.js'
+import { canPlayMalus, isPlayableFromDiscard, hasJob, hasTag, isGrandProf } from './rules.js'
+import { flowOf, activeFrame } from './flows/index.js'
 
 const range = (n) => Array.from({ length: n }, (_, i) => i)
-
-// une carte jouée (main ou carte forcée) : pose devant soi, ou malus sur chaque cible valide
-function playsOf(state, me, card) {
-  if (card.type === 'malus')
-    return range(state.players.length)
-      .filter((i) => i !== me && canPlayMalus(state, me, card, i).ok)
-      .map((i) => ({ type: 'PLAY_MALUS', uid: card.uid, target: i }))
-  return canPoseSelf(state, me, card).ok ? [{ type: 'PLAY_SELF', uid: card.uid }] : []
-}
 
 // choix en attente (pending) : seul ce qui le résout est permis
 function pendingActions(state, actor) {
@@ -41,14 +31,6 @@ function pendingActions(state, actor) {
   const opponentsWithCards = () => range(state.players.length).filter((i) => i !== me && state.players[i].hand.length > 0)
 
   switch (pend.type) {
-    case 'purchase': {
-      const out = []
-      if (architectFree(p, pend.card)) out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
-      const best = cheapestPayment(state, p, purchaseCost(p, pend.card))
-      if (best) out.push({ type: 'PURCHASE_CONFIRM', salaryUids: best.salaryUids, useHeritage: best.useHeritage })
-      out.push({ type: 'PURCHASE_CANCEL' })
-      return out
-    }
     case 'chance':
       return pend.cards.map((c) => ({ type: 'CHANCE_PICK', uid: c.uid }))
     case 'discard-pick':
@@ -110,58 +92,14 @@ function pendingActions(state, actor) {
   }
 }
 
-function drawActions(state) {
-  const me = state.current
-  const p = state.players[me]
-  const out = [{ type: 'DRAW_DECK' }]
-  if (canTakeDiscardTop(state, me).ok) out.push({ type: 'TAKE_DISCARD' })
-  if (state.riverEnabled)
-    state.river.forEach((c, index) => {
-      out.push({ type: 'TAKE_RIVER', index, playNow: false })
-      if (canTakeRiverNow(state, me, c)) out.push({ type: 'TAKE_RIVER', index, playNow: true })
-    })
-  if (jobOf(p)) out.push({ type: 'RESIGN' })
-  if (isMarried(p)) out.push({ type: 'DIVORCE_VOLUNTARY' })
-  return out
-}
-
-function playActions(state) {
-  const me = state.current
-  const p = state.players[me]
-  // carte forcée (prise dans la défausse / la rivière, Étoile filante, Astronaute) :
-  // elle seule peut être jouée ; défaussable seulement si elle ne consomme pas le jeu
-  // (un salaire forcé peut aussi être misé au Casino)
-  const casinoOpen = state.casino && (!state.casino.stake || state.casino.stake.by !== me)
-  if (state.forced) {
-    const c = state.forced
-    const out = playsOf(state, me, c)
-    if (c.type === 'salary' && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
-    if (!state.forcedConsumesPlay) out.push({ type: 'DISCARD_CARD', uid: c.uid })
-    return out
-  }
-  const out = []
-  for (const c of p.hand) {
-    out.push(...playsOf(state, me, c))
-    if (c.type === 'salary' && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
-    out.push({ type: 'DISCARD_CARD', uid: c.uid })
-  }
-  // Arc-en-ciel : on peut s'arrêter avant d'avoir joué toutes ses cartes
-  if (canEndPlays(state)) out.push({ type: 'END_PLAYS' })
-  return out
-}
-
 export function legalActions(state, actor) {
   if (!state?.players || state.status !== 'playing') return []
   if (!whoMustAct(state).includes(actor)) return []
-  let list
-  if (state.pending) list = pendingActions(state, actor)
-  else {
-    list = state.phase === 'draw' ? drawActions(state) : playActions(state)
-    if (canStopAdultery(state, actor).ok) list.push({ type: 'STOP_ADULTERY' })
-  }
+  // le cadre actif de la pile (tour, achat), sinon le choix pending
+  const frame = activeFrame(state)
+  const list = frame ? flowOf(frame.flow).legal(state, frame, actor) : pendingActions(state, actor)
   return list.map((a) => ({ ...a, by: actor }))
 }
-
 // clé stable d'une action (comparer deux listes, chercher une action dans la liste)
 export const actionKey = (a) => JSON.stringify(Object.keys(a).sort().map((k) => [k, a[k]]))
 
