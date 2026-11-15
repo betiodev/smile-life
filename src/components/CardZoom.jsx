@@ -64,8 +64,9 @@ function paidLabel(cards) {
 // cards : la pile touchée (on peut passer d'une carte à l'autre)
 // hand : null (lecture seule) ou { gate, onSwipe(dir, rect), onHint, hint, from }
 // extras : { under: uid → salaires/Héritage posés sous l'acquisition, notes: uid → état }
+// action : null, ou { label, onClick } (bouton, ex. « Prendre et jouer ») ou { reason } (pourquoi c'est impossible)
 // onClose(rect) : rect = position de la carte au moment de fermer
-export default function CardZoom({ cards, index = cards.length - 1, hand = null, extras = null, onClose }) {
+export default function CardZoom({ cards, index = cards.length - 1, hand = null, extras = null, action = null, onClose }) {
   const [i, setI] = useState(index)
   const [sub, setSub] = useState(null) // carte sous l'acquisition, montrée à sa place
   const base = cards[i] ?? cards[cards.length - 1]
@@ -142,6 +143,13 @@ export default function CardZoom({ cards, index = cards.length - 1, hand = null,
             </div>
           </div>
         )}
+        {action?.onClick && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); action.onClick() }}
+            className="self-start mt-2 rounded-xl bg-[#FFC93C] text-[#1F2228] font-bold px-4 py-2 text-sm whitespace-nowrap shadow active:scale-95 transition-transform">
+            {action.label}
+          </button>
+        )}
+        {!action?.onClick && action?.reason && <p className="text-xs font-bold mt-1 text-[#E8836F]">{action.reason}</p>}
         {hand && <p className="text-[11px] font-bold mt-1"><span className="text-[#E8836F]">← Défausser</span> · <span className="text-[#8FCB6B]">Jouer →</span></p>}
       </div>
       {hand?.hint && <div key={hand.hint.id} className="ui-zoom swipe-hint" style={{ top: 10 }} role="status">{hand.hint.text}</div>}

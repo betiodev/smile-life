@@ -273,7 +273,8 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
       ? (isForced ? [forcedOf(state)] : p.hand).filter((c) => c.type === 'salary') : [],
     onCasinoBet: (card) => pi.start(card, 'play', spots.hand(card.uid), { casino: true }),
     onTapHand: (card) => { if (!zoomBack) setZoom({ cards: [card], fromHand: true, from: spots.hand(card.uid) }) },
-    onZoom: (cards, extras) => setZoom({ cards, extras, fromHand: false }),
+    // action : bouton facultatif dans la carte agrandie ({ label, onClick } ou { reason })
+    onZoom: (cards, extras, action) => setZoom({ cards, extras, action, fromHand: false }),
   }
 
   const vengeanceMalus = it?.flow === 'vengeance' && malusOf(state.players[state.current]).find((m) => m.uid === it.malusUid)
@@ -314,6 +315,10 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
         <CardZoom
           cards={zoom.cards}
           extras={zoom.extras}
+          action={zoom.action && {
+            ...zoom.action,
+            onClick: zoom.action.onClick && (() => { setZoom(null); zoom.action.onClick() }),
+          }}
           hand={zoom.fromHand ? {
             gate: gateFor(zoom.cards[0]),
             onSwipe: (dir, rect) => { setZoom(null); pi.start(zoom.cards[0], dir, rect) },
