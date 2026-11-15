@@ -76,6 +76,13 @@ check('Règle 5 : réforme qui autorise, sans interdiction personnelle → permi
 check('Effet au choix : ignoré par défaut', resolve('price', 6, [c(1, { set: 0, optional: true })]) === 6)
 check('Effet au choix : compté avec withOptional', resolve('price', 6, [c(1, { set: 0, optional: true })], { withOptional: true }) === 0)
 
+// --- prix : arrondi au-dessus après les × (moitié de prix d'une maison à 5 → 3)
+check('Prix : moitié de 5 arrondie au-dessus = 3', resolve('price', 5, [c(1, { multiply: 0.5 })]) === 3)
+check('Prix : moitié de prix sur une maison offerte = 0', resolve('price', 6, [c(1, { multiply: 0.5 }), c(2, { set: 0 })]) === 0)
+check('Prix : réduction puis moitié ((5 − 1) × ½ = 2)', resolve('price', 5, [c(1, { multiply: 0.5 }), c(2, { add: -1 })]) === 2)
+check('Smiles : pas d’arrondi ni de borne (−3 possible)', resolve('cardSmiles', 1, [c(1, { add: -4 })]) === -3)
+check('Règle de paiement : « devient » le plus récent', resolve('paymentRule', 'necessary', [c(1, { set: 'exact' })]) === 'exact')
+
 // --- la liste est fermée ------------------------------------------------------------
 let threw = false
 try { resolve('inventee', 0, []) } catch { threw = true }

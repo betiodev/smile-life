@@ -8,8 +8,8 @@ import Card from './Card'
 import { Ghost, cardRect, prefersReducedMotion } from './flights'
 import { TOAST_MS } from './usePlayIntent'
 import { playerColor } from './theme'
-import { validatePayment, malusHasTarget, hasTag, architectFree, heritageLiasses } from '../game/rules'
-import { isMarried, unspentMoney, malusOf } from '../game/state'
+import { checkPayment, malusHasTarget, hasTag, architectFree, heritageLiasses } from '../game/rules'
+import { isMarried, looseMoney, giftableMoney, moneyValue, malusOf } from '../game/state'
 
 // carte en attente : arrive en volant depuis l'endroit où on l'a lâchée
 export function Dock({ card, from, width = 110 }) {
@@ -62,12 +62,11 @@ const chip = (on) =>
 export function PaymentSheet({ intent, state, player, patch, onCancel, onConfirm }) {
   const { cost, payment } = intent
   const free = payment.architect
-  const unused = unspentMoney(state, player)
+  const unused = looseMoney(state, player)
   const liasses = heritageLiasses(state, player)
-  const levels = unused.filter((c) => payment.salaryUids.includes(c.uid)).map((c) => c.level)
-  const heritage = payment.useHeritage ? liasses : 0
-  const total = levels.reduce((a, b) => a + b, 0) + heritage
-  const check = free ? { ok: true } : validatePayment(cost, levels, heritage)
+  const paid = checkPayment(state, state.players.indexOf(player), cost, payment)
+  const total = paid.total
+  const check = free ? { ok: true } : paid
   const toggle = (uid) => patch(({ payment: pay }) => ({
     payment: {
       ...pay, architect: false,
@@ -87,7 +86,7 @@ export function PaymentSheet({ intent, state, player, patch, onCancel, onConfirm
         )}
         {unused.map((c) => (
           <button key={c.uid} type="button" className={chip(!free && payment.salaryUids.includes(c.uid))} onClick={() => toggle(c.uid)}>
-            💰 {c.level}
+            💰 {moneyValue(c)}
           </button>
         ))}
         {liasses > 0 && (
@@ -170,7 +169,7 @@ export function GiftsOverlay({ gifts, state }) {
   const { choice, asking, until, give } = gifts
   const me = state.players[state.current]
   const d = state.players[asking]
-  const unused = unspentMoney(state, d)
+  const unused = giftableMoney(state, d)
   return (
     <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3 anim-fade">
       <div className="ui-zoom bg-[#2A2E36] rounded-2xl shadow-2xl p-3 flex gap-3 max-w-[min(680px,96vw)] w-full max-h-[94vh]">

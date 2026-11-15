@@ -46,7 +46,7 @@ function PlayerPanel({ game, player, index, target, onZoom }) {
           : <span className="text-[11px] font-bold opacity-70 whitespace-nowrap">{player.hand.length} en main</span>}
         {pickable
           ? <span className="ml-auto shrink-0 rounded-full bg-[#FFC93C] text-[#1F2228] px-2 font-bold text-xs">{target.selected ? '✓ Choisi' : 'Choisir'}</span>
-          : <span className="ml-auto shrink-0 rounded-full bg-black/25 px-2 font-title font-semibold text-sm">😄 {computeScore(player).total}</span>}
+          : <span className="ml-auto shrink-0 rounded-full bg-black/25 px-2 font-title font-semibold text-sm">😄 {computeScore(state, index).total}</span>}
       </div>
       <div ref={ref} className="flex-1 min-h-0 flex flex-wrap gap-2 items-center content-center overflow-auto thin-scroll px-1">
         {height > 0 && <PlayedStacks player={player} state={state} boxWidth={width - 8} boxHeight={height - 10} onZoom={target ? null : onZoom} />}

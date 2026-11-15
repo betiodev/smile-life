@@ -11,6 +11,14 @@
 //        les cartes : outlaw, prof, trophy, fonctionnaire, interim,
 //        animal, travel, house
 //  key   identifiant des cartes qui ont un comportement (règles, effets)
+//  money cartes qui peuvent payer (ARCHITECTURE.md §7) :
+//        { value, taxable, casino, gift, payTax, needsJob, allOrNothing? }
+//        value : liasses ; taxable : visée par l'Impôt ; casino : peut être
+//        misée ; gift : peut être offerte (Anniversaire) ; payTax : peut payer
+//        une taxe (Politique) ; needsJob : se pose seulement avec un métier ;
+//        allOrNothing : se dépense en entier, avec les autres cartes du même
+//        genre (Héritage). Ce champ n'est pas copié sur les cartes d'une
+//        partie : on le lit dans la définition (moneyTraits, src/game/state.js).
 //
 // Une définition ne contient jamais de fonction (données pures).
 // ---------------------------------------------------------------------------
@@ -76,7 +84,10 @@ const JOBS = JOB_ROWS.map(([key, name, studyReq, salaryLevel, status, perk, flav
 
 // --- SALAIRES (40 : 10 par niveau, 1 smile) -----------------------------------
 const SALARIES = [1, 2, 3, 4].map((level) =>
-  def(`salaire_${level}`, { type: 'salary', name: `Salaire ${level}`, level, smiles: 1 }, { count: 10 }))
+  def(`salaire_${level}`, {
+    type: 'salary', name: `Salaire ${level}`, level, smiles: 1,
+    money: { value: level, taxable: true, casino: true, gift: true, payTax: true, needsJob: true },
+  }, { count: 10 }))
 
 // --- FLIRTS (10 lieux × 2, 1 smile) -------------------------------------------
 const FLIRTS = [
@@ -140,6 +151,9 @@ const SPECIALS = [
   { key: 'vengeance', name: 'Vengeance', desc: 'Infligez un de vos malus reçus à un autre joueur' },
   { key: 'casino', name: 'Casino', desc: 'Misez un salaire. Même niveau : le 2e joueur gagne tout, sinon le 1er' },
 ].map((s) => def(s.key, { type: 'special', ...s, smiles: 0 }))
+// Héritage : 3 liasses, tout ou rien (ARCHITECTURE.md §7)
+SPECIALS.find((d) => d.key === 'heritage').money =
+  { value: 3, taxable: false, casino: false, gift: false, payTax: false, needsJob: false, allOrNothing: true }
 
 // --- ACQUISITIONS (15) --------------------------------------------------------------
 // acqType = sous-type affiché (cadre, icône) ; les règles lisent les tags

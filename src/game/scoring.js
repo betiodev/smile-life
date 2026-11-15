@@ -1,34 +1,64 @@
 // ---------------------------------------------------------------------------
-// Décompte final des smiles, par catégorie
+// Décompte final des smiles (ARCHITECTURE.md §7) : un pipeline
+//   1. chaque carte posée : la question cardSmiles (réponse de base : les
+//      smiles imprimés ; la Licorne doublée est un modificateur, cards/base.js)
+//   2. somme par catégorie
+//   3. la question scoreBonus, une fois les sous-totaux de TOUS les joueurs
+//      connus (les effets qui comparent les joueurs les lisent dans q.subtotals)
+// Marche sur l'état complet comme sur une vue (viewFor).
 // ---------------------------------------------------------------------------
-
 import { jobs, moneyOf, marriages, adulteries } from './state.js'
+import { ask } from './queries.js'
 
-const sum = (cards) => cards.reduce((s, c) => s + c.smiles, 0)
+// catégories de l'écran de fin, dans l'ordre : [libellé, cartes du joueur]
+export const CATEGORIES = [
+  ['Études 📚', (p) => p.studies],
+  ['Métier 💼', jobs],
+  ['Salaires 💰', moneyOf],
+  ['Flirts 💕', (p) => p.flirts],
+  ['Mariage 💒', marriages],
+  ['Adultère 😏', adulteries],
+  ['Enfants 👶', (p) => p.children],
+  ['Acquisitions 🏠', (p) => p.acquisitions],
+  ['Distinctions 🏅', (p) => p.distinctions],
+]
 
-export function licorneBonus(p) {
-  const used = (k) => p.specials.some((c) => c.key === k)
-  return used('arcenciel') && used('etoile')
+// smiles d'une carte posée devant le joueur pIdx
+export const cardSmiles = (s, pIdx, card) => ask(s, 'cardSmiles', { player: pIdx, card }, card.smiles ?? 0)
+
+// sous-total d'un joueur : { cat, changed, subtotal }
+// changed[catégorie] = [{ card, printed, smiles }] : cartes qui ne comptent
+// pas leurs smiles imprimés (Licorne doublée…), pour l'écran de fin
+function subtotalOf(s, pIdx) {
+  const p = s.players[pIdx]
+  const cat = {}
+  const changed = {}
+  for (const [label, cards] of CATEGORIES) {
+    let n = 0
+    for (const card of cards(p)) {
+      const smiles = cardSmiles(s, pIdx, card)
+      n += smiles
+      if (smiles !== (card.smiles ?? 0)) (changed[label] ??= []).push({ card, printed: card.smiles ?? 0, smiles })
+    }
+    cat[label] = n
+  }
+  const subtotal = Object.values(cat).reduce((a, b) => a + b, 0)
+  return { cat, changed, subtotal }
 }
 
-export function computeScore(p) {
-  const cat = {}
-  cat['Études 📚'] = p.studies.reduce((s, c) => s + c.smiles, 0)
-  cat['Métier 💼'] = sum(jobs(p))
-  cat['Salaires 💰'] = sum(moneyOf(p))
-  cat['Flirts 💕'] = p.flirts.reduce((s, c) => s + c.smiles, 0)
-  cat['Mariage 💒'] = sum(marriages(p))
-  cat['Adultère 😏'] = sum(adulteries(p))
-  cat['Enfants 👶'] = p.children.reduce((s, c) => s + c.smiles, 0)
+// Scores de tous les joueurs : [{ cat, changed, bonus, total }]
+export function computeScores(s) {
+  const subs = s.players.map((_, i) => subtotalOf(s, i))
+  const subtotals = subs.map((x) => x.subtotal)
+  return subs.map(({ cat, changed, subtotal }, i) => {
+    const bonus = ask(s, 'scoreBonus', { player: i, subtotals }, 0)
+    return { cat, changed, bonus, total: subtotal + bonus }
+  })
+}
 
-  let acq = 0
-  for (const c of p.acquisitions) {
-    if (c.key === 'licorne' && licorneBonus(p)) acq += 6
-    else acq += c.smiles
-  }
-  cat['Acquisitions 🏠'] = acq
-  cat['Distinctions 🏅'] = sum(p.distinctions)
-
-  const total = Object.values(cat).reduce((a, b) => a + b, 0)
-  return { cat, total }
+// Score d'un joueur (player : son indice, ou le joueur lui-même)
+export function computeScore(s, player) {
+  const i = typeof player === 'number' ? player : s.players.indexOf(player)
+  if (i < 0) throw new Error('computeScore : joueur absent de la partie')
+  return computeScores(s)[i]
 }

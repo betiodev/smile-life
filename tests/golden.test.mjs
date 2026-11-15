@@ -24,7 +24,7 @@ const results = SEEDS.map((seed) => {
     players: state.players.length,
     river: state.riverEnabled,
     steps,
-    scores: state.players.map((p) => computeScore(p).total),
+    scores: state.players.map((p) => computeScore(state, p).total),
     hash: hash(state),
   }
 })

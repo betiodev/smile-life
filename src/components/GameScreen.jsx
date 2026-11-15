@@ -8,7 +8,7 @@ import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, G
 import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
 import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
 import { legalActions } from '../game/legal'
-import { malusOf, phaseOf, forcedOf, choiceOf } from '../game/state'
+import { malusOf, phaseOf, forcedOf, choiceOf, canStake } from '../game/state'
 
 const rectOf = (el) => {
   if (!el) return null
@@ -270,7 +270,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     onHint: showHint,
     // Casino : miser un salaire de sa main (même toast d'annulation)
     casinoSalaries: baseGate().ok && state.casino && (!state.casino.stake || state.casino.stake.by !== state.current)
-      ? (isForced ? [forcedOf(state)] : p.hand).filter((c) => c.type === 'salary') : [],
+      ? (isForced ? [forcedOf(state)] : p.hand).filter(canStake) : [],
     onCasinoBet: (card) => pi.start(card, 'play', spots.hand(card.uid), { casino: true }),
     onTapHand: (card) => { if (!zoomBack) setZoom({ cards: [card], fromHand: true, from: spots.hand(card.uid) }) },
     // action : bouton facultatif dans la carte agrandie ({ label, onClick } ou { reason })

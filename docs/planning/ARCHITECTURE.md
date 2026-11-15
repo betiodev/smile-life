@@ -248,7 +248,7 @@ As built in roadmap step 10 (`src/game/queries.js`, `src/game/cards/base.js`):
 - A base answer may be marked `hard` (a precondition such as "the target must have a job", "one job at a time"): no modifier lifts it, and its reason shows before any card's. This keeps the old refusal messages in the old order.
 - An effect may be `optional` (the player's choice: the Architecte's free house). `price` ignores it unless asked `withOptional`.
 - `min` means "at least", `max` "at most"; they apply after multiply and before the printed bounds (salary levels 1–4, prices and sizes ≥ 0).
-- `price` exists already (Pilote, Architecte); step 11 moves the married half price and adds `paymentRule`. `isProtected`, `drawMode`, `skipLength`, `cardSmiles`, `scoreBonus` and `nextPlayer` are declared but not asked yet.
+- `price` exists already (Pilote, Architecte); step 11 moves the married half price and adds `paymentRule`. `isProtected`, `drawMode`, `skipLength` and `nextPlayer` are declared but not asked yet.
 - `onPlace(s, self)` is what a card does when its owner plays it (from hand, as the forced card, or via Piston); a stolen or gifted card does not run it.
 - A player is exempt from forbidding global cards when one of their cards in force has `ignoresGlobal: true` (Politique).
 
@@ -361,6 +361,13 @@ money: { value: 3, taxable: false, casino: false, gift: false, payTax: false, ne
 **Buying** is one flow: ask `price`, list the sources the player may use (own money, and the pot for a politician), validate with `paymentRule`, then `attach` the spent cards under the acquisition and mark them `used`. Free and discounted purchases are `price` modifiers, so "gratuit pour l'architecte" on a Bunker and "moitié prix pour le serveur" on Caviar need no code of their own.
 
 **Scoring** is a pipeline: for each placed card ask `cardSmiles`, sum per category, then add `scoreBonus`. The Licorne bonus becomes a modifier on the Licorne. Effects that compare players (Sado-maso) run after every player's subtotal is known.
+
+As built in roadmap step 11:
+
+- `money` traits live on the definition and are **not copied onto card instances**; `moneyTraits(card)` (`state.js`) reads them from the catalogue by `card.def`, so views carry no extra data. Héritage stays in `specials` and has `allOrNothing: true` (every unspent Héritage is spent together, as before). Selectors: `looseMoney`, `lumpMoney`, `taxableMoney`, `giftableMoney`, `canStake`, `paidWith`, `spentPaying`.
+- `price` has `round: 'up'`: after `multiply`, the price is rounded up (a house at 5 when married costs 3). The married half price is a `multiply: 0.5` modifier on every Mariage card (first marriage only). Architecte's free house (`set: 0`) still wins over it.
+- `paymentRule` answers `'necessary'` (base) or `'exact'`; `checkPayment(s, player, cost, { salaryUids, useHeritage })` validates and returns the cards to put under the acquisition. The action shape is unchanged.
+- `computeScore(state, player)` / `computeScores(state)` → `{ cat, changed, bonus, total }`. `changed` lists cards that do not score their printed smiles, for the final screen. `scoreBonus` is asked with `q.subtotals` (every player's subtotal).
 
 ## 8. View, driver, network and bots
 

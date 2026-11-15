@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 import { take, draw, log } from '../primitives.js'
 import { endFlow } from './index.js'
+import { canStake } from '../state.js'
 
 const copy = (x) => JSON.parse(JSON.stringify(x))
 
@@ -13,7 +14,7 @@ const casinoStake = {
   start: () => ({ flow: 'casino-stake', step: 'stake', data: {} }),
   actors: (state) => [state.current],
   legal: (state) => [
-    ...state.players[state.current].hand.filter((c) => c.type === 'salary').map((c) => ({ type: 'CASINO_STAKE', uid: c.uid })),
+    ...state.players[state.current].hand.filter(canStake).map((c) => ({ type: 'CASINO_STAKE', uid: c.uid })),
     { type: 'CASINO_STAKE', uid: null },
   ],
   apply(s, frame, action) {
@@ -21,7 +22,7 @@ const casinoStake = {
     const p = s.players[s.current]
     if (action.uid) {
       const card = p.hand.find((c) => c.uid === action.uid)
-      if (!card || card.type !== 'salary') return false
+      if (!card || !canStake(card)) return false
       take(s, { hand: s.current }, card.uid)
       s.casino.stake = { card, by: s.current }
       log(s, `🎰 ${p.name} mise immédiatement un salaire (et repioche)`)

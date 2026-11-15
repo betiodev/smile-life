@@ -196,7 +196,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play a game and try a blocked move for each perk you can (Accident on a Garagiste, Licenciement on a Prof…). The refusal message is the same as before.
   - Prompt: [docs/prompts/10-queries-modifiers.md](prompts/10-queries-modifiers.md)
 
-- [ ] **Step 11 — Money traits, prices and the scoring pipeline**
+- [x] **Step 11 — Money traits, prices and the scoring pipeline**
   - Goal: Generalise paying and scoring so extension money, discounts and score modifiers need no special code.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/11-money-price-scoring.md and follow it.`

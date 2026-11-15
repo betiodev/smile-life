@@ -12,8 +12,8 @@
 
 import { hasTag } from '../data/index.js'
 import {
-  jobs, jobOf, marriages, isMarried, adulteryOf, topFlirt, unspentMoney, moneyPaidFor, spentMoney, malusOf,
-  isUsed, onOf, phaseOf, choiceOf, forcedOf, mustPlayForced, cardPlayedThisTurn, isRainbow, playsLeft,
+  jobs, jobOf, marriages, isMarried, adulteryOf, topFlirt, moneyPaidFor, spentMoney, malusOf,
+  isUsed, moneyTraits, moneyValue, looseMoney, lumpMoney, taxableMoney, giftableMoney, paidWith, spentPaying, phaseOf, choiceOf, forcedOf, mustPlayForced, cardPlayedThisTurn, isRainbow, playsLeft,
 } from './state.js'
 import { ask } from './queries.js'
 
@@ -75,8 +75,13 @@ export function effectiveSalaryLevel(s, p) {
   return Math.max(0, ...salaryLevels(s, indexOf(s, p)))
 }
 
-// Liasses disponibles (salaires non investis), hors héritage
-export const availableLiasses = (s, p) => unspentMoney(s, p).reduce((t, c) => t + c.level, 0)
+// --- argent et achats (ARCHITECTURE.md §7) ----------------------------------
+// Ce qui peut payer est lu dans les traits `money` des définitions
+// (src/data/base.js) ; les sélecteurs sont dans state.js.
+const sumValues = (cards) => cards.reduce((t, c) => t + moneyValue(c), 0)
+
+// Liasses disponibles à choisir une par une (salaires non investis), hors héritage
+export const availableLiasses = (s, p) => sumValues(looseMoney(s, p))
 
 // Salaires investis dans une acquisition (posés sous elle)
 export const paidSalaries = moneyPaidFor
@@ -85,47 +90,65 @@ export const paidSalaries = moneyPaidFor
 // retournés (comptent leurs smiles, ne peuvent plus payer ni être offerts)
 export const spentSalaries = spentMoney
 
-// Héritage : posé face visible tant qu'il n'a rien payé
-const heritageCards = (p) => p.specials.filter((c) => c.key === 'heritage')
-export const unusedHeritage = (s, p) => heritageCards(p).filter((c) => !isUsed(s, c))
-// une carte Héritage vaut 3 liasses ; elles se dépensent toutes ensemble
-export const HERITAGE_LIASSES = 3
-export const heritageLiasses = (s, p) => HERITAGE_LIASSES * unusedHeritage(s, p).length
+// Héritage (argent « tout ou rien ») : posé face visible tant qu'il n'a rien
+// payé ; toutes ces cartes se dépensent ensemble
+export const unusedHeritage = lumpMoney
+export const heritageLiasses = (s, p) => sumValues(lumpMoney(s, p))
 
-// Cartes posées sous une acquisition : salaires et Héritage qui l'ont payée
-export const paidCards = (s, p, acqUid) =>
-  [...paidSalaries(s, p, acqUid), ...heritageCards(p).filter((c) => isUsed(s, c) && onOf(s, c) === acqUid)]
+// Cartes posées sous une acquisition : l'argent qui l'a payée
+export const paidCards = paidWith
 
-// Argent dépensé dont l'acquisition a quitté le jeu (salaires + Héritage), retourné
-export const spentCards = (s, p) => [
-  ...spentSalaries(s, p),
-  ...heritageCards(p).filter((c) => isUsed(s, c) && !p.acquisitions.some((a) => a.uid === onOf(s, c))),
-]
+// Argent dépensé dont l'acquisition a quitté le jeu, retourné
+export const spentCards = spentPaying
 
-export function houseCost(p, card) {
-  return isMarried(p) ? Math.ceil(card.cost / 2) : card.cost
-}
-
-// Prix d'une acquisition : imprimé, maisons à moitié prix une fois marié.
-// Pilote (voyages) et Architecte (une maison, au choix) : cards/base.js.
+// Prix d'une acquisition : la question price. Réponse de base : le prix
+// imprimé. Maisons à moitié prix une fois marié (les cartes Mariage), Pilote
+// (voyages) et Architecte (une maison, au choix) : cards/base.js.
 // withOptional : avec les effets au choix du joueur (maison offerte).
 export const price = (s, pIdx, card, { withOptional = false } = {}) =>
-  ask(s, 'price', { player: pIdx, card },
-    () => (hasTag(card, 'house') ? houseCost(s.players[pIdx], card) : card.cost), { withOptional })
+  ask(s, 'price', { player: pIdx, card }, card.cost ?? 0, { withOptional })
 
-// Validation d'un paiement (achat voyage/maison) : le total doit couvrir le
-// coût ET chaque élément choisi doit être nécessaire — retirer n'importe quel
-// salaire (ou l'héritage) ferait repasser sous le coût. On peut donc surpayer
-// faute d'appoint, mais pas investir des salaires superflus (ce qui les
-// mettrait à l'abri de l'Impôt sur le revenu).
-export function validatePayment(cost, salaryLevels, heritage = 0) {
-  const total = salaryLevels.reduce((a, b) => a + b, 0) + heritage
+// Règle de paiement : la question paymentRule.
+//   'necessary' (jeu de base) : le total doit couvrir le coût ET chaque
+//     élément choisi doit être nécessaire — retirer n'importe quel salaire
+//     (ou l'héritage) ferait repasser sous le coût. On peut donc surpayer
+//     faute d'appoint, mais pas investir des salaires superflus (ce qui les
+//     mettrait à l'abri de l'Impôt sur le revenu) ;
+//   'exact' : le total doit être exactement le coût (plus tard : Salrapas).
+export const PAYMENT_RULES = ['necessary', 'exact']
+export const paymentRule = (s, pIdx) => ask(s, 'paymentRule', { player: pIdx }, 'necessary')
+
+// Validation d'un paiement : values = valeurs des cartes choisies une par une,
+// heritage = valeur de l'argent « tout ou rien » utilisé (0 sinon)
+export function validatePayment(cost, values, heritage = 0, rule = 'necessary') {
+  const total = values.reduce((a, b) => a + b, 0) + heritage
   if (total < cost) return NO(`Total insuffisant (${total}/${cost} liasses)`)
-  for (const lvl of salaryLevels) {
-    if (total - lvl >= cost) return NO('Retirez les salaires superflus : le coût est déjà couvert sans eux')
+  if (rule === 'exact') {
+    if (total !== cost) return NO(`Il faut payer exactement ${cost} liasses (${total} choisies)`)
+    return OK
+  }
+  for (const v of values) {
+    if (total - v >= cost) return NO('Retirez les salaires superflus : le coût est déjà couvert sans eux')
   }
   if (heritage > 0 && total - heritage >= cost) return NO('L’Héritage est superflu : le coût est déjà couvert sans lui')
   return OK
+}
+
+// Le paiement choisi par le joueur pIdx : { salaryUids, useHeritage } →
+// { ok, reason?, cards, total } (cards : ce qui passe sous l'acquisition)
+export function checkPayment(s, pIdx, cost, { salaryUids = [], useHeritage = false } = {}) {
+  const p = s.players[pIdx]
+  const loose = looseMoney(s, p)
+  const chosen = []
+  for (const uid of salaryUids) {
+    const c = loose.find((m) => m.uid === uid)
+    if (c && !chosen.includes(c)) chosen.push(c)
+  }
+  const lump = useHeritage ? lumpMoney(s, p) : []
+  const heritage = sumValues(lump)
+  const total = sumValues(chosen) + heritage
+  const v = validatePayment(cost, chosen.map(moneyValue), heritage, paymentRule(s, pIdx))
+  return { ...v, cards: [...chosen, ...lump], total }
 }
 
 // Un enfant est-il posable ?
@@ -173,7 +196,7 @@ export function canPoseSelf(state, pIdx, card, { ignoreStudies = false } = {}) {
       return OK
     }
     case 'salary': {
-      if (!jobOf(p)) return NO('Il faut un métier pour poser un salaire')
+      if (moneyTraits(card)?.needsJob && !jobOf(p)) return NO('Il faut un métier pour poser un salaire')
       if (!salaryLevels(state, pIdx).includes(card.level))
         return NO(`Votre métier autorise le niveau ${effectiveSalaryLevel(state, p)} maximum`)
       return OK
@@ -305,7 +328,7 @@ export function canPlayMalus(state, attackerIdx, card, targetIdx) {
       return OK
     case 'impot':
       if (!jobOf(t)) return HARD('La cible doit avoir un métier')
-      if (unspentMoney(state, t).length === 0) return NO('Aucun salaire non-investi à imposer')
+      if (taxableMoney(state, t).length === 0) return NO('Aucun salaire non-investi à imposer')
       return OK
     case 'divorce':
       if (!isMarried(t)) return HARD('La cible doit être mariée')
@@ -424,16 +447,17 @@ export const pistonable = (s, pIdx, card) =>
 // Paiement valide le moins cher : moins de liasses dépensées, puis moins de
 // salaires investis. → { salaryUids, useHeritage, total } ou null
 export function cheapestPayment(s, p, cost) {
-  const sal = unspentMoney(s, p).slice(0, 14)
+  const rule = paymentRule(s, indexOf(s, p))
+  const sal = looseMoney(s, p).slice(0, 14)
   const liasses = heritageLiasses(s, p)
   let best = null
   for (const h of liasses > 0 ? [false, true] : [false]) {
     const heritage = h ? liasses : 0
     for (let mask = 0; mask < 1 << sal.length; mask++) {
       const picked = sal.filter((_, i) => mask & (1 << i))
-      const levels = picked.map((c) => c.level)
-      if (!validatePayment(cost, levels, heritage).ok) continue
-      const total = levels.reduce((a, b) => a + b, 0) + heritage
+      const values = picked.map(moneyValue)
+      if (!validatePayment(cost, values, heritage, rule).ok) continue
+      const total = values.reduce((a, b) => a + b, 0) + heritage
       if (!best || total < best.total || (total === best.total && picked.length < best.salaryUids.length)) {
         best = { salaryUids: picked.map((c) => c.uid), useHeritage: h, total }
       }
@@ -446,13 +470,13 @@ export function cheapestPayment(s, p, cost) {
 export const vengeanceChoices = (state, pIdx) =>
   malusOf(state.players[pIdx]).filter((m) => malusHasTarget(state, pIdx, m))
 
-// Anniversaire : adversaires ayant au moins un salaire non investi
+// Anniversaire : adversaires ayant au moins un salaire (argent à offrir) non investi
 export const birthdayDonors = (state, pIdx) =>
-  state.players.map((q, i) => i).filter((i) => i !== pIdx && unspentMoney(state, state.players[i]).length > 0)
+  state.players.map((q, i) => i).filter((i) => i !== pIdx && giftableMoney(state, state.players[i]).length > 0)
 
 // Salaire non investi le plus petit (cadeau par défaut)
 export function lowestUnusedSalary(s, p) {
   let best = null
-  for (const c of unspentMoney(s, p)) if (!best || c.level < best.level) best = c
+  for (const c of giftableMoney(s, p)) if (!best || moneyValue(c) < moneyValue(best)) best = c
   return best
 }

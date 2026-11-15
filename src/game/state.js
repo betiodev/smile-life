@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 // Toutes les zones sont des listes de cartes (ARCHITECTURE.md §3.1).
+import { CATALOGUE } from '../data/index.js'
 
 // --- méta des cartes posées (ARCHITECTURE.md §3.2) -------------------------
 // state.meta[uid] = { seq, used?, on? } pour chaque carte posée sur un plateau :
@@ -54,6 +55,31 @@ export const moneyPaidFor = (s, p, acqUid) => p.money.filter((c) => isUsed(s, c)
 // dépensées pour une acquisition qui a quitté le jeu
 export const spentMoney = (s, p) =>
   p.money.filter((c) => isUsed(s, c) && !p.acquisitions.some((a) => a.uid === onOf(s, c)))
+
+// --- ce qui peut payer : traits d'argent (ARCHITECTURE.md §7) -------------
+// Toute carte posée dont la définition a des traits `money` (salaires,
+// Héritage ; plus tard argent sale, primes, bijoux…). Les règles lisent les
+// traits, jamais le type de la carte. Lus dans la définition (card.def).
+export const moneyTraits = (card) => CATALOGUE[card?.def]?.money ?? null
+// valeur en liasses
+export const moneyValue = (card) => moneyTraits(card)?.value ?? 0
+const unspentPaying = (s, p) => boardCards(p).filter((c) => moneyTraits(c) && !isUsed(s, c))
+// non dépensées, à choisir une par une pour payer (salaires)
+export const looseMoney = (s, p) => unspentPaying(s, p).filter((c) => !moneyTraits(c).allOrNothing)
+// non dépensées, qui se dépensent toutes ensemble (Héritage)
+export const lumpMoney = (s, p) => unspentPaying(s, p).filter((c) => moneyTraits(c).allOrNothing)
+// non dépensées et visées par l'Impôt
+export const taxableMoney = (s, p) => unspentPaying(s, p).filter((c) => moneyTraits(c).taxable)
+// non dépensées et qu'on peut offrir (Anniversaire)
+export const giftableMoney = (s, p) => unspentPaying(s, p).filter((c) => moneyTraits(c).gift)
+// cartes qu'on peut miser au Casino (dans une main)
+export const canStake = (card) => !!moneyTraits(card)?.casino
+// cartes d'argent posées sous l'acquisition acqUid (elles l'ont payée)
+export const paidWith = (s, p, acqUid) =>
+  boardCards(p).filter((c) => moneyTraits(c) && isUsed(s, c) && onOf(s, c) === acqUid)
+// cartes d'argent dépensées pour une acquisition qui a quitté le jeu
+export const spentPaying = (s, p) =>
+  boardCards(p).filter((c) => moneyTraits(c) && isUsed(s, c) && !p.acquisitions.some((a) => a.uid === onOf(s, c)))
 
 // --- cartes spéciales ------------------------------------------------------
 // posées sous une autre carte (le Piston sous le métier qu'il a donné)

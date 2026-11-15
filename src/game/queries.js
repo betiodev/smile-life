@@ -54,14 +54,14 @@ export const QUERIES = {
   flirtLimit: { kind: 'number', bounds: { min: 0 } },        // { player }
   studyCardLimit: { kind: 'number', bounds: { min: 0 } },    // { player }
   canHaveChild: { kind: 'bool' },    // { player }
-  price: { kind: 'number', bounds: { min: 0 } },             // prix d'une acquisition { player, card }
-  paymentRule: { kind: 'value' },    // plus tard (étape 11)
+  price: { kind: 'number', bounds: { min: 0 }, round: 'up' }, // prix d'une acquisition { player, card }
+  paymentRule: { kind: 'value' },    // règle de paiement { player } : 'necessary' | 'exact' (rules.js)
   handSize: { kind: 'number', bounds: { min: 0 } },          // taille de main { player }
   canDiscard: { kind: 'bool' },      // défausser une carte de sa main { player, card }
   drawMode: { kind: 'value' },       // plus tard
   skipLength: { kind: 'number', bounds: { min: 0 } },        // plus tard
-  cardSmiles: { kind: 'number' },    // plus tard (étape 11)
-  scoreBonus: { kind: 'number' },    // plus tard (étape 11)
+  cardSmiles: { kind: 'number' },    // smiles d'une carte posée { player, card } (scoring.js)
+  scoreBonus: { kind: 'number' },    // bonus de fin de partie { player, subtotals } (scoring.js)
   nextPlayer: { kind: 'value' },     // plus tard
 }
 
@@ -146,7 +146,8 @@ const latest = (list) => list.reduce((best, c) => (!best || c.seq >= best.seq ? 
 //   sinon une carte globale qui autorise, sinon la réponse de base.
 // Nombres :
 //   §5.3-1  « devient X » (set) d'abord, le plus récent l'emporte ; puis les
-//           + / −, puis les ×, puis min / max, puis les bornes imprimées ;
+//           + / −, puis les ×, puis l'arrondi de la question (prix : au-dessus),
+//           puis min / max, puis les bornes imprimées ;
 //   §5.3-3  un effet personnel « illimité » (set: Infinity) l'emporte sur une
 //           limite fixée par une carte globale.
 // Ensembles (niveaux de salaire) : replace (le plus récent), puis include,
@@ -157,7 +158,7 @@ export function resolve(query, base, contributions, { exempt = false, withOption
   if (!def) throw new Error(`Question inconnue : ${query}`)
   const list = contributions.filter((c) => withOptional || !c.effect.optional)
   if (def.kind === 'bool') return resolveBool(base, list, exempt)
-  if (def.kind === 'number') return resolveNumber(base, list, def.bounds)
+  if (def.kind === 'number') return resolveNumber(base, list, def)
   if (def.kind === 'set') return resolveSet(base, list, def.bounds)
   // 'value' : seul « devient X » a un sens, le plus récent l'emporte
   const set = latest(list.filter((c) => 'set' in c.effect))
@@ -188,7 +189,7 @@ function bound(n, bounds = {}) {
   return n
 }
 
-function resolveNumber(base, list, bounds) {
+function resolveNumber(base, list, { bounds, round }) {
   let n = base
   const sets = list.filter((c) => 'set' in c.effect)
   const unlimited = sets.find((c) => !isGlobal(c) && c.effect.set === Infinity)
@@ -196,6 +197,8 @@ function resolveNumber(base, list, bounds) {
   if (set) n = set.effect.set
   for (const c of list) if ('add' in c.effect) n += c.effect.add
   for (const c of list) if ('multiply' in c.effect) n *= c.effect.multiply
+  // prix : une moitié de prix s'arrondit au-dessus (maison à 5 → 3)
+  if (round === 'up') n = Math.ceil(n)
   for (const c of list) if ('min' in c.effect) n = Math.max(n, c.effect.min)
   for (const c of list) if ('max' in c.effect) n = Math.min(n, c.effect.max)
   return bound(n, bounds)
