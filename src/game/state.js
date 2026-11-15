@@ -15,17 +15,27 @@
 import { CATALOGUE } from '../data/index.js'
 
 // --- méta des cartes posées (ARCHITECTURE.md §3.2) -------------------------
-// state.meta[uid] = { seq, used?, on? } pour chaque carte posée sur un plateau :
-//   seq  : ordre de pose, global (state.seqCounter) ; plus grand = plus récent
-//   used : retournée après usage (salaire ou Héritage dépensé, Grand Prix sans
-//          effet) ; elle compte toujours ses smiles
-//   on   : uid de la carte sous laquelle elle est posée (salaires et Héritage
-//          sous l'acquisition qu'ils ont payée)
+// state.meta[uid] = { seq, used?, on?, protectedBy?, faceDown?, timer? } pour
+// chaque carte sur la table (plateaux et centre) :
+//   seq         : ordre de pose, global (state.seqCounter) ; plus grand = plus récent
+//   used        : retournée après usage (salaire ou Héritage dépensé, Grand Prix
+//                 sans effet) ; elle compte toujours ses smiles
+//   on          : uid de la carte sous laquelle elle est posée (salaires et
+//                 Héritage sous l'acquisition qu'ils ont payée ; au centre :
+//                 la carte qu'elle recouvre)
+//   protectedBy : uid de la carte qui la protège, ou un code de raison ;
+//                 remove (primitives.js) pose la question isProtected
+//   faceDown    : face cachée pour tout le monde (canSee, view.js)
+//   timer       : { left, by } — tours de table restant ; décompté chaque fois
+//                 que le tour passe par le siège `by` (primitives tickTimers)
 // L'entrée naît quand la carte est posée et disparaît quand elle quitte la
-// table (primitives place / remove).
+// table (primitives place / placeCenter / remove).
 export const metaOf = (s, uid) => s.meta?.[uid] ?? null
 export const isUsed = (s, card) => !!metaOf(s, card.uid)?.used
 export const onOf = (s, card) => metaOf(s, card.uid)?.on ?? null
+export const protectedByOf = (s, card) => metaOf(s, card.uid)?.protectedBy ?? null
+export const isFaceDown = (s, card) => !!metaOf(s, card.uid)?.faceDown
+export const timerOf = (s, card) => metaOf(s, card.uid)?.timer ?? null
 
 // --- métiers ---------------------------------------------------------------
 export const jobs = (p) => p.jobs
@@ -98,6 +108,24 @@ export const malusOf = (p) => p.malus
 export const outOfGame = (s) => s.outOfGame
 export const outOfGameCards = (s) => s.outOfGame.map((e) => e.card)
 
+// --- zones partagées (ARCHITECTURE.md §3.1) --------------------------------
+// centre de la table : cartes en vigueur pour tout le monde (réformes,
+// crises, éphémérides…). Public. Une carte posée sur une autre (meta.on) la
+// recouvre : seule celle du dessus est en vigueur.
+export const centerCards = (s) => s.center ?? []
+export const centerInForce = (s) => {
+  const center = centerCards(s)
+  if (center.length === 0) return center
+  const covered = new Set(center.map((c) => metaOf(s, c.uid)?.on).filter(Boolean))
+  return center.filter((c) => !covered.has(c.uid) && !isUsed(s, c))
+}
+// cagnotte partagée (Politique : l'argent des taxes). Public, sans méta.
+export const potCards = (s) => s.pot ?? []
+// cartes mises de côté à la mise en place : jamais visibles, jamais dans une vue
+export const spareCards = (s) => s.spare ?? []
+// cartes posées sur la table : tous les plateaux et le centre
+export const tableCards = (s) => [...s.players.flatMap((p) => boardCards(p)), ...centerCards(s)]
+
 // --- tout le plateau -------------------------------------------------------
 // Toutes les cartes posées devant le joueur (hors main), dans l'ordre du
 // tableau de vie : pro, perso, acquisitions, distinctions, spéciales, malus
@@ -113,6 +141,8 @@ export const boardCards = (p) => [
 // décide qui agit et ce qui est permis. Le tour est toujours tout en bas
 // (pile vide : partie finie). Le joueur du tour est state.current.
 export const topFrame = (s) => s.stack?.[s.stack.length - 1] ?? null
+// mise en place en cours (flux setup en bas de la pile, avant le premier tour)
+export const inSetup = (s) => s.stack?.[0]?.flow === 'setup'
 export const turnFrame = (s) => (s.stack?.[0]?.flow === 'turn' ? s.stack[0] : null)
 // étape du tour : 'draw' (piocher, ou démission / divorce à la place) | 'play'
 export const phaseOf = (s) => turnFrame(s)?.step ?? null

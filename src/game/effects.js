@@ -4,7 +4,7 @@
 // (Piston, Vengeance, Anniversaire). Les zones ne changent que par les
 // primitives ; un effet qui attend un joueur pose un flux sur la pile.
 // ---------------------------------------------------------------------------
-import { interimReplaced, hasTag, isGrandProf, needsPayment } from './rules.js'
+import { interimReplaced, hasTag, isGrandProf, needsPayment, skipLength } from './rules.js'
 import { setBy } from './queries.js'
 import { jobOf, marriageOf, adulteryOf, topFlirt, taxableMoney, giftableMoney, moneyValue } from './state.js'
 import { log, put, place, remove, removeAll, steal, loseJob, skip } from './primitives.js'
@@ -20,7 +20,7 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
     case 'accident':
     case 'maladie':
     case 'burnout':
-      skip(s, targetIdx, 1)
+      skip(s, targetIdx, skipLength(s, targetIdx, card, 1))
       place(s, targetIdx, card)
       log(s, `${a.name} inflige ${card.name} à ${t.name} : passe 1 tour`, 'malus')
       break
@@ -32,8 +32,8 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
     case 'impot': {
       // le dernier salaire non investi (argent imposable)
       const last = taxableMoney(s, t).at(-1)
-      if (last) {
-        remove(s, last.uid, { cause: 'impot', by: attackerIdx })
+      // (un salaire protégé reste en place : remove → null)
+      if (last && remove(s, last.uid, { cause: 'impot', by: attackerIdx })) {
         log(s, `${a.name} impose ${t.name} : salaire niveau ${moneyValue(last)} défaussé`, 'malus')
       }
       place(s, targetIdx, card)
@@ -60,7 +60,7 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
       break
     }
     case 'prison':
-      skip(s, targetIdx, 3)
+      skip(s, targetIdx, skipLength(s, targetIdx, card, 3))
       log(s, `${a.name} envoie ${t.name} en Prison : passe 3 tours, le Bandit est défaussé`, 'malus')
       loseJob(s, targetIdx, { cause: 'prison', by: attackerIdx })
       put(s, card, 'discard', { by: attackerIdx })
@@ -70,7 +70,7 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
       const cause = { cause: 'attentat', by: attackerIdx, to: 'outOfGame' }
       removeAll(s, attackerIdx, 'children', cause)
       removeAll(s, targetIdx, 'children', cause)
-      a.didAttentat = true
+      a.history.didAttentat = true
       put(s, card, 'outOfGame', cause)
       log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${na + nt} enfant(s) retirés du jeu`, 'malus')
       break
@@ -132,9 +132,9 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
       s.players.forEach((q, qi) => {
         if (qi === pIdx) return
         const top = topFlirt(q)
-        if (top && top.place === card.place) {
-          // le flirt volé est posé de nouveau, chez le voleur
-          steal(s, top.uid, pIdx, { cause: 'vol' })
+        // le flirt volé est posé de nouveau, chez le voleur (un flirt
+        // protégé reste en place : steal → null)
+        if (top && top.place === card.place && steal(s, top.uid, pIdx, { cause: 'vol' })) {
           log(s, `💘 ${p.name} vole le flirt ${top.name} de ${q.name} !`, 'malus')
         }
       })
@@ -166,7 +166,7 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
         // gratuite (Pilote : voyages) : posée sans passer par l'achat
         const by = setBy(s, 'price', { player: pIdx, card })
         place(s, pIdx, card)
-        log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (${by?.effect.note ?? by?.card.name})`)
+        log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (${by?.effect.note ?? by?.card?.name})`)
         break
       }
       // achat à payer : le flux d'achat attend le paiement (flows/purchase.js)

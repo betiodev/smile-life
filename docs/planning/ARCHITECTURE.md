@@ -1,6 +1,6 @@
 # Architecture — an engine that can carry all six extensions
 
-Status: design, written 2026-11-11 by Claude Fable. Nothing here is built yet. `docs/ROADMAP.md` turns the migration plan (section 12) into sessions.
+Status: design, written 2026-11-11 by Claude Fable; the engine migration (section 12, roadmap steps 01–12) is built, with "As built" notes in each section. `docs/ROADMAP.md` turns the migration plan (section 12) into sessions.
 
 Read `docs/planning/AUDIT.md` first for how the code works today.
 
@@ -248,7 +248,7 @@ As built in roadmap step 10 (`src/game/queries.js`, `src/game/cards/base.js`):
 - A base answer may be marked `hard` (a precondition such as "the target must have a job", "one job at a time"): no modifier lifts it, and its reason shows before any card's. This keeps the old refusal messages in the old order.
 - An effect may be `optional` (the player's choice: the Architecte's free house). `price` ignores it unless asked `withOptional`.
 - `min` means "at least", `max` "at most"; they apply after multiply and before the printed bounds (salary levels 1–4, prices and sizes ≥ 0).
-- `price` exists already (Pilote, Architecte); step 11 moves the married half price and adds `paymentRule`. `isProtected`, `drawMode`, `skipLength` and `nextPlayer` are declared but not asked yet.
+- `price` exists already (Pilote, Architecte); step 11 moves the married half price and adds `paymentRule`. `isProtected`, `drawMode`, `skipLength` and `nextPlayer` were declared but not asked yet; step 12 wires them (section 9).
 - `onPlace(s, self)` is what a card does when its owner plays it (from hand, as the forced card, or via Piston); a stolen or gifted card does not run it.
 - A player is exempt from forbidding global cards when one of their cards in force has `ignoresGlobal: true` (Politique).
 
@@ -459,6 +459,19 @@ Each line names the mechanism above that carries it. If a card needs something n
 | Game ending early, or restarting | Apo | `status`, a flow |
 | Set-up steps | Fan | set-up flow |
 | Always-on bonus rules of an extension | GP, Trash, Fan | behaviours with no card, active when the extension is enabled |
+
+As built in roadmap step 12 (every line of the table above now has its mechanism; proven with the fake extensions `test` and `probe` in `tests/ext/`):
+
+- **Plugging in an extension:** `registerExtension({ id, defs, behaviours, flows, setup, bonus })` (`src/game/extensions.js`). Flows are named `<ext>.<name>`. `bonus` rules are behaviours with no card (`{ id, modifiers, on }`), in force whenever the game's `state.extensions` includes the extension; their contributions have source `'bonus'`, `card: null`, `seq: 0`.
+- **Shared zones:** `state.center`, `state.pot`, `state.spare`, plus `state.sight`. Center cards have meta like board cards (`tableCards(s)` = boards + center); `placeCenter(s, card, { by, on, rounds })`; a center card covered by another (`meta.on`) is not in force (`centerInForce`). Pot and spare cards have no meta. `remove` works on the center (discarded in nobody's name). `setAsideFromDeck(s, n)` takes from the bottom of the deck.
+- **Auto-play:** tag `autoPlay`, options on the definition (read from the catalogue): `autoPlay: { withChance, redraw }` and `rounds`. `draw(s, player, { fill, chance })`: a card that plays itself goes to the center, then the behaviour's `onAutoPlay(s, { card, owner: null, drawer })` runs (it may push a flow). When a hand or the river is being completed (`fill`: opening hands, end-of-turn refill, Piston, river) the card is always replaced; the turn's own draw replaces it unless `redraw: false`; Chance never replaces it (Chance then holds fewer cards). Those last two are engine defaults: each extension's spec decides what its cards do (Politique and Fantastique recommend "with Chance, keep none"), through the definition options or `onAutoPlay`.
+- **Frames pushed during the end of a turn** (a card that plays itself while the hand is refilled) are kept: `beginTurn` replaces only the bottom frame, so they are settled at the start of the next player's turn, before that player acts.
+- **Timers:** `meta.timer = { left, by }`; `tickTimers(s, seat)` runs each time the turn reaches a seat (played or skipped). An extra turn does not tick. At 0 the card leaves the table (`cause: 'timer'`).
+- **Protection:** `protect(s, uid, by)`; `remove` asks `isProtected` (`{ player: owner, card, cause, by }`, base: `meta.protectedBy` is set; `ok` = protected). A protected card stays and `remove` returns `null`; the rest of the effect that hit it still happens (a Licenciement still lands, a stolen flirt is simply not stolen). `loseJob` does nothing for a protected job. When the protecting card leaves, its `protectedBy` links are cleared.
+- **Visibility:** `canSee(state, viewer, uid)` and `seesAt` in `view.js`; `viewFor` uses them for hands, boards and the center. A face-down card becomes `{ uid: 'facedown-…', hidden: true, faceDown: true }` for everyone, its owner included, and meta links (`on`, `protectedBy`) to it are not sent. `addSight(s, viewer | 'all', uids, 'turn' | 'flow')`; 'turn' entries end at `beginTurn`, 'flow' entries when the frame on top at the time leaves the stack. Deck cards seen by sight arrive as `view.seen = [{ zone: 'deck', index, card }]` (index 0 = top). A view carries only the viewer's own sight entries; spare is never sent.
+- **Set-up flow** (`flows/setup.js`): the bottom frame before the first turn. Steps run in order (base `deal`, `river`, then each enabled extension's steps); a step may push a flow and the set-up waits. Then the start message, `gameSetup`, and the first turn.
+- **Turn questions now asked:** `drawMode` (`'normal' | 'none' | 'noDiscard'`; `'none'` offers `SKIP_DRAW`; draw-two, play-then-draw and a face-up deck come with the cards that need them), `skipLength` (printed length of Accident, Maladie, Burn-out, Prison), `nextPlayer` (base: next seat in `state.direction`, +1 or −1; a round ends when the turn reaches seat 0), `canDiscard` (now also filters the legal actions). Per player: `extraTurns` (the same player plays a whole new turn), `handDelta` (added to the base hand size), `history` (`wasBandit`, `didAttentat`; extensions add their own keys).
+- **Behaviour hook for extension specials:** `canPlay(state, player, card)` gives the base answer of `canPlace` for a `special` the base game does not know.
 
 **Cards with no digital equivalent as printed.** The engine can carry any of these stand-ins; which one is used is Teto's ruling, recorded in the extension spec.
 

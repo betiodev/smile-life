@@ -8,6 +8,8 @@ import { whoMustAct } from '../src/game/turn.js'
 import { makeRng } from '../src/game/rng.js'
 import { legalActions } from '../src/game/legal.js'
 import { checkInvariants, where } from './invariants.mjs'
+// extension factice 'test' (ne joue que dans les parties qui la choisissent)
+import './ext/test-ext.mjs'
 
 export const stats = { birthdayGifts: 0, chercheurDiscards: 0 }
 
@@ -53,17 +55,18 @@ export function step(s) {
 
 // nouvelle partie n° g : 2 à 4 joueurs, rivière une partie sur deux.
 // seed : graine de la partie et des choix du simulateur (par défaut g)
-export function newGame(g, seed = g) {
+// extensions : extensions en jeu (par défaut aucune ; 'test' : tests/ext/test-ext.mjs)
+export function newGame(g, seed = g, extensions = []) {
   const n = 2 + (g % 3)
   const river = g % 2 === 0
-  random = makeRng('sim-' + seed)
-  return newGameState(Array.from({ length: n }, (_, i) => `J${i + 1}`), null, { river, seed })
+  random = makeRng('sim-' + seed + (extensions.length ? ':' + extensions.join('+') : ''))
+  return newGameState(Array.from({ length: n }, (_, i) => `J${i + 1}`), null, { river, seed, extensions })
 }
 
 // joue une partie complète ; renvoie l'état final et le nombre d'étapes.
 // En cas d'erreur, le message donne la graine pour rejouer la partie.
-export function playGame(g, seed = g, { onStep, invariants = false } = {}) {
-  let s = newGame(g, seed)
+export function playGame(g, seed = g, { onStep, invariants = false, extensions = [] } = {}) {
+  let s = newGame(g, seed, extensions)
   let steps = 0
   try {
     while (s.status !== 'over') {
@@ -80,7 +83,8 @@ export function playGame(g, seed = g, { onStep, invariants = false } = {}) {
     onStep?.(s, steps)
     if (invariants) checkInvariants(s, null, null)
   } catch (e) {
-    e.message = `Partie ${g} (graine ${seed}, étape ${steps}) : ${e.message}\n  → rejouer : SEED=${seed} GAME=${g} node tests/sim.mjs`
+    const ext = extensions.length ? ` EXT=${extensions.join(',')}` : ''
+    e.message = `Partie ${g} (graine ${seed}${ext ? ',' + ext : ''}, étape ${steps}) : ${e.message}\n  → rejouer : SEED=${seed} GAME=${g}${ext} node tests/sim.mjs`
     throw e
   }
   return { state: s, steps }

@@ -204,7 +204,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Finish a game and compare the final score screen with a hand count of one player's cards.
   - Prompt: [docs/prompts/11-money-price-scoring.md](prompts/11-money-price-scoring.md)
 
-- [ ] **Step 12 — Shared zone, cards that play themselves, and visibility**
+- [x] **Step 12 — Shared zone, cards that play themselves, and visibility**
   - Goal: Add the last mechanisms the extensions need, proven with two fake cards before any real card depends on them.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/12-center-autoplay-visibility.md and follow it.`

@@ -6,11 +6,10 @@
 // ---------------------------------------------------------------------------
 import { buildDeck, shuffle } from '../data/index.js'
 import { canAct } from './turn.js'
-import { log, fillDeck, draw } from './primitives.js'
-import { emit } from './events.js'
+import { fillDeck } from './primitives.js'
 import { seedFrom, randomSeed, rngOf } from './rng.js'
 import { flowOf, activeFrame } from './flows/index.js'
-import { beginTurn } from './flows/turn.js'
+import { runSetup } from './flows/setup.js'
 
 // --- helpers ---------------------------------------------------------------
 
@@ -31,8 +30,9 @@ function makePlayer(name, color = null) {
     specials: [],       // cartes spéciales utilisées (retournées)
     malus: [],          // malus reçus (retournés)
     skipTurns: 0,
-    wasBandit: false,
-    didAttentat: false,
+    extraTurns: 0,      // tours de plus à jouer tout de suite (« rejouez » : un tour entier)
+    handDelta: 0,       // changement durable de la taille de main (rules.js handSize)
+    history: { wasBandit: false, didAttentat: false }, // souvenirs (Légion d'honneur ; extensions)
     architectFreeUsed: false,
   }
 }
@@ -55,12 +55,17 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
       deck: [],
       discard: [],
       outOfGame: [],      // cartes retirées du jeu : [{ card, cause, by }], public
-      meta: {},           // état des cartes posées, par uid : { seq, used?, on? } (state.js)
+      center: [],         // centre de la table : cartes en vigueur pour tous (réformes, crises…), public
+      pot: [],            // cagnotte partagée (Politique), public
+      spare: [],          // cartes mises de côté à la mise en place, jamais visibles
+      sight: [],          // regards temporaires : [{ viewer, uids, until }] (view.js)
+      meta: {},           // état des cartes sur la table, par uid : { seq, used?, on?, protectedBy?, faceDown?, timer? } (state.js)
       seqCounter: 0,      // dernier numéro d'ordre de pose (meta[uid].seq)
       river: [],
       riverEnabled: river,
       riverIdle: 0,
       current: 0,         // joueur du tour
+      direction: 1,       // sens du jeu : +1 (aiguilles d'une montre) ou −1 (rules.js nextPlayer)
       stack: [],          // pile des flux : [tour, …] (src/game/flows/)
       casino: null,
       log: [],
@@ -68,11 +73,9 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
     }
     // uid numérotés au hasard (un uid ne révèle pas la carte), puis paquet mélangé
     fillDeck(s, shuffle(buildDeck(s.extensions, rngOf(s)), rngOf(s)))
-    s.players.forEach((_, i) => draw(s, i, { count: 5 }))
-    if (s.riverEnabled) draw(s, null, { count: 3, to: 'river' })
-    log(s, `🎉 La partie commence ! ${s.players.map((p) => p.name).join(', ')}`)
-    emit(s, 'gameSetup')
-    beginTurn(s)
+    // mise en place (flows/setup.js) : mains de départ, rivière, étapes des
+    // extensions ; puis le premier tour
+    runSetup(s)
     return s
   }
 }

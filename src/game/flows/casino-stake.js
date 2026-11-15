@@ -5,7 +5,7 @@
 // aux autres (state.casino, view.js).
 // ---------------------------------------------------------------------------
 import { take, draw, log } from '../primitives.js'
-import { endFlow } from './index.js'
+import { finishFlow, resumeDone } from './index.js'
 import { canStake } from '../state.js'
 
 const copy = (x) => JSON.parse(JSON.stringify(x))
@@ -28,10 +28,11 @@ const casinoStake = {
       log(s, `🎰 ${p.name} mise immédiatement un salaire (et repioche)`)
       draw(s, s.current)
     }
-    endFlow(s)
+    // (une carte jouée d'office à la repioche a pu poser un flux au-dessus)
+    finishFlow(s, frame)
     return true
   },
-  resume() {},
+  resume: resumeDone,
   // délai dépassé : ne pas miser
   fallback: () => ({ type: 'CASINO_STAKE', uid: null }),
   view: (state, frame) => copy(frame),

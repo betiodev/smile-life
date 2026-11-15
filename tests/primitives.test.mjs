@@ -36,7 +36,7 @@ const fresh = () => newGameState(['Ana', 'Ben', 'Cléo'], null, { seed: 7 })
     }
   }
   walk(root)
-  const ZONES = 'hand|deck|discard|river|outOfGame|studies|jobs|money|flirts|marriages|adultery|children|acquisitions|distinctions|specials|malus|meta'
+  const ZONES = 'hand|deck|discard|river|outOfGame|center|pot|spare|sight|studies|jobs|money|flirts|marriages|adultery|children|acquisitions|distinctions|specials|malus|meta'
   const edit = new RegExp(`\\.(${ZONES})(\\.(push|pop|splice|shift|unshift)\\(|\\.length\\s*=(?!=)|\\s*=(?![=>]))`)
   const offenders = []
   for (const f of files) {
