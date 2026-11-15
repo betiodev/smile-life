@@ -242,6 +242,16 @@ Rules 2 and 4 can disagree (a personal `allow` placed after a forbidding réform
 
 Every pair of cards that can disagree gets a row in `INTERACTIONS.md` and a test.
 
+As built in roadmap step 10 (`src/game/queries.js`, `src/game/cards/base.js`):
+
+- Scopes are `owner`, `target` and `everyone`. `when` and `effect` may be functions of `(q, self, state)`; `self = { card, owner }`.
+- A base answer may be marked `hard` (a precondition such as "the target must have a job", "one job at a time"): no modifier lifts it, and its reason shows before any card's. This keeps the old refusal messages in the old order.
+- An effect may be `optional` (the player's choice: the Architecte's free house). `price` ignores it unless asked `withOptional`.
+- `min` means "at least", `max` "at most"; they apply after multiply and before the printed bounds (salary levels 1–4, prices and sizes ≥ 0).
+- `price` exists already (Pilote, Architecte); step 11 moves the married half price and adds `paymentRule`. `isProtected`, `drawMode`, `skipLength`, `cardSmiles`, `scoreBonus` and `nextPlayer` are declared but not asked yet.
+- `onPlace(s, self)` is what a card does when its owner plays it (from hand, as the forced card, or via Piston); a stolen or gifted card does not run it.
+- A player is exempt from forbidding global cards when one of their cards in force has `ignoresGlobal: true` (Politique).
+
 ## 6. Things that happen: primitives, events and flows
 
 ### 6.1 Primitives

@@ -30,15 +30,21 @@ export const EVENTS = [
   'malusReceived', 'handRefilled', 'turnEnd', 'roundEnd', 'gameEnd',
 ]
 
-// événement → définitions de cartes abonnées (calculé une fois)
-const LISTENERS = Object.fromEntries(EVENTS.map((name) => [
-  name,
-  new Set(Object.keys(BEHAVIOURS).filter((id) => BEHAVIOURS[id].on?.[name])),
-]))
-for (const [id, b] of Object.entries(BEHAVIOURS)) {
-  for (const name of Object.keys(b.on ?? {})) {
-    if (!EVENTS.includes(name)) throw new Error(`${id} s'abonne à un événement inconnu : ${name}`)
+// événement → définitions de cartes abonnées (calculé au premier emit : les
+// comportements importent les primitives, qui importent ce fichier)
+let LISTENERS = null
+function listeners() {
+  if (LISTENERS) return LISTENERS
+  for (const [id, b] of Object.entries(BEHAVIOURS)) {
+    for (const name of Object.keys(b.on ?? {})) {
+      if (!EVENTS.includes(name)) throw new Error(`${id} s'abonne à un événement inconnu : ${name}`)
+    }
   }
+  LISTENERS = Object.fromEntries(EVENTS.map((name) => [
+    name,
+    new Set(Object.keys(BEHAVIOURS).filter((id) => BEHAVIOURS[id].on?.[name])),
+  ]))
+  return LISTENERS
 }
 
 const inForce = (s, card) => {
@@ -47,7 +53,7 @@ const inForce = (s, card) => {
 }
 
 export function emit(s, name, ev = {}) {
-  const defs = LISTENERS[name]
+  const defs = listeners()[name]
   if (!defs) throw new Error(`Événement inconnu : ${name}`)
   if (defs.size === 0) return
   // cartes abonnées en jeu au moment de l'événement, joueur par joueur

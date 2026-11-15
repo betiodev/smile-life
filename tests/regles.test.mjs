@@ -1,10 +1,11 @@
 // Tests ciblés des 5 corrections signalées
 import { gameReducer, newGameState } from '../src/game/reducer.js'
 import {
-  canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
-  flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
+  canPlace, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
+  flirtStealVictims, cheapestPayment, birthdayDonors, canTarget, interimReplaced,
   paidSalaries, spentSalaries, availableLiasses, effectiveSalaryLevel,
   unusedHeritage, paidCards, spentCards, canStopAdultery, canTakeRiverNow, heritageLiasses,
+  handSize, price, needsPayment, architectFree, salaryLevels, hasTag,
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import {
@@ -45,19 +46,19 @@ function check(label, cond) {
   const double = find((c) => c.type === 'study' && c.levels === 2)
   // 5 cartes dont 1 double = 6 niveaux → une 6e carte doit être autorisée
   p.studies = [...singles.slice(0, 4), double]
-  check('5 cartes (dont 1 double, niv. 6) → 6e carte autorisée', canPoseSelf(s, 0, singles[10]).ok)
+  check('5 cartes (dont 1 double, niv. 6) → 6e carte autorisée', canPlace(s, 0, singles[10]).ok)
   // 6 cartes → 7e refusée
   p.studies = singles.slice(0, 6)
-  check('6 cartes études → 7e refusée', !canPoseSelf(s, 0, singles[10]).ok)
+  check('6 cartes études → 7e refusée', !canPlace(s, 0, singles[10]).ok)
   // Médecin : études continues même au-delà de 6 cartes
   setJob(s, p, find((c) => c.key === 'medecin'))
-  check('Médecin avec 6 cartes → 7e autorisée', canPoseSelf(s, 0, singles[10]).ok)
+  check('Médecin avec 6 cartes → 7e autorisée', canPlace(s, 0, singles[10]).ok)
   setJob(s, p, find((c) => c.key === 'chirurgien'))
-  check('Chirurgien avec 6 cartes → 7e autorisée', canPoseSelf(s, 0, singles[10]).ok)
+  check('Chirurgien avec 6 cartes → 7e autorisée', canPlace(s, 0, singles[10]).ok)
   // un autre métier bloque toujours les études
   setJob(s, p, find((c) => c.key === 'pizzaiolo'))
   p.studies = singles.slice(0, 2)
-  check('Pizzaïolo → études bloquées', !canPoseSelf(s, 0, singles[10]).ok)
+  check('Pizzaïolo → études bloquées', !canPlace(s, 0, singles[10]).ok)
 }
 
 // --- 2 : la victime d'un malus ne reprend pas sa carte défaussée ------------
@@ -118,16 +119,16 @@ function check(label, cond) {
   const barmaid = find((c) => c.key === 'barmaid')
   check('La carte s’appelle Barmaid', barmaid.name === 'Barmaid')
   p.flirts = flirts.slice(0, 5)
-  check('Sans métier : 6e flirt refusé', !canPoseSelf(s, 0, flirts[6]).ok)
+  check('Sans métier : 6e flirt refusé', !canPlace(s, 0, flirts[6]).ok)
   setJob(s, p, barmaid)
-  check('Barmaid célibataire : 6e flirt autorisé', canPoseSelf(s, 0, flirts[6]).ok)
+  check('Barmaid célibataire : 6e flirt autorisé', canPlace(s, 0, flirts[6]).ok)
   p.flirts = flirts.slice(0, 7)
-  check('Barmaid : 8e flirt autorisé (illimité)', canPoseSelf(s, 0, flirts[8]).ok)
+  check('Barmaid : 8e flirt autorisé (illimité)', canPlace(s, 0, flirts[8]).ok)
   setMarriage(s, p, find((c) => c.type === 'marriage'))
-  check('Barmaid mariée : flirt interdit', !canPoseSelf(s, 0, flirts[8]).ok)
+  check('Barmaid mariée : flirt interdit', !canPlace(s, 0, flirts[8]).ok)
   setMarriage(s, p, null)
   setJob(s, p, null) // démission/licenciement
-  check('Après le métier : flirts conservés (7) mais plus de pose', !canPoseSelf(s, 0, flirts[8]).ok && p.flirts.length === 7)
+  check('Après le métier : flirts conservés (7) mais plus de pose', !canPlace(s, 0, flirts[8]).ok && p.flirts.length === 7)
 }
 
 // --- Achat : pas de salaire superflu (anti-évasion fiscale) ------------------
@@ -446,7 +447,7 @@ function check(label, cond) {
     return s
   }
   let s = setup('prof_maths')
-  check('Licenciement sur un fonctionnaire : bloqué', !canPlayMalus(s, 0, lic, 1).ok)
+  check('Licenciement sur un fonctionnaire : bloqué', !canTarget(s, 0, lic, 1).ok)
   check('Licenciement sans cible : injouable, avec la raison', canPlayFromHand(s, 0, lic).reason === 'Aucun joueur ne peut être licencié')
   check('Licenciement sans cible : défausse permise', canDiscardFromHand(s, 0, lic).ok)
   check('Reducer : licenciement d’un fonctionnaire refusé', gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 }) === s)
@@ -454,12 +455,12 @@ function check(label, cond) {
   check('Licenciement sur un joueur sans métier : bloqué', canPlayFromHand(s, 0, lic).reason === 'Aucun joueur ne peut être licencié')
 
   s = setup('pizzaiolo')
-  check('Licenciement sur un métier normal : jouable', canPlayMalus(s, 0, lic, 1).ok && canPlayFromHand(s, 0, lic).ok)
+  check('Licenciement sur un métier normal : jouable', canTarget(s, 0, lic, 1).ok && canPlayFromHand(s, 0, lic).ok)
   s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
   check('Licenciement : le Pizzaïolo est défaussé', jobOf(s.players[1]) === null && s.discard.some((e) => e.card.key === 'pizzaiolo'))
 
   s = setup('serveur')
-  check('Licenciement sur un intérimaire : jouable', canPlayMalus(s, 0, lic, 1).ok)
+  check('Licenciement sur un intérimaire : jouable', canTarget(s, 0, lic, 1).ok)
   s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
   check('Licenciement : le Serveur est défaussé', jobOf(s.players[1]) === null)
 }
@@ -904,10 +905,10 @@ function check(label, cond) {
   const [pizzaiolo, serveur] = [find((c) => c.key === 'pizzaiolo'), find((c) => c.key === 'serveur')]
   const [m1, m2] = findAll((c) => c.type === 'marriage')
   setJob(s, p, pizzaiolo)
-  check('Un seul métier : un 2e métier est refusé', !canPoseSelf(s, 0, serveur).ok)
+  check('Un seul métier : un 2e métier est refusé', !canPlace(s, 0, serveur).ok)
   p.flirts.push(find((c) => c.type === 'flirt'))
   setMarriage(s, p, m1)
-  check('Un seul mariage : un 2e mariage est refusé', !canPoseSelf(s, 0, m2).ok)
+  check('Un seul mariage : un 2e mariage est refusé', !canPlace(s, 0, m2).ok)
   check('Sélecteurs : une seule carte dans chaque liste', jobOf(p) === pizzaiolo && marriageOf(p) === m1 && isMarried(p))
 }
 
@@ -961,6 +962,80 @@ function check(label, cond) {
   const d = gameReducer(vol, { by: 0, type: 'PLAY_MALUS', uid: divorce.uid, target: 1 })
   check('Méta : la carte qui quitte la table perd sa méta', !d.meta[mariage.uid] && d.discard.some((e) => e.card.uid === mariage.uid))
   check('Méta : le malus reçu est posé avec un numéro', d.meta[divorce.uid]?.seq === vol.seqCounter + 1)
+}
+
+// --- Avantages et immunités des métiers (modificateurs, src/game/cards/base.js) ---
+// Les raisons de refus sont celles d'avant, mot pour mot.
+{
+  const job = (key) => find((c) => c.type === 'job' && c.key === key)
+  const malus = (key) => find((c) => c.type === 'malus' && c.key === key)
+  const reason = (r) => (r.ok ? 'OK' : r.reason)
+  const s = freshState()
+  const [ana, ben] = s.players
+  setJob(s, ana, job('pizzaiolo'))
+  const vs = (key) => reason(canTarget(s, 0, malus(key), 1))
+
+  setJob(s, ben, job('garagiste'))
+  check('Garagiste : « Le Garagiste ne subit aucun accident »', vs('accident') === 'Le Garagiste ne subit aucun accident')
+  check('Garagiste : la maladie passe', vs('maladie') === 'OK')
+  for (const key of ['pharmacien', 'medecin', 'chirurgien']) {
+    setJob(s, ben, job(key))
+    check(`${job(key).name} : « immunisé contre la maladie »`, vs('maladie') === `${job(key).name} : immunisé contre la maladie`)
+  }
+  setJob(s, ben, job('avocat'))
+  check('Avocat non marié : « La cible doit être mariée »', vs('divorce') === 'La cible doit être mariée')
+  setMarriage(s, ben, find((c) => c.type === 'marriage'))
+  check('Avocat marié : « L’Avocat ne subit aucun divorce »', vs('divorce') === 'L’Avocat ne subit aucun divorce')
+  setMarriage(s, ben, null)
+  setJob(s, ben, job('prof_maths'))
+  check('Prof : « Un fonctionnaire ne peut pas être licencié »', vs('licenciement') === 'Un fonctionnaire ne peut pas être licencié')
+  setJob(s, ben, job('grand_prof'))
+  check('Grand Prof : fonctionnaire aussi', vs('licenciement') === 'Un fonctionnaire ne peut pas être licencié')
+  setJob(s, ben, job('bandit'))
+  check('Bandit : « Le Bandit : ni impôt, ni licenciement » (licenciement)', vs('licenciement') === 'Le Bandit : ni impôt, ni licenciement')
+  check('Bandit sans salaire : la raison Bandit passe avant (impôt)', vs('impot') === 'Le Bandit : ni impôt, ni licenciement')
+  check('Bandit : la Prison est jouable', vs('prison') === 'OK')
+  setJob(s, ben, job('gourou'))
+  check('Gourou : « La prison ne concerne que le Bandit »', vs('prison') === 'La prison ne concerne que le Bandit')
+  setJob(s, ben, null)
+  check('Sans métier : « La cible doit avoir un métier »', vs('licenciement') === 'La cible doit avoir un métier')
+  check('Sur soi-même : refusé', reason(canTarget(s, 0, malus('accident'), 0)) === 'On ne joue pas un malus sur soi-même')
+  // Militaire : aucun attentat, ni contre lui ni contre les autres, ni par lui
+  setJob(s, ben, job('militaire'))
+  check('Militaire : « Un Militaire est en poste : aucun attentat possible »', vs('attentat') === 'Un Militaire est en poste : aucun attentat possible')
+  check('Militaire : le Militaire lui-même non plus', reason(canTarget(s, 1, malus('attentat'), 0)) === 'Un Militaire est en poste : aucun attentat possible')
+  // Policier : ni Bandit ni Gourou, pour tout le monde
+  setJob(s, ben, job('policier'))
+  setJob(s, ana, null)
+  check('Policier : « Un Policier est en poste : ni Bandit ni Gourou »',
+    reason(canPlace(s, 0, job('bandit'))) === 'Un Policier est en poste : ni Bandit ni Gourou')
+  setJob(s, ana, job('pizzaiolo'))
+  check('Policier, mais déjà un métier : « Un seul métier à la fois » reste la raison',
+    reason(canPlace(s, 0, job('gourou'))) === 'Un seul métier à la fois (démissionnez d’abord)')
+  // Légion d'honneur : Bandit en poste
+  setJob(s, ben, job('bandit'))
+  check('Bandit en poste : « Interdite aux Bandits, présents ou passés »',
+    reason(canPlace(s, 1, find((c) => c.key === 'legion'))) === 'Interdite aux Bandits, présents ou passés')
+  // Chercheur : main de 6
+  setJob(s, ben, job('chercheur'))
+  check('Chercheur : main de 6', handSize(s, 1) === 6 && handSize(s, 0) === 5)
+  // Pilote : voyage gratuit, posé sans achat
+  setJob(s, ben, job('pilote'))
+  const voyage = find((c) => hasTag(c, 'travel'))
+  check('Pilote : voyage gratuit', price(s, 1, voyage) === 0 && !needsPayment(s, 1, voyage) && canPlace(s, 1, voyage).ok)
+  check('Sans Pilote : le voyage coûte 3', price(s, 0, voyage) === 3 && needsPayment(s, 0, voyage))
+  check('Sans argent : « Coût : 3 liasses (vous avez 0) »', reason(canPlace(s, 0, voyage)) === 'Coût : 3 liasses (vous avez 0)')
+  // Architecte : maison offerte au choix (le prix normal reste proposé)
+  setJob(s, ben, job('architecte'))
+  const maison = find((c) => hasTag(c, 'house'))
+  check('Architecte : maison offerte au choix', architectFree(s, 1, maison) && price(s, 1, maison) === maison.cost && canPlace(s, 1, maison).ok)
+  ben.architectFreeUsed = true
+  check('Architecte : une seule maison offerte par métier', !architectFree(s, 1, maison) && !canPlace(s, 1, maison).ok)
+  // Grand Prix : niveaux de salaire 1 à 4 (un ensemble)
+  setJob(s, ben, job('ecrivain'))
+  check('Écrivain : niveau 1 seulement', salaryLevels(s, 1).join() === '1')
+  placeCard(s, ben.distinctions, find((c) => c.key === 'grandprix'))
+  check('Écrivain + Grand Prix : niveaux 1 à 4', salaryLevels(s, 1).join() === '1,2,3,4')
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

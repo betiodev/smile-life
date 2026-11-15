@@ -14,7 +14,7 @@ import { CARD_RATIO } from './PlayedStacks'
 import { cardRect } from './flights'
 import {
   needsPayment, purchaseCost, architectFree, cheapestPayment, vengeanceChoices,
-  birthdayDonors, flirtStealVictims, canPlayMalus, interimReplaced,
+  birthdayDonors, flirtStealVictims, canTarget, interimReplaced,
 } from '../game/rules'
 import { topFlirt, malusOf, choiceOf } from '../game/state'
 
@@ -63,7 +63,7 @@ function flowFor(state, pIdx, card, dir, casino) {
   if (card.key === 'troc' && card.type === 'special') return 'troc'
   if (card.key === 'vengeance' && card.type === 'special') return 'vengeance'
   if (card.key === 'anniversaire' && card.type === 'special') return 'birthday'
-  if (needsPayment(state.players[pIdx], card)) return 'purchase'
+  if (needsPayment(state, pIdx, card)) return 'purchase'
   return 'simple'
 }
 
@@ -132,8 +132,8 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
       return
     }
     if (flow === 'purchase') {
-      const cost = purchaseCost(p, card)
-      const free = architectFree(p, card)
+      const cost = purchaseCost(state, me, card)
+      const free = architectFree(state, me, card)
       const best = cheapestPayment(state, p, cost)
       const payment = free
         ? { architect: true, salaryUids: [], useHeritage: false }
@@ -249,11 +249,11 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
   const targetCheck = (i) => {
     const it = ref.current
     if (!it) return { ok: false }
-    if (it.flow === 'malus') return canPlayMalus(state, state.current, it.card, i)
+    if (it.flow === 'malus') return canTarget(state, state.current, it.card, i)
     if (it.flow === 'troc') return state.players[i].hand.length > 0 ? { ok: true } : { ok: false, reason: 'Aucune carte en main' }
     if (it.flow === 'vengeance') {
       const m = malusOf(state.players[state.current]).find((c) => c.uid === it.malusUid)
-      return m ? canPlayMalus(state, state.current, m, i) : { ok: false }
+      return m ? canTarget(state, state.current, m, i) : { ok: false }
     }
     return { ok: false }
   }

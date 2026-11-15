@@ -22,7 +22,7 @@
 import { draw, refill, take, takeAll, put, place, remove, loseJob, log } from '../primitives.js'
 import { emit } from '../events.js'
 import {
-  canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays, isInterim,
+  canPlace, canTarget, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays, isInterim,
 } from '../rules.js'
 import {
   jobOf, isMarried, marriageOf, adulteryOf, turnFrame, topFrame, forcedOf,
@@ -141,9 +141,9 @@ export function gameOver(s) {
 export function playsOf(state, me, card) {
   if (card.type === 'malus')
     return range(state.players.length)
-      .filter((i) => i !== me && canPlayMalus(state, me, card, i).ok)
+      .filter((i) => i !== me && canTarget(state, me, card, i).ok)
       .map((i) => ({ type: 'PLAY_MALUS', uid: card.uid, target: i }))
-  return canPoseSelf(state, me, card).ok ? [{ type: 'PLAY_SELF', uid: card.uid }] : []
+  return canPlace(state, me, card).ok ? [{ type: 'PLAY_SELF', uid: card.uid }] : []
 }
 
 function drawActions(state) {
@@ -272,7 +272,7 @@ function apply(s, frame, action) {
     case 'PLAY_SELF': {
       if (frame.step !== 'play') return false
       const played = playedCard(s, frame, action.uid)
-      if (!played || !canPoseSelf(s, s.current, played.card).ok) return false
+      if (!played || !canPlace(s, s.current, played.card).ok) return false
       const { card, fromForced } = played
       if (!fromForced) take(s, { hand: s.current }, card.uid)
       poseSelf(s, s.current, card, { fromForced })
@@ -288,7 +288,7 @@ function apply(s, frame, action) {
       if (frame.step !== 'play') return false
       const played = playedCard(s, frame, action.uid)
       if (!played || played.card.type !== 'malus') return false
-      if (!canPlayMalus(s, s.current, played.card, action.target).ok) return false
+      if (!canTarget(s, s.current, played.card, action.target).ok) return false
       if (!played.fromForced) take(s, { hand: s.current }, played.card.uid)
       applyMalus(s, s.current, played.card, action.target)
       consumePlay(s, played.fromForced)

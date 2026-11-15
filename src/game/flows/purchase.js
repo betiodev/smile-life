@@ -12,8 +12,7 @@
 // ---------------------------------------------------------------------------
 import { attach, place, put, log } from '../primitives.js'
 import {
-  hasJob, hasTag, houseCost, validatePayment, unusedHeritage, heritageLiasses,
-  architectFree, cheapestPayment, purchaseCost,
+  validatePayment, unusedHeritage, heritageLiasses, architectFree, cheapestPayment, purchaseCost,
 } from '../rules.js'
 import { unspentMoney } from '../state.js'
 import { endFlow } from './index.js'
@@ -31,8 +30,8 @@ const purchase = {
     const p = state.players[state.current]
     const { card } = frame.data
     const out = []
-    if (architectFree(p, card)) out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
-    const best = cheapestPayment(state, p, purchaseCost(p, card))
+    if (architectFree(state, state.current, card)) out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
+    const best = cheapestPayment(state, p, purchaseCost(state, state.current, card))
     if (best) out.push({ type: 'PURCHASE_CONFIRM', salaryUids: best.salaryUids, useHeritage: best.useHeritage })
     out.push({ type: 'PURCHASE_CANCEL' })
     return out
@@ -42,8 +41,9 @@ const purchase = {
     const { card, fromForced } = frame.data
     switch (action.type) {
       case 'PURCHASE_CONFIRM': {
-        const isFree = hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed && action.useArchitect
-        const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
+        // offerte au choix (Architecte : cards/base.js)
+        const isFree = !!action.useArchitect && architectFree(s, s.current, card)
+        const cost = purchaseCost(s, s.current, card)
         if (!isFree) {
           const chosen = []
           const unspent = unspentMoney(s, p)

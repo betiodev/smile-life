@@ -5,7 +5,7 @@
 // ce flux attend alors (étape 'done') qu'elle finisse. Public.
 // ---------------------------------------------------------------------------
 import { remove, log } from '../primitives.js'
-import { canPlayMalus } from '../rules.js'
+import { canTarget } from '../rules.js'
 import { malusOf } from '../state.js'
 import { applyMalus } from '../effects.js'
 import { finishFlow, resumeDone } from './index.js'
@@ -21,14 +21,14 @@ const vengeance = {
     const me = state.current
     return malusOf(state.players[me]).flatMap((m) =>
       range(state.players.length)
-        .filter((i) => i !== me && canPlayMalus(state, me, m, i).ok)
+        .filter((i) => i !== me && canTarget(state, me, m, i).ok)
         .map((i) => ({ type: 'VENGEANCE_PICK', uid: m.uid, target: i })))
   },
   apply(s, frame, action) {
     if (action.type !== 'VENGEANCE_PICK' || frame.step !== 'pick') return false
     const p = s.players[s.current]
     const malus = malusOf(p).find((c) => c.uid === action.uid)
-    if (!malus || !canPlayMalus(s, s.current, malus, action.target).ok) return false
+    if (!malus || !canTarget(s, s.current, malus, action.target).ok) return false
     remove(s, malus.uid, { cause: 'vengeance', by: s.current, to: 'aside' })
     log(s, `😈 ${p.name} se venge avec ${malus.name} !`)
     applyMalus(s, s.current, malus, action.target)
