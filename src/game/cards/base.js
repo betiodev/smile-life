@@ -63,7 +63,7 @@ const JOBS = {
     ],
     // souvenir pour la Légion d'honneur (Bandit passé)
     onPlace(s, { owner }) {
-      s.players[owner].wasBandit = true
+      s.players[owner].history.wasBandit = true
       return false
     },
   },

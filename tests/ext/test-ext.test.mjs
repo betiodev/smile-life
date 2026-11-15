@@ -9,7 +9,9 @@ import { TEST_DEFS, SPARE_COUNT } from './test-ext.mjs'
 import { gameReducer, newGameState } from '../../src/game/reducer.js'
 import { viewFor, canSee } from '../../src/game/view.js'
 import { legalActions } from '../../src/game/legal.js'
-import { canPlace } from '../../src/game/rules.js'
+import { canPlace, handSize, drawMode } from '../../src/game/rules.js'
+import { computeScore } from '../../src/game/scoring.js'
+import { defaultAction } from '../../src/game/turn.js'
 import { CATALOGUE, EXTENSIONS, buildDeck } from '../../src/data/index.js'
 import { setStep, setPlays } from '../../src/game/flows/turn.js'
 import { startFlow, setFlow } from '../../src/game/flows/index.js'
@@ -406,6 +408,120 @@ const act = (s, a) => {
   check('carte introuvable : non', !canSee(s, 0, 'c99999'))
   const views = [0, 1, 2, null].map((v) => JSON.stringify(viewFor(s, v)))
   check('les cartes de côté n’apparaissent dans aucune vue', s.spare.every((c) => views.every((j) => !j.includes(`"${c.uid}"`))) && views.every((j) => !j.includes('"spare"')))
+}
+
+// --- règles bonus d'une extension (sans carte) ----------------------------------------------
+{
+  const s = fresh()
+  const shieldCard = grab(s, SHIELD)
+  place(s, 1, shieldCard)
+  check('règle bonus : +1 smile par Bouclier posé, pour son propriétaire seulement',
+    computeScore(s, s.players[1]).bonus === 1 && computeScore(s, s.players[0]).bonus === 0)
+  const off = structuredClone(s)
+  off.extensions = []
+  check('règle bonus : pas en vigueur si l’extension n’est pas choisie', computeScore(off, off.players[1]).bonus === 0)
+  const v = viewFor(s, 0)
+  check('règle bonus : la même réponse sur une vue', computeScore(v, v.players[1]).bonus === 1)
+}
+
+// --- questions du tour : drawMode, nextPlayer et sens du jeu, skipLength, canDiscard, ----
+// --- taille de main propre au joueur, tour de plus, souvenirs (history) -----------------------
+{
+  const probe = (answers, seed = 5) => {
+    const s = newGameState(names, null, { seed, extensions: ['probe'] })
+    s.probe = answers
+    return s
+  }
+  const endTurnOf = (st) => {
+    const me = st.current
+    if (turnFrame(st).step === 'draw') st = act(st, legalActions(st, me).find((a) => a.type === 'DRAW_DECK' || a.type === 'SKIP_DRAW'))
+    return act(st, legalActions(st, me).find((a) => a.type === 'DISCARD_CARD'))
+  }
+  // jeu de base : réponses de base
+  const base = newGameState(names, null, { seed: 5 })
+  check('jeu de base : drawMode « normal », sens +1, taille de main 5', drawMode(base, 0) === 'normal' && base.direction === 1 && handSize(base, 0) === 5)
+
+  // drawMode 'none' : pas de pioche ce tour
+  let s = probe({ drawMode: { set: 'none' } })
+  const l = legalActions(s, 0).map((a) => a.type)
+  check('drawMode none : on passe la pioche (SKIP_DRAW), sans pioche ni défausse', l.includes('SKIP_DRAW') && !l.includes('DRAW_DECK') && !l.includes('TAKE_DISCARD'))
+  check('drawMode none : piocher est refusé', gameReducer(s, { type: 'DRAW_DECK', by: 0 }) === s)
+  check('drawMode none : l’action par défaut est de passer la pioche', defaultAction(s, 0)?.type === 'SKIP_DRAW')
+  const h = s.players[0].hand.length
+  s = act(s, { type: 'SKIP_DRAW', by: 0 })
+  check('drawMode none : étape play, main inchangée', turnFrame(s).step === 'play' && s.players[0].hand.length === h)
+  const normal = probe({})
+  check('drawMode normal : SKIP_DRAW absent et refusé', !legalActions(normal, 0).some((a) => a.type === 'SKIP_DRAW') && gameReducer(normal, { type: 'SKIP_DRAW', by: 0 }) === normal)
+
+  // drawMode 'noDiscard' : pas de carte de la défausse
+  s = probe({ drawMode: { set: 'noDiscard' } })
+  const study = grabWhere(s, (c) => c.type === 'study')
+  s.discard.push({ card: study, by: 1 })
+  check('drawMode noDiscard : la carte de la défausse n’est pas proposée, et refusée',
+    !legalActions(s, 0).some((a) => a.type === 'TAKE_DISCARD') && gameReducer(s, { type: 'TAKE_DISCARD', by: 0 }) === s)
+  const withDiscard = probe({})
+  withDiscard.discard.push({ card: grabWhere(withDiscard, (c) => c.type === 'study'), by: 1 })
+  check('drawMode normal : la même carte de la défausse est proposée', legalActions(withDiscard, 0).some((a) => a.type === 'TAKE_DISCARD'))
+
+  // nextPlayer et sens du jeu
+  s = endTurnOf(probe({ nextPlayer: { set: 2 } }))
+  check('nextPlayer : après Ana, le joueur que la question désigne (Cléo)', s.current === 2)
+  let r = probe({})
+  r.direction = -1
+  r = endTurnOf(r)
+  check('sens inversé : après Ana vient Cléo', r.current === 2)
+  r = endTurnOf(r)
+  check('sens inversé : puis Ben', r.current === 1 && !r.probe.rounds)
+  r = endTurnOf(r)
+  check('sens inversé : retour chez Ana = fin du tour de table (roundEnd)', r.current === 0 && r.probe.rounds === 1)
+
+  // skipLength
+  const accidentOn = (answers) => {
+    let st = probe(answers)
+    setStep(st, 'play')
+    setPlays(st, 2) // le tour d'Ana reste ouvert : le tour passé de Ben n'est pas encore consommé
+    const acc = grabWhere(st, (c) => c.key === 'accident')
+    st.players[0].hand.push(acc)
+    st = act(st, { type: 'PLAY_MALUS', uid: acc.uid, target: 1, by: 0 })
+    return st.players[1].skipTurns
+  }
+  check('skipLength : Accident = 1 tour passé (imprimé)', accidentOn({}) === 1)
+  check('skipLength : une règle +1 → 2 tours passés', accidentOn({ skipLength: { add: 1 } }) === 2)
+
+  // canDiscard
+  s = probe({ canDiscard: { forbid: 'Cette carte ne quitte pas la main' } })
+  s = act(s, { type: 'DRAW_DECK', by: 0 })
+  const c0 = s.players[0].hand[0]
+  check('canDiscard interdit : la défausse n’est pas proposée, et refusée',
+    !legalActions(s, 0).some((a) => a.type === 'DISCARD_CARD') && gameReducer(s, { type: 'DISCARD_CARD', uid: c0.uid, by: 0 }) === s)
+
+  // taille de main propre au joueur (handDelta)
+  s = probe({})
+  s.players[0].handDelta = 1
+  check('handDelta +1 : main de 6', handSize(s, 0) === 6)
+  s = endTurnOf(s)
+  check('handDelta +1 : la fin du tour complète la main à 6', s.players[0].hand.length === 6)
+  s.players[1].handDelta = -1
+  check('handDelta −1 : main de 4 (sur la vue aussi)', handSize(s, 1) === 4 && handSize(viewFor(s, 0), 1) === 4)
+
+  // tour de plus
+  s = probe({})
+  s.players[0].extraTurns = 1
+  const turnBefore = s.turnCount
+  s = endTurnOf(s)
+  check('tour de plus : Ana rejoue tout de suite, un nouveau tour commence', s.current === 0 && s.players[0].extraTurns === 0 &&
+    s.turnCount === turnBefore + 1 && turnFrame(s).step === 'draw' && s.log.some((e) => e.text.includes('rejoue un tour')))
+  s = endTurnOf(s)
+  check('tour de plus utilisé : puis Ben', s.current === 1)
+
+  // souvenirs
+  s = probe({})
+  setStep(s, 'play')
+  const bandit = grabWhere(s, (c) => c.key === 'bandit')
+  s.players[0].hand.push(bandit)
+  check('souvenirs : rien au départ', !s.players[0].history.wasBandit && !s.players[0].history.didAttentat)
+  s = act(s, { type: 'PLAY_SELF', uid: bandit.uid, by: 0 })
+  check('souvenirs : le Bandit posé est retenu (history.wasBandit)', s.players[0].history.wasBandit === true)
 }
 
 // --- fuite : parties simulées avec l'extension, chaque étape, chaque joueur ---------------------

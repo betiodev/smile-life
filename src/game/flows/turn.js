@@ -23,6 +23,7 @@ import { draw, refill, take, takeAll, put, place, remove, loseJob, log, tickTime
 import { emit } from '../events.js'
 import {
   canPlace, canTarget, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays, isInterim,
+  canDiscardFromHand, drawMode, nextPlayer,
 } from '../rules.js'
 import {
   jobOf, isMarried, marriageOf, adulteryOf, turnFrame, topFrame, forcedOf, canStake, moneyValue,
@@ -104,15 +105,28 @@ export function endTurn(s) {
     }
   }
 
-  // next : joueur suivant, en consommant les tours passés. Chaque siège par
-  // lequel passe le tour (joué ou passé) décompte ses cartes à durée.
-  let next = (pIdx + 1) % s.players.length
-  let wrapped = next <= pIdx
+  // tour de plus (« rejouez », un tour entier) : le même joueur rejoue, sans
+  // faire avancer la table
+  const me = s.players[pIdx]
+  if (me.extraTurns > 0) {
+    me.extraTurns -= 1
+    log(s, `🔁 ${me.name} rejoue un tour`)
+    s.turnCount += 1
+    beginTurn(s)
+    return
+  }
+
+  // next : joueur suivant (question nextPlayer, dans le sens du jeu), en
+  // consommant les tours passés. Chaque siège par lequel passe le tour (joué
+  // ou passé) décompte ses cartes à durée. Le tour de table est fini quand le
+  // tour revient au premier joueur (siège 0).
+  let next = nextPlayer(s, pIdx)
+  let wrapped = next === 0
   tickTimers(s, next)
   while (s.players[next].skipTurns > 0) {
     s.players[next].skipTurns -= 1
     log(s, `⏭️ ${s.players[next].name} passe son tour (${s.players[next].skipTurns} restant)`)
-    next = (next + 1) % s.players.length
+    next = nextPlayer(s, next)
     if (next === 0) wrapped = true
     tickTimers(s, next)
   }
@@ -157,8 +171,16 @@ export function playsOf(state, me, card) {
 function drawActions(state) {
   const me = state.current
   const p = state.players[me]
+  // façon de piocher (question drawMode) : 'none' → on passe la pioche
+  const mode = drawMode(state, me)
+  if (mode === 'none') {
+    const out = [{ type: 'SKIP_DRAW' }]
+    if (jobOf(p)) out.push({ type: 'RESIGN' })
+    if (isMarried(p)) out.push({ type: 'DIVORCE_VOLUNTARY' })
+    return out
+  }
   const out = [{ type: 'DRAW_DECK' }]
-  if (canTakeDiscardTop(state, me).ok) out.push({ type: 'TAKE_DISCARD' })
+  if (mode !== 'noDiscard' && canTakeDiscardTop(state, me).ok) out.push({ type: 'TAKE_DISCARD' })
   if (state.riverEnabled)
     state.river.forEach((c, index) => {
       out.push({ type: 'TAKE_RIVER', index, playNow: false })
@@ -180,14 +202,15 @@ function playActions(state, frame) {
     const c = forced.card
     const out = playsOf(state, me, c)
     if (canStake(c) && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
-    if (!forced.consumesPlay) out.push({ type: 'DISCARD_CARD', uid: c.uid })
+    if (canDiscardFromHand(state, me, c).ok) out.push({ type: 'DISCARD_CARD', uid: c.uid })
     return out
   }
   const out = []
   for (const c of p.hand) {
     out.push(...playsOf(state, me, c))
     if (canStake(c) && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
-    out.push({ type: 'DISCARD_CARD', uid: c.uid })
+    // (question canDiscard : une carte qui ne peut pas quitter la main)
+    if (canDiscardFromHand(state, me, c).ok) out.push({ type: 'DISCARD_CARD', uid: c.uid })
   }
   // Arc-en-ciel : on peut s'arrêter avant d'avoir joué toutes ses cartes
   if (canEndPlays(state)) out.push({ type: 'END_PLAYS' })
@@ -215,13 +238,21 @@ function apply(s, frame, action) {
   switch (action.type) {
     // ----- étape draw --------------------------------------------------------
     case 'DRAW_DECK': {
-      if (frame.step !== 'draw') return false
+      if (frame.step !== 'draw' || drawMode(s, s.current) === 'none') return false
       draw(s, s.current)
       frame.step = 'play'
       return true
     }
+    case 'SKIP_DRAW': {
+      // pas de pioche ce tour (drawMode 'none') : on passe à l'étape play
+      if (frame.step !== 'draw' || drawMode(s, s.current) !== 'none') return false
+      frame.step = 'play'
+      log(s, `${p.name} ne pioche pas ce tour`)
+      return true
+    }
     case 'TAKE_DISCARD': {
       if (frame.step !== 'draw' || !canTakeDiscardTop(s, s.current).ok) return false
+      if (['none', 'noDiscard'].includes(drawMode(s, s.current))) return false
       const card = take(s, 'discard', s.discard.at(-1).card.uid)
       setForced(s, card, true)
       frame.step = 'play'
@@ -229,7 +260,7 @@ function apply(s, frame, action) {
       return true
     }
     case 'TAKE_RIVER': {
-      if (frame.step !== 'draw' || !s.riverEnabled) return false
+      if (frame.step !== 'draw' || !s.riverEnabled || drawMode(s, s.current) === 'none') return false
       const i = action.index
       if (i < 0 || i >= s.river.length) return false
       if (action.playNow && !canTakeRiverNow(s, s.current, s.river[i])) return false
@@ -305,10 +336,10 @@ function apply(s, frame, action) {
     }
     case 'DISCARD_CARD': {
       if (frame.step !== 'play') return false
-      // une carte prise dans la défausse ou la rivière doit être réellement jouée
-      if (d.forced?.card.uid === action.uid && d.forced.consumesPlay) return false
       const played = playedCard(s, frame, action.uid)
-      if (!played) return false
+      // une carte prise dans la défausse ou la rivière doit être réellement
+      // jouée ; une carte peut ne pas pouvoir quitter la main (question canDiscard)
+      if (!played || !canDiscardFromHand(s, s.current, played.card).ok) return false
       if (!played.fromForced) take(s, { hand: s.current }, played.card.uid)
       put(s, played.card, 'discard', { by: s.current })
       log(s, `${p.name} défausse une carte`)
@@ -400,7 +431,7 @@ const turn = {
   fallback(state, frame, actor) {
     const legal = turn.legal(state, frame, actor)
     const pickType = (type) => legal.find((a) => a.type === type)
-    if (frame.step === 'draw') return pickType('DRAW_DECK')
+    if (frame.step === 'draw') return pickType('DRAW_DECK') ?? pickType('SKIP_DRAW')
     return pickType('END_PLAYS') ?? pickType('DISCARD_CARD') ?? legal[0] ?? null
   },
   // tout est public : la carte forcée vient de la défausse ou de la rivière

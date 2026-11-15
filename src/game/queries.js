@@ -28,14 +28,15 @@
 // Une carte est EN JEU (ses modificateurs comptent) quand elle est posée sur
 // un plateau (malus reçus compris) et pas retournée (meta.used), ou au centre
 // de la table sur le dessus de sa pile (source 'global', sans propriétaire :
-// seule la portée 'everyone' la concerne). Les personnages et les règles
-// bonus d'une extension viendront avec leurs extensions ('character', 'bonus').
+// seule la portée 'everyone' la concerne). Les règles bonus d'une extension
+// en jeu (source 'bonus', sans carte : registerBonusRules) comptent toujours,
+// comme un effet personnel. Les personnages viendront avec Fantastique.
 //
 // Toutes les réponses sont combinées par UNE fonction, resolve() : c'est le
 // seul endroit où la précédence est décidée (§5.3, INTERACTIONS.md G1–G4).
 // Les questions marchent sur l'état complet comme sur une vue (viewFor).
 // ---------------------------------------------------------------------------
-import { BEHAVIOURS, behavioursVersion } from './cards/index.js'
+import { BEHAVIOURS, behavioursVersion, bonusRulesOf } from './cards/index.js'
 import { boardCards, malusOf, metaOf, centerInForce } from './state.js'
 
 // --- la liste des questions (§5.1) -------------------------------------------
@@ -105,7 +106,7 @@ export function collect(s, name, q) {
   const defs = index()[name]
   if (!defs) throw new Error(`Question inconnue : ${name}`)
   const out = []
-  if (defs.size === 0) return out
+  if (defs.size === 0 && !bonusRulesOf(s).length) return out
   s.players.forEach((p, owner) => {
     const malus = new Set(malusOf(p).map((c) => c.uid))
     for (const card of boardCards(p)) {
@@ -131,6 +132,17 @@ export function collect(s, name, q) {
       const effect = typeof m.effect === 'function' ? m.effect(q, self, s) : m.effect
       if (!effect) continue
       out.push({ source: 'global', seq: metaOf(s, card.uid).seq, card, owner: null, effect })
+    }
+  }
+  // règles bonus des extensions en jeu : sans carte ni propriétaire (seq 0)
+  for (const rule of bonusRulesOf(s)) {
+    const self = { card: null, owner: null, rule }
+    for (const m of rule.modifiers ?? []) {
+      if (m.query !== name || !appliesTo(m, q, null)) continue
+      if (m.when && !m.when(q, self, s)) continue
+      const effect = typeof m.effect === 'function' ? m.effect(q, self, s) : m.effect
+      if (!effect) continue
+      out.push({ source: 'bonus', seq: 0, card: null, owner: null, rule: rule.id, effect })
     }
   }
   return out

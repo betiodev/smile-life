@@ -30,8 +30,9 @@ function makePlayer(name, color = null) {
     specials: [],       // cartes spéciales utilisées (retournées)
     malus: [],          // malus reçus (retournés)
     skipTurns: 0,
-    wasBandit: false,
-    didAttentat: false,
+    extraTurns: 0,      // tours de plus à jouer tout de suite (« rejouez » : un tour entier)
+    handDelta: 0,       // changement durable de la taille de main (rules.js handSize)
+    history: { wasBandit: false, didAttentat: false }, // souvenirs (Légion d'honneur ; extensions)
     architectFreeUsed: false,
   }
 }
@@ -64,6 +65,7 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
       riverEnabled: river,
       riverIdle: 0,
       current: 0,         // joueur du tour
+      direction: 1,       // sens du jeu : +1 (aiguilles d'une montre) ou −1 (rules.js nextPlayer)
       stack: [],          // pile des flux : [tour, …] (src/game/flows/)
       casino: null,
       log: [],

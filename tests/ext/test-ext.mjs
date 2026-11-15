@@ -11,6 +11,11 @@
 //                     propriétaire contre les autres joueurs (meta.protectedBy,
 //                     question isProtected).
 //   mise en place     3 cartes du dessous de la pioche mises de côté (spare).
+//   règle bonus       (sans carte, toujours en vigueur avec l'extension) :
+//                     +1 smile en fin de partie par Bouclier posé.
+// Un deuxième module, 'probe', n'a ni carte ni étape : ses règles bonus
+// répondent aux questions du tour (drawMode, nextPlayer, skipLength,
+// canDiscard) selon state.probe, que les tests remplissent eux-mêmes.
 // Importer ce fichier l'enregistre ; une partie ne l'utilise que si elle le
 // choisit : START_GAME { extensions: ['test'] }.
 // ---------------------------------------------------------------------------
@@ -100,12 +105,41 @@ if (!EXTENSIONS.includes('test')) {
     defs: TEST_DEFS,
     behaviours: BEHAVIOURS,
     flows: { 'test.notice': notice },
+    bonus: [{
+      id: 'test.bonus-shield',
+      modifiers: [{
+        query: 'scoreBonus', scope: 'everyone',
+        effect: (q, self, s) => {
+          const n = s.players[q.player].specials.filter((c) => c.def === 'test.shield').length
+          return n ? { add: n } : null
+        },
+      }],
+    }],
     setup: [{
       id: 'test.spare',
       run(s) {
         setAsideFromDeck(s, SPARE_COUNT)
         log(s, `🗃️ ${SPARE_COUNT} cartes sont mises de côté`)
       },
+    }],
+  })
+}
+
+// --- 'probe' : réponses choisies par le test (state.probe[question]) -----------
+const PROBED = ['drawMode', 'nextPlayer', 'skipLength', 'canDiscard', 'handSize']
+if (!EXTENSIONS.includes('probe')) {
+  registerExtension({
+    id: 'probe',
+    bonus: [{
+      id: 'probe.answers',
+      modifiers: PROBED.map((query) => ({
+        query, scope: 'everyone',
+        effect: (q, self, s) => {
+          const a = s.probe?.[query]
+          return typeof a === 'function' ? a(q) : a ?? null
+        },
+      })),
+      on: { roundEnd(s) { if (s.probe) s.probe.rounds = (s.probe.rounds ?? 0) + 1 } },
     }],
   })
 }

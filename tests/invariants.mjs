@@ -105,7 +105,7 @@ function candidates(s) {
 
   const out = []
   // READY n'existe plus (passage d'écran : src/session/hotseat.js) : toujours refusé
-  for (const type of ['READY', 'DRAW_DECK', 'TAKE_DISCARD', 'RESIGN', 'DIVORCE_VOLUNTARY', 'STOP_ADULTERY',
+  for (const type of ['READY', 'DRAW_DECK', 'SKIP_DRAW', 'TAKE_DISCARD', 'RESIGN', 'DIVORCE_VOLUNTARY', 'STOP_ADULTERY',
     'END_PLAYS', 'PURCHASE_CANCEL', 'CLOSE_INFO']) out.push({ type })
   out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
   for (const index of indexes) {

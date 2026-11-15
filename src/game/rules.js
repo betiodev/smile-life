@@ -34,8 +34,23 @@ export const jobSlots = (s, pIdx) => ask(s, 'jobSlots', { player: pIdx }, 1)
 export const marriageSlots = (s, pIdx) => ask(s, 'marriageSlots', { player: pIdx }, 1)
 export const flirtLimit = (s, pIdx) => ask(s, 'flirtLimit', { player: pIdx }, 5)
 export const studyCardLimit = (s, pIdx) => ask(s, 'studyCardLimit', { player: pIdx }, 6)
-// taille de main (Chercheur : 6)
-export const handSize = (s, pIdx) => ask(s, 'handSize', { player: pIdx }, 5)
+// taille de main (Chercheur : 6) ; handDelta : changement durable propre au
+// joueur (Roulette russe −1, Magicien ±1…), 0 dans le jeu de base
+export const handSize = (s, pIdx) => ask(s, 'handSize', { player: pIdx }, 5 + (s.players[pIdx].handDelta ?? 0))
+// nombre de tours passés par un malus (imprimé : Accident 1, Prison 3…)
+export const skipLength = (s, pIdx, card, printed) => ask(s, 'skipLength', { player: pIdx, card }, printed)
+// façon de piocher au début du tour : 'normal' (pioche, défausse, rivière),
+// 'none' (pas de pioche ce tour), 'noDiscard' (pas de carte de la défausse).
+// D'autres façons (piocher deux et en garder une, jouer puis piocher, pioche
+// face visible) viendront avec les cartes qui les demandent.
+export const DRAW_MODES = ['normal', 'none', 'noDiscard']
+export const drawMode = (s, pIdx) => ask(s, 'drawMode', { player: pIdx }, 'normal')
+// joueur suivant : dans le sens du jeu (state.direction, +1 = sens des
+// aiguilles d'une montre), avant les tours passés
+export const nextPlayer = (s, from) => {
+  const n = s.players.length
+  return ask(s, 'nextPlayer', { player: from }, (((from + (s.direction ?? 1)) % n) + n) % n)
+}
 // tous les emplacements de métier occupés ?
 const jobsFull = (s, pIdx) => jobs(s.players[pIdx]).length >= jobSlots(s, pIdx)
 // groupes de cartes : tags des définitions (src/data/base.js)
@@ -234,8 +249,8 @@ export function canPoseSelf(state, pIdx, card, { ignoreStudies = false } = {}) {
     case 'distinction': {
       if (card.key === 'legion') {
         // (Bandit en poste : cards/base.js)
-        if (p.wasBandit) return NO('Interdite aux Bandits, présents ou passés')
-        if (p.didAttentat) return NO('Interdite aux auteurs d’attentat')
+        if (p.history.wasBandit) return NO('Interdite aux Bandits, présents ou passés')
+        if (p.history.didAttentat) return NO('Interdite aux auteurs d’attentat')
         return OK
       }
       // grand prix

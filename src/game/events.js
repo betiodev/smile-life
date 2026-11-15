@@ -11,7 +11,7 @@
 // joueur (seuls les flux attendent, étape 08). Les événements ne sont pas
 // rangés dans l'état : ils sont traités tout de suite, dans l'ordre.
 // ---------------------------------------------------------------------------
-import { BEHAVIOURS, behavioursVersion } from './cards/index.js'
+import { BEHAVIOURS, behavioursVersion, bonusRulesOf } from './cards/index.js'
 import { boardCards, metaOf, centerInForce } from './state.js'
 
 // La liste est fermée : un nom inconnu est une erreur.
@@ -58,6 +58,12 @@ const inForce = (s, card) => {
 export function emit(s, name, ev = {}) {
   const defs = listeners()[name]
   if (!defs) throw new Error(`Événement inconnu : ${name}`)
+  // règles bonus des extensions en jeu (sans carte)
+  for (const rule of bonusRulesOf(s)) {
+    if (!rule.on?.[name]) continue
+    if (!EVENTS.includes(name)) throw new Error(`Événement inconnu : ${name}`)
+    rule.on[name](s, ev, { card: null, owner: null, rule })
+  }
   if (defs.size === 0) return
   // cartes abonnées en jeu au moment de l'événement, joueur par joueur
   const subscribers = []
