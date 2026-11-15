@@ -11,10 +11,7 @@
 //   fromForced : elle vient de la défausse / la rivière / l'Étoile filante
 // ---------------------------------------------------------------------------
 import { attach, place, put, log } from '../primitives.js'
-import {
-  validatePayment, unusedHeritage, heritageLiasses, architectFree, cheapestPayment, purchaseCost,
-} from '../rules.js'
-import { unspentMoney } from '../state.js'
+import { checkPayment, architectFree, cheapestPayment, purchaseCost } from '../rules.js'
 import { endFlow } from './index.js'
 
 const copy = (x) => JSON.parse(JSON.stringify(x))
@@ -25,7 +22,7 @@ const purchase = {
   },
   actors: (state) => [state.current],
   // le paiement valide le moins cher (et l'Architecte) : le reducer accepte
-  // tout paiement que validatePayment accepte (ARCHITECTURE.md §6.5)
+  // tout paiement que checkPayment accepte (règle : la question paymentRule) (ARCHITECTURE.md §6.5)
   legal(state, frame) {
     const p = state.players[state.current]
     const { card } = frame.data
@@ -45,20 +42,13 @@ const purchase = {
         const isFree = !!action.useArchitect && architectFree(s, s.current, card)
         const cost = purchaseCost(s, s.current, card)
         if (!isFree) {
-          const chosen = []
-          const unspent = unspentMoney(s, p)
-          for (const su of action.salaryUids || []) {
-            const sal = unspent.find((c) => c.uid === su)
-            if (sal && !chosen.includes(sal)) chosen.push(sal)
-          }
-          const heritage = action.useHeritage ? heritageLiasses(s, p) : 0
           // pas de salaire superflu : impossible de sur-investir pour échapper à l'Impôt
-          if (!validatePayment(cost, chosen.map((c) => c.level), heritage).ok) return false
-          const paid = chosen.reduce((t, c) => t + c.level, 0) + heritage
-          // les salaires passent sous l'acquisition qu'ils ont payée
-          for (const sal of chosen) attach(s, sal.uid, card.uid)
-          // l'Héritage (tout ou rien) passe sous l'acquisition, avec les salaires
-          if (heritage > 0) for (const c of unusedHeritage(s, p)) attach(s, c.uid, card.uid)
+          const pay = checkPayment(s, s.current, cost, action)
+          if (!pay.ok) return false
+          const paid = pay.total
+          // l'argent choisi (salaires, et l'Héritage tout ou rien) passe sous
+          // l'acquisition qu'il a payée
+          for (const c of pay.cards) attach(s, c.uid, card.uid)
           log(s, `${p.name} achète ${card.name} pour ${cost} liasses (${paid} investies${paid > cost ? ' — pas de monnaie !' : ''})`)
         } else {
           p.architectFreeUsed = true

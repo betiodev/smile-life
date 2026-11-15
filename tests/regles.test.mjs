@@ -5,11 +5,12 @@ import {
   flirtStealVictims, cheapestPayment, birthdayDonors, canTarget, interimReplaced,
   paidSalaries, spentSalaries, availableLiasses, effectiveSalaryLevel,
   unusedHeritage, paidCards, spentCards, canStopAdultery, canTakeRiverNow, heritageLiasses,
-  handSize, price, needsPayment, architectFree, salaryLevels, hasTag,
+  handSize, price, needsPayment, architectFree, salaryLevels, hasTag, checkPayment, paymentRule,
 } from '../src/game/rules.js'
-import { computeScore } from '../src/game/scoring.js'
+import { computeScore, computeScores, cardSmiles } from '../src/game/scoring.js'
 import {
   jobOf, marriageOf, adulteryOf, moneyOf, unspentMoney, malusOf, outOfGameCards, isMarried, isUsed, metaOf,
+  moneyTraits, moneyValue, canStake, taxableMoney, giftableMoney,
 } from '../src/game/state.js'
 import {
   setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard, loseJob,
@@ -172,14 +173,14 @@ function check(label, cond) {
   check('Méta : l’acquisition est posée après les salaires',
     metaOf(okBuy, travel.uid).seq > Math.max(...[sal2[0], sal2[1], sal1].map((c) => metaOf(okBuy, c.uid).seq)))
   // acquisition retirée du jeu : ses salaires restent au joueur, retournés
-  const score = computeScore(buyer).total
+  const score = computeScore(okBuy, buyer).total
   const lost = structuredClone(okBuy)
   liftCard(lost, lost.players[0].acquisitions, travel.uid)
   const sans = lost.players[0]
   check('Acquisition perdue : sa méta disparaît, les salaires ne sont plus posés dessus',
     !metaOf(lost, travel.uid) && [sal2[0], sal2[1]].every((c) => isUsed(lost, c) && !metaOf(lost, c.uid).on))
   check('Acquisition perdue : ses salaires deviennent « dépensés »', spentSalaries(lost, sans).length === 2)
-  check('Salaires dépensés : smiles conservés', computeScore(sans).total === score - travel.smiles)
+  check('Salaires dépensés : smiles conservés', computeScore(lost, sans).total === score - travel.smiles)
   check('Salaires dépensés : inutilisables pour payer', availableLiasses(lost, sans) === 1)
 }
 
@@ -227,7 +228,7 @@ function check(label, cond) {
   const v = after.players[1]
   check('Licenciement : Grand Prix sans effet, Légion intacte',
     !jobOf(v) && isUsed(after, gp) && !isUsed(after, legion))
-  check('Licenciement : le Grand Prix compte toujours ses smiles', computeScore(v).cat['Distinctions 🏅'] === gp.smiles + legion.smiles)
+  check('Licenciement : le Grand Prix compte toujours ses smiles', computeScore(after, v).cat['Distinctions 🏅'] === gp.smiles + legion.smiles)
   const suite = structuredClone(after)
   setJob(suite, suite.players[1], autre)
   check('Nouveau métier : le Grand Prix reste sans effet', effectiveSalaryLevel(suite, suite.players[1]) === autre.salaryLevel)
@@ -735,7 +736,7 @@ function check(label, cond) {
   const r3 = gameReducer(s3, { type: 'PLAY_SELF', uid: marriage.uid, by: 0 })
   check('Mariage : les flirts restent posés, inchangés (jamais retournés)',
     marriageOf(r3.players[0])?.uid === marriage.uid && JSON.stringify(r3.players[0].flirts) === before)
-  check('Mariage : les flirts comptent toujours leurs smiles', computeScore(r3.players[0]).cat['Flirts 💕'] === 3)
+  check('Mariage : les flirts comptent toujours leurs smiles', computeScore(r3, 0).cat['Flirts 💕'] === 3)
   check('Flirts : jamais rangés parmi les cartes retournées',
     !r3.players[0].specials.some((c) => c.type === 'flirt') && !malusOf(r3.players[0]).some((c) => c.type === 'flirt'))
 }
@@ -797,13 +798,25 @@ function check(label, cond) {
   const licorne = find((c) => c.key === 'licorne')
   const arc = find((c) => c.key === 'arcenciel')
   const etoile = find((c) => c.key === 'etoile')
-  const p = freshState().players[0]
-  p.acquisitions = [licorne]
-  const acq = (specials) => computeScore({ ...p, specials }).cat['Acquisitions 🏠']
+  const acq = (specials) => {
+    const s = freshState()
+    placeCard(s, s.players[0].acquisitions, licorne)
+    for (const c of specials) placeCard(s, s.players[0].specials, c)
+    return computeScore(s, 0).cat['Acquisitions 🏠']
+  }
   check('Licorne seule : 3 smiles', acq([]) === 3)
   check('Licorne + Arc-en-ciel seul : pas doublée', acq([arc]) === 3)
   check('Licorne + Étoile filante seule : pas doublée', acq([etoile]) === 3)
   check('Licorne + Arc-en-ciel + Étoile filante : doublée (6)', acq([arc, etoile]) === 6)
+  {
+    const s = freshState()
+    placeCard(s, s.players[0].acquisitions, licorne)
+    placeCard(s, s.players[0].specials, arc)
+    placeCard(s, s.players[0].specials, etoile)
+    const ch = computeScore(s, 0).changed['Acquisitions 🏠']
+    check('Licorne doublée : signalée à l’écran de fin (3 → 6)', ch?.length === 1 && ch[0].printed === 3 && ch[0].smiles === 6)
+    check('Licorne doublée : seulement chez son propriétaire', computeScore(s, 1).changed['Acquisitions 🏠'] === undefined)
+  }
 }
 
 // --- Liste des actions permises (legalActions) et trous fermés dans le reducer ---
@@ -1085,6 +1098,56 @@ function check(label, cond) {
   loseJob(s, 0, { cause: 'licenciement', by: 1 })
   setJob(s, s.players[0], job('architecte'))
   check('Architecte : un nouveau métier d’Architecte redonne une maison offerte', architectFree(s, 0, houses[1]))
+}
+
+// --- Argent, prix et décompte (étape 11 : traits money, price, paymentRule, cardSmiles)
+{
+  const her = find((c) => c.key === 'heritage')
+  const sal = (n, k = 0) => findAll((c) => c.type === 'salary' && c.level === n)[k]
+  const job = (key) => find((c) => c.type === 'job' && c.key === key)
+  const s = freshState()
+  const [ana, ben] = s.players
+  check('Traits : un salaire vaut son niveau, imposable, misable, à offrir, avec un métier',
+    JSON.stringify(moneyTraits(sal(3))) === JSON.stringify({ value: 3, taxable: true, casino: true, gift: true, payTax: true, needsJob: true }))
+  check('Traits : l’Héritage vaut 3, tout ou rien, ni imposable ni misable ni à offrir',
+    moneyValue(her) === 3 && moneyTraits(her).allOrNothing && !moneyTraits(her).taxable && !canStake(her) && !moneyTraits(her).gift)
+  check('Traits : une carte sans argent ne vaut rien', moneyValue(find((c) => c.type === 'study')) === 0 && !canStake(her))
+  check('Traits : pas copiés sur la carte (lus dans la définition)', !('money' in sal(1)))
+  // Impôt : vise l'argent imposable, pas l'Héritage
+  setJob(s, ben, job('pizzaiolo'))
+  placeCard(s, ben.specials, her)
+  const impot = find((c) => c.key === 'impot')
+  check('Impôt : l’Héritage seul n’est pas imposable', taxableMoney(s, ben).length === 0 && !canTarget(s, 0, impot, 1).ok)
+  addMoney(s, ben, sal(1))
+  check('Impôt : un salaire non investi est imposable', taxableMoney(s, ben).length === 1 && canTarget(s, 0, impot, 1).ok)
+  // Anniversaire : seul l'argent qu'on peut offrir
+  check('Anniversaire : l’Héritage ne s’offre pas', giftableMoney(s, ben).map((c) => c.uid).join() === sal(1).uid)
+  // achat : salaires et Héritage, règle de paiement de base
+  check('Règle de paiement de base : « nécessaire »', paymentRule(s, 1) === 'necessary')
+  const pay = checkPayment(s, 1, 4, { salaryUids: [sal(1).uid], useHeritage: true })
+  check('Paiement : salaire + Héritage, tout passe sous l’acquisition', pay.ok && pay.total === 4 && pay.cards.length === 2)
+  check('Paiement : salaire inconnu ignoré', checkPayment(s, 1, 3, { salaryUids: ['x'], useHeritage: true }).total === 3)
+  check('Règle « exacte » : surpayer refusé', !validatePayment(3, [2, 2], 0, 'exact').ok && validatePayment(3, [2, 1], 0, 'exact').ok)
+  // prix : maison à moitié prix une fois marié (modificateur des cartes Mariage)
+  const villa = find((c) => c.name === 'Villa')
+  const simple = find((c) => c.name === 'Maison simple')
+  const voyage = find((c) => hasTag(c, 'travel'))
+  check('Prix : maison au prix imprimé sans mariage', price(s, 0, villa) === 10)
+  setMarriage(s, ana, find((c) => c.type === 'marriage'))
+  check('Prix : maison à moitié prix une fois marié (Villa 10 → 5)', price(s, 0, villa) === 5 && price(s, 0, simple) === 3)
+  check('Prix : le voyage n’est pas concerné par le mariage', price(s, 0, voyage) === 3)
+  check('Prix : le mariage d’Ana ne change pas les prix de Ben', price(s, 1, villa) === 10)
+  setJob(s, ana, job('architecte'))
+  check('Prix : Architecte marié, maison offerte au choix (sinon moitié prix)',
+    price(s, 0, villa, { withOptional: true }) === 0 && price(s, 0, villa) === 5)
+  // décompte : smiles par carte, somme par catégorie, bonus
+  check('Décompte : cardSmiles = smiles imprimés', cardSmiles(s, 0, villa) === villa.smiles)
+  const sc = computeScore(s, 0)
+  check('Décompte : mêmes catégories qu’avant',
+    Object.keys(sc.cat).join() === 'Études 📚,Métier 💼,Salaires 💰,Flirts 💕,Mariage 💒,Adultère 😏,Enfants 👶,Acquisitions 🏠,Distinctions 🏅')
+  check('Décompte : total = somme des catégories + bonus (0 dans le jeu de base)',
+    sc.bonus === 0 && sc.total === Object.values(sc.cat).reduce((a, b) => a + b, 0))
+  check('Décompte : par indice ou par joueur, et pour tous', computeScore(s, ana).total === sc.total && computeScores(s).length === 2)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

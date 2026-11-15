@@ -1,4 +1,4 @@
-import { computeScore, licorneBonus } from '../game/scoring'
+import { computeScores } from '../game/scoring'
 
 const CONFETTI_COLORS = ['#f472b6', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f87171']
 
@@ -19,7 +19,8 @@ function Confetti() {
 }
 
 export default function GameOverScreen({ state, dispatch }) {
-  const scores = state.players.map((p, i) => ({ p, i, ...computeScore(p) }))
+  const all = computeScores(state)
+  const scores = state.players.map((p, i) => ({ p, i, ...all[i] }))
   scores.sort((a, b) => b.total - a.total)
   const categories = Object.keys(scores[0].cat)
   const medals = ['🥇', '🥈', '🥉', '4e', '5e']
@@ -54,13 +55,26 @@ export default function GameOverScreen({ state, dispatch }) {
                   {scores.map((s) => (
                     <td key={s.i} className="py-1.5 px-2 text-center font-bold">
                       {s.cat[c] || <span className="text-gray-300">–</span>}
-                      {c === 'Acquisitions 🏠' && licorneBonus(s.p) && s.p.acquisitions.some((a) => a.key === 'licorne') && (
-                        <span title="Licorne doublée !"> 🦄✨</span>
-                      )}
+                      {/* cartes qui ne comptent pas leurs smiles imprimés (Licorne doublée…) */}
+                      {(s.changed[c] ?? []).map(({ card, printed, smiles }) => (
+                        <span key={card.uid} title={smiles === printed * 2 ? `${card.name} doublée !` : `${card.name} : ${smiles} smiles au lieu de ${printed}`}>
+                          {' '}{card.emoji ?? ''}✨
+                        </span>
+                      ))}
                     </td>
                   ))}
                 </tr>
               ))}
+              {scores.some((s) => s.bonus) && (
+                <tr className="border-b border-gray-100">
+                  <td className="py-1.5 pr-2 font-semibold text-gray-600">Bonus ✨</td>
+                  {scores.map((s) => (
+                    <td key={s.i} className="py-1.5 px-2 text-center font-bold">
+                      {s.bonus || <span className="text-gray-300">–</span>}
+                    </td>
+                  ))}
+                </tr>
+              )}
               <tr className="bg-amber-50">
                 <td className="py-2 pr-2 font-black text-gray-800">TOTAL 😄</td>
                 {scores.map((s) => (

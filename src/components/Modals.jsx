@@ -5,9 +5,9 @@
 import { useState } from 'react'
 import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
-import { canTarget, purchaseCost, architectFree as freeForArchitect, pistonable, validatePayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
+import { canTarget, purchaseCost, architectFree as freeForArchitect, pistonable, checkPayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
 import { legalActions } from '../game/legal'
-import { jobOf, isMarried, unspentMoney, malusOf, choiceOf } from '../game/state'
+import { jobOf, isMarried, looseMoney, canStake, malusOf, choiceOf } from '../game/state'
 
 // until : échéance du pilote pour ce choix (sans réponse, il joue l'action
 // par défaut) ; affichée en compte à rebours
@@ -44,12 +44,10 @@ function PurchaseModal({ state, dispatch, until }) {
   const cost = purchaseCost(state, state.current, card)
   const architectFree = freeForArchitect(state, state.current, card)
 
-  const available = unspentMoney(state, p)
+  const available = looseMoney(state, p)
   const liasses = heritageLiasses(state, p)
-  const levels = chosen.map((u) => available.find((c) => c.uid === u).level)
-  const heritage = useHeritage ? liasses : 0
-  const total = levels.reduce((a, b) => a + b, 0) + heritage
-  const check = validatePayment(cost, levels, heritage)
+  const check = checkPayment(state, state.current, cost, { salaryUids: chosen, useHeritage })
+  const total = check.total
   const toggle = (u) => setChosen(chosen.includes(u) ? chosen.filter((x) => x !== u) : [...chosen, u])
 
   return (
@@ -294,7 +292,7 @@ function VengeanceModal({ state, dispatch, until }) {
 // --- Casino : mise immédiate ---------------------------------------------------
 function CasinoStakeModal({ state, dispatch, until }) {
   const p = state.players[state.current]
-  const salaries = p.hand.filter((c) => c.type === 'salary')
+  const salaries = p.hand.filter(canStake)
   return (
     <Modal until={until} title="🎰 Casino ouvert ! Misez un salaire de votre main (face cachée) ?">
       <div className="flex gap-2 flex-wrap justify-center">

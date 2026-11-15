@@ -25,7 +25,7 @@ import {
   canPlace, canTarget, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays, isInterim,
 } from '../rules.js'
 import {
-  jobOf, isMarried, marriageOf, adulteryOf, turnFrame, topFrame, forcedOf,
+  jobOf, isMarried, marriageOf, adulteryOf, turnFrame, topFrame, forcedOf, canStake, moneyValue,
 } from '../state.js'
 import { poseSelf, applyMalus } from '../effects.js'
 
@@ -171,14 +171,14 @@ function playActions(state, frame) {
   if (forced) {
     const c = forced.card
     const out = playsOf(state, me, c)
-    if (c.type === 'salary' && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
+    if (canStake(c) && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
     if (!forced.consumesPlay) out.push({ type: 'DISCARD_CARD', uid: c.uid })
     return out
   }
   const out = []
   for (const c of p.hand) {
     out.push(...playsOf(state, me, c))
-    if (c.type === 'salary' && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
+    if (canStake(c) && casinoOpen) out.push({ type: 'CASINO_BET', uid: c.uid })
     out.push({ type: 'DISCARD_CARD', uid: c.uid })
   }
   // Arc-en-ciel : on peut s'arrêter avant d'avoir joué toutes ses cartes
@@ -313,7 +313,7 @@ function apply(s, frame, action) {
       // (pris dans la défausse : la mise compte comme le jouer)
       if (frame.step !== 'play' || !s.casino) return false
       const played = playedCard(s, frame, action.uid)
-      if (!played || played.card.type !== 'salary') return false
+      if (!played || !canStake(played.card)) return false
       if (s.casino.stake && s.casino.stake.by === s.current) return false
       const { card, fromForced } = played
       if (!fromForced) take(s, { hand: s.current }, card.uid)
@@ -324,12 +324,13 @@ function apply(s, frame, action) {
         const first = s.casino.stake
         const firstP = s.players[first.by]
         let winnerIdx
-        if (first.card.level === card.level) {
+        const a = moneyValue(first.card), b = moneyValue(card)
+        if (a === b) {
           winnerIdx = s.current
-          log(s, `🎰 Même niveau (${card.level}) : ${p.name} remporte les deux salaires !`)
+          log(s, `🎰 Même niveau (${b}) : ${p.name} remporte les deux salaires !`)
         } else {
           winnerIdx = first.by
-          log(s, `🎰 Niveaux différents (${first.card.level} vs ${card.level}) : ${firstP.name} remporte les deux salaires !`)
+          log(s, `🎰 Niveaux différents (${a} vs ${b}) : ${firstP.name} remporte les deux salaires !`)
         }
         place(s, winnerIdx, first.card)
         place(s, winnerIdx, card)

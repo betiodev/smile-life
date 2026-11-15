@@ -4,7 +4,7 @@
 //
 //  modifiers  changent la réponse d'une question (src/game/queries.js) tant
 //             que la carte est en jeu : avantages et immunités des métiers,
-//             Grand Prix ;
+//             maisons à moitié prix (Mariages), Licorne, Grand Prix ;
 //  onPlace    ce que fait la carte quand son propriétaire la JOUE (de sa main,
 //             carte forcée, Piston) : avantages instantanés des métiers et
 //             cartes spéciales. onPlace(s, self) avec self = { card, owner },
@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 import { BASE_DEFS } from '../../data/base.js'
 import { hasTag, shuffle } from '../../data/index.js'
-import { jobOf, isMarried } from '../state.js'
+import { jobOf, isMarried, marriageOf, canStake } from '../state.js'
 import { flip, log, loseJob, draw, put, takeAll } from '../primitives.js'
 import { startFlow } from '../flows/index.js'
 import { addPlays, startRainbow } from '../flows/turn.js'
@@ -133,6 +133,33 @@ for (const d of BASE_DEFS) {
 }
 
 // ---------------------------------------------------------------------------
+// Mariages : maisons à moitié prix (arrondi au-dessus) une fois marié.
+// Seul le premier mariage compte (deux mariages ne font pas un quart de prix).
+// ---------------------------------------------------------------------------
+const MARRIAGES = {}
+const HALF_HOUSE = {
+  query: 'price', scope: 'owner',
+  when: (q, self, s) => hasTag(q.card, 'house') && marriageOf(s.players[self.owner])?.uid === self.card.uid,
+  effect: { multiply: 0.5 },
+}
+for (const d of BASE_DEFS) if (d.type === 'marriage') MARRIAGES[d.id] = { modifiers: [HALF_HOUSE] }
+
+// ---------------------------------------------------------------------------
+// Acquisitions
+// ---------------------------------------------------------------------------
+const ACQUISITIONS = {
+  // Licorne : doublée seulement avec l'Arc-en-ciel ET l'Étoile filante joués
+  'base.licorne': {
+    modifiers: [{
+      query: 'cardSmiles', scope: 'owner',
+      when: (q, self, s) => q.card.uid === self.card.uid &&
+        ['arcenciel', 'etoile'].every((k) => s.players[self.owner].specials.some((c) => c.key === k)),
+      effect: { multiply: 2 },
+    }],
+  },
+}
+
+// ---------------------------------------------------------------------------
 // Distinctions
 // ---------------------------------------------------------------------------
 const DISTINCTIONS = {
@@ -239,7 +266,7 @@ const SPECIALS = {
       const p = s.players[owner]
       s.casino = { owner, stake: null }
       log(s, `🎰 ${p.name} ouvre un Casino !`)
-      if (p.hand.some((c) => c.type === 'salary')) {
+      if (p.hand.some(canStake)) {
         startFlow(s, 'casino-stake')
         return true
       }
@@ -248,4 +275,4 @@ const SPECIALS = {
   },
 }
 
-export default { ...JOBS, ...DISTINCTIONS, ...SPECIALS }
+export default { ...JOBS, ...MARRIAGES, ...ACQUISITIONS, ...DISTINCTIONS, ...SPECIALS }

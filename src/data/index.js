@@ -22,9 +22,11 @@ export function defsFor(extensions = []) {
   return ['base', ...extensions].flatMap((e) => SETS[e])
 }
 
-// une carte de partie : les champs de la définition + uid + def (id de la définition)
+// une carte de partie : les champs de la définition + uid + def (id de la définition).
+// Les traits d'argent (money) ne sont pas copiés : on les lit dans la
+// définition (moneyTraits, src/game/state.js).
 export function instanceOf(d, uid) {
-  const { id, count, ...fields } = d
+  const { id, count, money, ...fields } = d
   return { uid, def: id, ...fields, tags: [...fields.tags] }
 }
 

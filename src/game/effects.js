@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 import { interimReplaced, hasTag, isGrandProf, needsPayment } from './rules.js'
 import { setBy } from './queries.js'
-import { jobOf, marriageOf, adulteryOf, topFlirt, unspentMoney } from './state.js'
+import { jobOf, marriageOf, adulteryOf, topFlirt, taxableMoney, giftableMoney, moneyValue } from './state.js'
 import { log, put, place, remove, removeAll, steal, loseJob, skip } from './primitives.js'
 import { startFlow } from './flows/index.js'
 import { BEHAVIOURS } from './cards/index.js'
@@ -30,11 +30,11 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
       place(s, targetIdx, card)
       break
     case 'impot': {
-      // le dernier salaire non investi
-      const last = unspentMoney(s, t).at(-1)
+      // le dernier salaire non investi (argent imposable)
+      const last = taxableMoney(s, t).at(-1)
       if (last) {
         remove(s, last.uid, { cause: 'impot', by: attackerIdx })
-        log(s, `${a.name} impose ${t.name} : salaire niveau ${last.level} défaussé`, 'malus')
+        log(s, `${a.name} impose ${t.name} : salaire niveau ${moneyValue(last)} défaussé`, 'malus')
       }
       place(s, targetIdx, card)
       break
@@ -194,11 +194,11 @@ export function giveBirthdayGifts(s, pIdx, gifts) {
   let count = 0
   s.players.forEach((q, qi) => {
     if (qi === pIdx) return
-    const gift = unspentMoney(s, q).find((c) => c.uid === gifts[qi])
+    const gift = giftableMoney(s, q).find((c) => c.uid === gifts[qi])
     if (gift) {
       steal(s, gift.uid, pIdx, { cause: 'anniversaire', by: qi })
       count++
-      log(s, `🎂 ${q.name} offre un salaire niveau ${gift.level} à ${p.name}`)
+      log(s, `🎂 ${q.name} offre un salaire niveau ${moneyValue(gift)} à ${p.name}`)
     } else {
       log(s, `🎂 ${q.name} n’a aucun salaire à offrir`)
     }

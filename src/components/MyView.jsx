@@ -111,7 +111,7 @@ function Piles({ game }) {
 // ---- centre : barre du haut -------------------------------------------------
 function TopBar({ game }) {
   const { state, viewer, p, locked, myTurn } = game
-  const score = computeScore(p)
+  const score = computeScore(state, p)
   return (
     <div className="ui-zoom flex items-center gap-2 min-w-0 h-8 shrink-0">
       <span className="w-3.5 h-3.5 rounded-full shrink-0 ring-2 ring-white/20" style={{ background: playerColor(p, viewer) }} />

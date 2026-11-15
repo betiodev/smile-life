@@ -18,7 +18,7 @@ function Zone({ title, children, empty, compact }) {
 // Tableau de vie d'un joueur : zones pro / perso / acquisitions / autres
 export default function PlayerBoard({ player, state, compact = false }) {
   const p = player
-  const score = computeScore(p)
+  const score = computeScore(state, p)
   const casinoHere = state.casino && state.players[state.casino.owner] === p
   const heritage = heritageLiasses(state, p)
   const size = compact ? 'xs' : 'sm'

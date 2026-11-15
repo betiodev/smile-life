@@ -55,7 +55,7 @@ const sameSet = (a, b) => [...a].sort().join() === [...b].sort().join()
   const deck = buildDeck()
   check('Chaque carte connaît sa définition (def)', deck.every((c) => CATALOGUE[c.def]))
   check('Une carte porte les champs de sa définition', deck.every((c) => {
-    const { id, count, ...fields } = CATALOGUE[c.def]
+    const { id, count, money, ...fields } = CATALOGUE[c.def]
     return Object.entries(fields).every(([k, v]) => JSON.stringify(c[k]) === JSON.stringify(v))
   }))
   check('Les tags d’une carte ne sont pas ceux de la définition (copie)', deck[0].tags !== CATALOGUE[deck[0].def].tags)

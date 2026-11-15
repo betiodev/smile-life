@@ -28,12 +28,12 @@ for (const { g, seed } of games) {
   if (s.casino?.stake) count += 1
   for (const p of s.players) {
     count += p.hand.length + boardCards(p).length
-    const sc = computeScore(p)
+    const sc = computeScore(s, p)
     if (sc.total < 0 || isNaN(sc.total)) throw new Error(`Partie ${g} (graine ${seed}) : score invalide`)
     if (p.hand.length !== 0) throw new Error(`Partie ${g} (graine ${seed}) : main non défaussée en fin de partie`)
   }
   if (count !== 200) throw new Error(`Partie ${g} (graine ${seed}) : ${count} cartes comptées au lieu de 200 !`)
-  const scores = s.players.map((p) => computeScore(p).total)
+  const scores = s.players.map((p) => computeScore(s, p).total)
   console.log(`Partie ${g} (graine ${seed}, ${n}j${river ? ', rivière' : ''}) : ${guard} étapes — scores ${scores.join(' / ')}`)
 }
 console.log(`\n✅ ${games.length} parties complètes sans erreur (${totalTurns} étapes au total, ${stats.birthdayGifts} cadeaux d’Anniversaire, ${stats.chercheurDiscards} défausses de Chercheur)`)
