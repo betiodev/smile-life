@@ -4,10 +4,8 @@
 import { gameReducer } from '../src/game/reducer.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/index.js'
-import {
-  setJob, setMarriage, setAdultery, setMoney, setMalus, putOutOfGame,
-  jobOf, marriageOf, adulteryOf, moneyOf, malusOf, outOfGameCards,
-} from '../src/game/state.js'
+import { jobOf, marriageOf, adulteryOf, moneyOf, malusOf, outOfGameCards } from '../src/game/state.js'
+import { setJob, setMarriage, setAdultery, setMoney, setMalus, putOutOfGame } from '../src/game/primitives.js'
 import { step, newGame } from './sim-lib.mjs'
 
 let passed = 0

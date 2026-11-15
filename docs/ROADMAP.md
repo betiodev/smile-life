@@ -164,7 +164,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Buy a house with salaries and an Héritage: the spent cards still show under the house and still count at the end.
   - Prompt: [docs/prompts/06-card-meta.md](prompts/06-card-meta.md)
 
-- [ ] **Step 07 — Primitives and events**
+- [x] **Step 07 — Primitives and events**
   - Goal: Route every draw, placement and loss of a card through a few shared functions that announce what happened.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/07-primitives-events.md and follow it.`
