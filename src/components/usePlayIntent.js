@@ -7,7 +7,7 @@
 //    choix « Annuler » / « Confirmer », envoi au moteur à la confirmation.
 // Annuler ne touche jamais l'état du jeu : la carte revient simplement en main.
 // Les cadeaux d'Anniversaire (après la confirmation) sont une étape du moteur
-// (state.pending) : voir useBirthdayGifts plus bas.
+// (le flux birthday, sur la pile) : voir useBirthdayGifts plus bas.
 // ---------------------------------------------------------------------------
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CARD_RATIO } from './PlayedStacks'
@@ -16,7 +16,7 @@ import {
   needsPayment, purchaseCost, architectFree, cheapestPayment, vengeanceChoices,
   birthdayDonors, flirtStealVictims, canPlayMalus, interimReplaced,
 } from '../game/rules'
-import { topFlirt, malusOf } from '../game/state'
+import { topFlirt, malusOf, choiceOf } from '../game/state'
 
 export const TOAST_MS = 3000
 
@@ -270,11 +270,11 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
 // pour lui son plus petit salaire libre.
 // ---------------------------------------------------------------------------
 export function useBirthdayGifts({ state, act, remember, active }) {
-  const pend = active && state.pending?.type === 'birthday' ? state.pending : null
-  const asking = pend ? pend.donors.find((i) => !(i in pend.gifts)) ?? null : null
+  const choice = active && choiceOf(state)?.type === 'birthday' ? choiceOf(state) : null
+  const asking = choice ? choice.donors.find((i) => !(i in choice.gifts)) ?? null : null
   const until = asking == null ? null : state.deadlines?.find((d) => d.seat === asking)?.until ?? null
 
-  const cardUid = pend?.card.uid
+  const cardUid = choice?.card.uid
   const give = useCallback((donor, uid) => {
     // la carte part du dock quand le dernier cadeau est reçu
     const dock = spots.dock()
@@ -282,5 +282,5 @@ export function useBirthdayGifts({ state, act, remember, active }) {
     act({ type: 'BIRTHDAY_GIFT', by: donor, uid })
   }, [act, remember, cardUid])
 
-  return pend ? { pending: pend, asking, until, give } : null
+  return choice ? { choice, asking, until, give } : null
 }

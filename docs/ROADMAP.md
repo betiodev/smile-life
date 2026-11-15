@@ -180,7 +180,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play a full game with at least one house purchase and one card taken from the discard pile.
   - Prompt: [docs/prompts/08-flow-stack-core.md](prompts/08-flow-stack-core.md)
 
-- [ ] **Step 09 — Flow stack, part 2: every remaining choice**
+- [x] **Step 09 — Flow stack, part 2: every remaining choice**
   - Goal: Finish the move to flows so the old `pending` slot disappears.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/09-flow-stack-port.md and follow it.`

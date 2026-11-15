@@ -313,6 +313,8 @@ next    nextPlayer, consuming skipped turns; extraTurns keeps the same player
 
 As built in step 08: `start`, `end` and `next` wait for nobody, so they are functions (`beginTurn`, `endTurn`) rather than steps stored in the frame. The frame's waiting steps are `draw` and `play`. In the base game the "instead of drawing" options (démission, divorce) are offered in the same wait as drawing. The forced card is turn data (`data.forced`), and a purchase is a frame of its own.
 
+As built in step 09: every choice is a flow (`src/game/flows/`, one file each) and `state.pending` is gone. A flow that pushes another flow on top of itself (Piston → Journaliste, Vengeance → Chercheur's discard) waits at step `done` and leaves when the child does. A Chercheur who resigns parks the turn at step `end` until their discard is chosen. The driver times every flow above the turn (30 s, then the flow's `fallback`); the turn itself is not timed.
+
 "Rejouez" exists in two strengths and the engine supports both: one more *play* in the same turn (`plays += 1`, as Arc-en-ciel does) and one more whole *turn* (`extraTurns += 1`). Which one each card means is a rules question per card.
 
 ### 6.5 One list of legal actions

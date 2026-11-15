@@ -19,46 +19,6 @@ const copy = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)))
 // carte face cachée : aucun lien avec la carte réelle (ni uid, ni contenu)
 const placeholder = (owner, i) => ({ uid: `hidden-${owner}-${i}`, hidden: true })
 
-// étapes « regard unique » : seul le joueur courant voit, et seulement
-// tant que l'étape est ouverte
-function pendingFor(pending, state, viewer) {
-  if (!pending) return null
-  const me = viewer != null && viewer === state.current
-  switch (pending.type) {
-    case 'medium':
-      // les 13 prochaines cartes : au Médium seulement
-      return me ? copy(pending) : { type: 'medium' }
-    case 'journalist':
-      // le Journaliste voit toutes les autres mains, le temps de la modale
-      return me
-        ? { type: 'journalist', hands: state.players.map((q, i) => (i === viewer ? null : copy(q.hand))) }
-        : { type: 'journalist' }
-    case 'chance':
-      // les 3 cartes piochées : au joueur courant seulement
-      return me ? copy(pending) : { type: 'chance', count: pending.cards.length }
-    case 'chef-troc': {
-      // Troc du Chef : les uid (carte protégée, carte prise) restent au Chef ;
-      // l'adversaire visé ne connaît que le nombre de cartes où piocher
-      const chef = state.players[state.current]
-      const pub = { type: 'chef-troc', step: pending.step }
-      if ('target' in pending) pub.target = pending.target
-      if (pending.step === 'opp-pick') {
-        pub.protected = !!pending.protectedUid
-        pub.pickCount = chef.hand.filter((c) => c.uid !== pending.protectedUid).length
-      }
-      if (me) {
-        if ('protectedUid' in pending) pub.protectedUid = pending.protectedUid
-        if ('oppPickedUid' in pending) pub.oppPickedUid = pending.oppPickedUid
-      }
-      return pub
-    }
-    default:
-      // anniversaire, Étoile filante, Piston, Troc, Vengeance, Casino,
-      // défausse du Chercheur (seul son joueur voit sa main) : publics
-      return copy(pending)
-  }
-}
-
 export function viewFor(state, viewer) {
   if (!state.players) {
     const { rng, seed, ...rest } = state
@@ -66,7 +26,7 @@ export function viewFor(state, viewer) {
   }
 
   // rng et seed : jamais dans une vue (ils permettraient de prédire la pioche)
-  const { deck, players, pending, casino, rng, seed, meta, stack, ...rest } = state
+  const { deck, players, casino, rng, seed, meta, stack, ...rest } = state
   const view = copy(rest)
   view.deckCount = deck.length
   view.players = players.map((p, i) => {
@@ -79,9 +39,11 @@ export function viewFor(state, viewer) {
   // publics dans le jeu de base)
   const seen = new Set(players.flatMap((p) => boardCards(p).map((c) => c.uid)))
   view.meta = Object.fromEntries(Object.entries(meta ?? {}).filter(([uid]) => seen.has(uid)).map(([uid, m]) => [uid, { ...m }]))
-  // pile des flux : chaque flux dit ce que ce joueur en sait (view)
+  // pile des flux : chaque flux dit ce que ce joueur en sait (sa fonction
+  // view, src/game/flows/) : les 13 cartes au Médium, les mains au
+  // Journaliste, les 3 cartes de la Chance au joueur courant, les uid du Troc
+  // du Chef au Chef ; le reste est public
   view.stack = stackView(state, viewer)
-  view.pending = pendingFor(pending, state, viewer)
   // mise du Casino : face cachée pour tous sauf celui qui a misé
   view.casino = casino && {
     owner: casino.owner,

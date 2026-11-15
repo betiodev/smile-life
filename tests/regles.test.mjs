@@ -15,8 +15,8 @@ import {
 } from '../src/game/primitives.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
-import { startFlow } from '../src/game/flows/index.js'
-import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn } from '../src/game/state.js'
+import { startFlow, setFlow } from '../src/game/flows/index.js'
+import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn, choiceOf } from '../src/game/state.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/index.js'
@@ -99,8 +99,8 @@ function check(label, cond) {
   setStep(s, 'play')
   const before = s.players[0].hand.length // 5
   s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: chance.uid })
-  check('Chance ouvre le choix des 3 cartes', s.pending?.type === 'chance' && s.pending.cards.length === 3)
-  const kept = s.pending.cards[1]
+  check('Chance ouvre le choix des 3 cartes', choiceOf(s)?.type === 'chance' && choiceOf(s).cards.length === 3)
+  const kept = choiceOf(s).cards[1]
   s = gameReducer(s, { by: s.current, type: 'CHANCE_PICK', uid: kept.uid })
   const p = s.players[0]
   check('La carte gardée est en main', p.hand.some((c) => c.uid === kept.uid))
@@ -255,13 +255,13 @@ function check(label, cond) {
   const s = setup()
   check('Anniversaire : Ben et Cléo sont donateurs', birthdayDonors(s, 0).join() === '1,2')
   const p = gameReducer(s, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
-  check('Anniversaire : un choix des donateurs est en attente', p.pending?.type === 'birthday' &&
-    p.pending.donors.join() === '1,2' && p.players[0].specials.some((c) => c.uid === anniv.uid))
+  check('Anniversaire : un choix des donateurs est en attente', choiceOf(p)?.type === 'birthday' &&
+    choiceOf(p).donors.join() === '1,2' && p.players[0].specials.some((c) => c.uid === anniv.uid))
   check('Anniversaire : aucun salaire ne bouge avant la fin des choix', moneyOf(p.players[0]).length === 0 &&
     moneyOf(p.players[1]).length === 2 && moneyOf(p.players[2]).length === 2)
   check('whoMustAct : les deux donateurs pendant l’Anniversaire', whoMustAct(p).join() === '1,2')
   check('Anniversaire : PLAY_SELF n’accepte plus de « gifts »',
-    gameReducer(s, { by: 0, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: b3.uid, 2: c2.uid } }).pending?.type === 'birthday')
+    choiceOf(gameReducer(s, { by: 0, type: 'PLAY_SELF', uid: anniv.uid, gifts: { 1: b3.uid, 2: c2.uid } }))?.type === 'birthday')
 
   // refus
   check('Anniversaire : le joueur fêté ne peut pas offrir', gift(p, 0, null) === p)
@@ -273,9 +273,9 @@ function check(label, cond) {
 
   // Ben puis Cléo
   const r1 = gift(p, 1, b3.uid)
-  check('Anniversaire : le choix de Ben est noté, rien n’est encore donné', r1.pending?.gifts[1] === b3.uid &&
+  check('Anniversaire : le choix de Ben est noté, rien n’est encore donné', choiceOf(r1)?.gifts[1] === b3.uid &&
     moneyOf(r1.players[1]).length === 2 && moneyOf(r1.players[0]).length === 0)
-  check('Anniversaire : p.pending reste inchangé (état immuable)', Object.keys(p.pending.gifts).length === 0)
+  check('Anniversaire : choiceOf(p) reste inchangé (état immuable)', Object.keys(choiceOf(p).gifts).length === 0)
   check('whoMustAct : seule Cléo reste à choisir', whoMustAct(r1).join() === '2')
   check('Anniversaire : Ben ne peut pas offrir deux fois', gift(r1, 1, b1.uid) === r1)
   const r2 = gift(r1, 2, null)
@@ -285,7 +285,7 @@ function check(label, cond) {
     moneyOf(r2.players[0]).some((c) => c.uid === c2.uid) && uids(r2.players[2]) === c4.uid)
   check('Anniversaire : journal dans l’ordre des joueurs', texts(r2, 2).join('|') ===
     '🎂 Ben offre un salaire niveau 3 à Ana|🎂 Cléo offre un salaire niveau 2 à Ana')
-  check('Anniversaire : le tour se termine ensuite normalement', r2.pending === null &&
+  check('Anniversaire : le tour se termine ensuite normalement', choiceOf(r2) === null &&
     r2.current === 1 && r2.turnCount === p.turnCount + 1 && whoMustAct(r2).join() === '1')
 
   // Cléo puis Ben : même résultat
@@ -301,10 +301,10 @@ function check(label, cond) {
   setMoney(sc, sc.players[2], [])
   addMoney(sc, sc.players[2], c4, { used: true })
   const pc = gameReducer(sc, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
-  check('Anniversaire : sans salaire libre, Cléo n’est pas donatrice', pc.pending.donors.join() === '1' && whoMustAct(pc).join() === '1')
+  check('Anniversaire : sans salaire libre, Cléo n’est pas donatrice', choiceOf(pc).donors.join() === '1' && whoMustAct(pc).join() === '1')
   check('Anniversaire : Cléo ne peut pas offrir', gift(pc, 2, null) === pc)
   const rc = gift(pc, 1, b1.uid)
-  check('Anniversaire : Cléo « n’a aucun salaire à offrir »', rc.pending === null &&
+  check('Anniversaire : Cléo « n’a aucun salaire à offrir »', choiceOf(rc) === null &&
     texts(rc, 2).join('|') === '🎂 Ben offre un salaire niveau 1 à Ana|🎂 Cléo n’a aucun salaire à offrir')
 
   // personne ne peut donner : réglé tout de suite
@@ -314,14 +314,14 @@ function check(label, cond) {
   addMoney(sn, sn.players[2], c4, { used: true })
   check('Anniversaire : sans salaire non investi, pas de donateur', birthdayDonors(sn, 0).length === 0)
   const rn = gameReducer(sn, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
-  check('Anniversaire sans donateur : réglé tout de suite', rn.pending === null && rn.current === 1 &&
+  check('Anniversaire sans donateur : réglé tout de suite', choiceOf(rn) === null && rn.current === 1 &&
     rn.log.some((e) => e.text === '🎂 Triste anniversaire pour Ana...'))
 
   // pendant un Arc-en-ciel : Ana continue de jouer après les cadeaux
   const sa = setup()
   setPlays(sa, 3)
   const ra = gift(gift(gameReducer(sa, { by: 0, type: 'PLAY_SELF', uid: anniv.uid }), 1, null), 2, null)
-  check('Anniversaire pendant un Arc-en-ciel : le tour continue', ra.pending === null && ra.current === 0 &&
+  check('Anniversaire pendant un Arc-en-ciel : le tour continue', choiceOf(ra) === null && ra.current === 0 &&
     phaseOf(ra) === 'play' && playsLeft(ra) === 2 && whoMustAct(ra).join() === '0')
   const next = gameReducer(ra, { by: 0, type: 'DISCARD_CARD', uid: ra.players[0].hand[0].uid })
   check('Anniversaire pendant un Arc-en-ciel : Ana peut rejouer', next !== ra && playsLeft(next) === 1)
@@ -420,7 +420,7 @@ function check(label, cond) {
   s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: piston.uid })
   p = s.players[0]
   check('Intérimaire → Piston : Barmaid défaussée, choix du métier ouvert',
-    jobOf(p) === null && s.pending?.type === 'piston' && s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
+    jobOf(p) === null && choiceOf(s)?.type === 'piston' && s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
   s = gameReducer(s, { by: s.current, type: 'PISTON_PICK', uid: medecin.uid })
   p = s.players[0]
   check('Intérimaire → Piston : Médecin en poste sans les études', jobOf(p)?.uid === medecin.uid && p.studies.length === 0)
@@ -484,14 +484,14 @@ function check(label, cond) {
   setStep(s, 'play')
   setJob(s, s.players[0], find((c) => c.key === 'chef_achats'))
   const protectedUid = s.players[0].hand[0].uid
-  s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid }
+  setFlow(s, 'chef-troc', 'opp-pick', { target: 1, protectedUid })
   check('whoMustAct : l’adversaire visé en opp-pick', JSON.stringify(whoMustAct(s)) === '[1]')
   check('Chef troc opp-pick : le Chef est refusé', gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 0 }) === s)
   check('Chef troc opp-pick : un 3e joueur est refusé', gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 2 }) === s)
   const r = gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 1 })
   // l'adversaire pioche dans la main du Chef, hors carte protégée
-  check('Chef troc opp-pick : l’adversaire est accepté', r !== s && r.pending.step === 'chef-pick' &&
-    r.pending.oppPickedUid !== protectedUid && s.players[0].hand.some((c) => c.uid === r.pending.oppPickedUid))
+  check('Chef troc opp-pick : l’adversaire est accepté', r !== s && choiceOf(r).step === 'chef-pick' &&
+    choiceOf(r).oppPickedUid !== protectedUid && s.players[0].hand.some((c) => c.uid === choiceOf(r).oppPickedUid))
   check('Chef troc chef-pick : de nouveau au tour du Chef', JSON.stringify(whoMustAct(r)) === '[0]' &&
     gameReducer(r, { type: 'CHEF_TROC_CHEF_PICK', index: 0, by: 1 }) === r)
 }
@@ -507,13 +507,14 @@ function check(label, cond) {
   const protectedUid = chefHand[0].uid
 
   // l'adversaire pioche chez le Chef, en visant toujours la dernière position
-  const oppState = { ...base, pending: { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid } }
+  const oppState = structuredClone(base)
+  setFlow(oppState, 'chef-troc', 'opp-pick', { target: 1, protectedUid })
   const lastPickable = chefHand.length - 2
   const oppTaken = new Map()
   for (let i = 0; i < RUNS; i++) {
     // hasard à graine : une graine différente à chaque essai
     const r = gameReducer({ ...oppState, rng: i }, { type: 'CHEF_TROC_OPP_PICK', index: lastPickable, by: 1 })
-    oppTaken.set(r.pending.oppPickedUid, (oppTaken.get(r.pending.oppPickedUid) ?? 0) + 1)
+    oppTaken.set(choiceOf(r).oppPickedUid, (oppTaken.get(choiceOf(r).oppPickedUid) ?? 0) + 1)
   }
   check('Chef troc opp-pick : la carte protégée n’est jamais prise', !oppTaken.has(protectedUid))
   check('Chef troc opp-pick : la dernière position n’est pas toujours prise',
@@ -523,7 +524,8 @@ function check(label, cond) {
 
   // le Chef pioche chez l'adversaire ; la dernière carte est connue (ex. prise dans la rivière)
   const oppPickedUid = chefHand[1].uid
-  const chefState = { ...base, pending: { type: 'chef-troc', step: 'chef-pick', target: 1, oppPickedUid } }
+  const chefState = structuredClone(base)
+  setFlow(chefState, 'chef-troc', 'chef-pick', { target: 1, oppPickedUid })
   const known = oppHand[oppHand.length - 1]
   const chefTaken = new Map()
   for (let i = 0; i < RUNS; i++) {
@@ -553,7 +555,7 @@ function check(label, cond) {
   // Licenciement pendant le tour d'Ana
   const s = setup()
   const r = gameReducer(s, { type: 'PLAY_MALUS', uid: licenciement.uid, target: 1, by: 0 })
-  check('Chercheur licencié : le choix s’ouvre pour Ben', r.pending?.type === 'chercheur-discard' && r.pending.player === 1 &&
+  check('Chercheur licencié : le choix s’ouvre pour Ben', choiceOf(r)?.type === 'chercheur-discard' && choiceOf(r).player === 1 &&
     jobOf(r.players[1]) === null && r.players[1].hand.length === 6)
   check('Chercheur licencié : seul Ben peut agir', JSON.stringify(whoMustAct(r)) === '[1]')
   check('Chercheur licencié : le tour d’Ana attend le choix', r.current === 0 && r.turnCount === s.turnCount)
@@ -567,7 +569,7 @@ function check(label, cond) {
   check('Chercheur licencié : la carte choisie va à la défausse', d.discard[d.discard.length - 1].card.uid === chosen.uid &&
     d.discard[d.discard.length - 1].by === 1 && d.players[1].hand.length === 5 && !d.players[1].hand.some((c) => c.uid === chosen.uid))
   check('Chercheur licencié : le métier est défaussé', d.discard.some((e) => e.card.uid === chercheur.uid))
-  check('Chercheur licencié : puis le tour d’Ana se termine normalement', d.pending === null && d.current === 1 &&
+  check('Chercheur licencié : puis le tour d’Ana se termine normalement', choiceOf(d) === null && d.current === 1 &&
     d.turnCount === r.turnCount + 1 && d.players[0].hand.length === 5)
   check('Chercheur licencié : action sans choix en attente refusée',
     gameReducer(d, { type: 'CHERCHEUR_DISCARD', uid: d.players[1].hand[0].uid, by: 1 }) === d)
@@ -582,34 +584,34 @@ function check(label, cond) {
   const v = setup()
   v.players[0].hand[0] = v.deck.pop()
   setMalus(v, v.players[0], [licenciement])
-  v.pending = { type: 'vengeance' }
+  setFlow(v, 'vengeance', 'pick')
   setPlays(v, 0) // la carte Vengeance a déjà consommé le jeu
   const rv = gameReducer(v, { type: 'VENGEANCE_PICK', uid: licenciement.uid, target: 1, by: 0 })
-  check('Chercheur licencié par Vengeance : le choix s’ouvre pour Ben', rv.pending?.type === 'chercheur-discard' && rv.current === 0)
+  check('Chercheur licencié par Vengeance : le choix s’ouvre pour Ben', choiceOf(rv)?.type === 'chercheur-discard' && rv.current === 0)
   const dv = gameReducer(rv, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 })
-  check('Chercheur licencié par Vengeance : puis le tour d’Ana se termine', dv.pending === null && dv.current === 1)
+  check('Chercheur licencié par Vengeance : puis le tour d’Ana se termine', choiceOf(dv) === null && dv.current === 1)
 
   // Démission volontaire pendant son propre tour
   const m = freshState()
   setJob(m, m.players[0], chercheur)
   m.players[0].hand.push(m.deck.pop())
   const rm = gameReducer(m, { type: 'RESIGN', by: 0 })
-  check('Chercheur démissionnaire : le choix s’ouvre, le tour n’est pas fini', rm.pending?.type === 'chercheur-discard' &&
-    rm.pending.player === 0 && rm.current === 0 && rm.turnCount === m.turnCount && rm.players[0].hand.length === 6)
+  check('Chercheur démissionnaire : le choix s’ouvre, le tour n’est pas fini', choiceOf(rm)?.type === 'chercheur-discard' &&
+    choiceOf(rm).player === 0 && rm.current === 0 && rm.turnCount === m.turnCount && rm.players[0].hand.length === 6)
   check('Chercheur démissionnaire : pas de pioche avant le choix', gameReducer(rm, { type: 'DRAW_DECK', by: 0 }) === rm)
   check('Chercheur démissionnaire : un autre joueur est refusé',
     gameReducer(rm, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 }) === rm)
   const pick = rm.players[0].hand[0]
   const dm = gameReducer(rm, { type: 'CHERCHEUR_DISCARD', uid: pick.uid, by: 0 })
   check('Chercheur démissionnaire : la carte choisie est défaussée, puis il passe son tour',
-    dm.discard[dm.discard.length - 1].card.uid === pick.uid && dm.pending === null && dm.current === 1 &&
+    dm.discard[dm.discard.length - 1].card.uid === pick.uid && choiceOf(dm) === null && dm.current === 1 &&
     dm.turnCount === rm.turnCount + 1 && dm.players[0].hand.length === 5)
 
   // main vide : aucun choix
   const e = setup()
   e.players[1].hand = []
   const re = gameReducer(e, { type: 'PLAY_MALUS', uid: licenciement.uid, target: 1, by: 0 })
-  check('Chercheur licencié, main vide : aucun choix, le tour se termine', re.pending === null && re.current === 1 &&
+  check('Chercheur licencié, main vide : aucun choix, le tour se termine', choiceOf(re) === null && re.current === 1 &&
     re.discard[re.discard.length - 1].card.uid === chercheur.uid)
 }
 
@@ -660,7 +662,7 @@ function check(label, cond) {
   const chance = find((c) => c.key === 'chance')
   s.players[0].hand[0] = chance
   let ch = gameReducer(s, { type: 'PLAY_SELF', uid: chance.uid, by: 0 })
-  ch = gameReducer(ch, { type: 'CHANCE_PICK', uid: ch.pending.cards[0].uid, by: 0 })
+  ch = gameReducer(ch, { type: 'CHANCE_PICK', uid: choiceOf(ch).cards[0].uid, by: 0 })
   check('Adultère : refusé après avoir joué Chance', playsLeft(ch) === 1 &&
     gameReducer(ch, { type: 'STOP_ADULTERY', by: 0 }) === ch)
 
@@ -669,7 +671,8 @@ function check(label, cond) {
   check('Adultère : le marqueur est remis à zéro au tour suivant', cardPlayedThisTurn(tourSuivant) === false)
 
   // refusé pendant un choix en attente ou avec une carte forcée
-  const pend = { ...s, pending: { type: 'journalist' } }
+  const pend = structuredClone(s)
+  setFlow(pend, 'journalist', 'look')
   check('Adultère : refusé pendant un choix en attente', gameReducer(pend, { type: 'STOP_ADULTERY', by: 0 }) === pend)
   const forced = structuredClone(s)
   setForced(forced, study, false)
@@ -748,7 +751,7 @@ function check(label, cond) {
   s.players[0].hand = [piston, grandProf, medecin]
   check('Piston : jouable avec un autre métier en main', canPlayFromHand(s, 0, piston).ok)
   const r = gameReducer(s, { type: 'PLAY_SELF', uid: piston.uid, by: 0 })
-  check('Piston : le choix du métier s’ouvre', r.pending?.type === 'piston')
+  check('Piston : le choix du métier s’ouvre', choiceOf(r)?.type === 'piston')
   check('Piston : le Grand Prof est refusé', gameReducer(r, { type: 'PISTON_PICK', uid: grandProf.uid, by: 0 }) === r)
   const ok = gameReducer(r, { type: 'PISTON_PICK', uid: medecin.uid, by: 0 })
   check('Piston : un métier normal est accepté', jobOf(ok.players[0])?.uid === medecin.uid)
@@ -822,7 +825,7 @@ function check(label, cond) {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
   setStep(s, 'play')
   setJob(s, s.players[0], find((c) => c.key === 'chef_achats'))
-  s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid: s.players[0].hand[0].uid }
+  setFlow(s, 'chef-troc', 'opp-pick', { target: 1, protectedUid: s.players[0].hand[0].uid })
   const n = s.players[0].hand.length - 1
   check('Chef troc : la liste propose une pioche par carte non protégée', legalActions(s, 1).length === n)
   check('Chef troc : index hors de la main refusé', gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: n, by: 1 }) === s &&

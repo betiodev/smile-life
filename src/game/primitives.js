@@ -14,6 +14,7 @@
 import { handTarget } from './rules.js'
 import { jobOf } from './state.js'
 import { emit } from './events.js'
+import { startFlow } from './flows/index.js'
 
 const byUid = (uid) => (c) => c.uid === uid
 
@@ -227,9 +228,9 @@ export const attach = (s, uid, ontoUid) => markUsed(s, uid, ontoUid)
 // Démission, licenciement, Policier, Prison, Intérimaire remplacé. Le métier
 // est défaussé au nom de son propriétaire (il ne peut pas le reprendre).
 // Événement jobLost (le Grand Prix s'y retourne, src/game/cards/base.js).
-// → true si un choix reste à faire (Chercheur : carte à défausser) ;
-// resume = ce qui reprend après ce choix ('finish-play', 'end-turn', 'none').
-export function loseJob(s, player, { cause, by = null, resume = 'finish-play' }) {
+// → true si un choix reste à faire (Chercheur : carte à défausser, flux
+// chercheur-discard posé sur la pile ; le cadre en dessous reprend ensuite).
+export function loseJob(s, player, { cause, by = null }) {
   const p = s.players[player]
   const job = jobOf(p)
   if (!job) return false
@@ -239,7 +240,7 @@ export function loseJob(s, player, { cause, by = null, resume = 'finish-play' })
   // Chercheur : défausse 1 carte en plus (main 6 → 5), choisie par le joueur
   // lui-même (action CHERCHEUR_DISCARD), même pendant le tour d'un autre
   if (job.key === 'chercheur' && p.hand.length > 0) {
-    s.pending = { type: 'chercheur-discard', player, resume }
+    startFlow(s, 'chercheur-discard', { player })
     return true
   }
   return false

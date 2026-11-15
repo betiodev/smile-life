@@ -76,7 +76,7 @@ export const boardCards = (p) => [
 
 // --- pile des flux (ARCHITECTURE.md §6.3, src/game/flows/) ----------------
 // state.stack = [cadre du tour, …cadres posés dessus]. Un cadre est une simple
-// donnée : { flow: 'turn' | 'purchase', step, data }. Le cadre du dessus
+// donnée : { flow, step, data } (flow : 'turn', 'purchase', 'chance'…). Le cadre du dessus
 // décide qui agit et ce qui est permis. Le tour est toujours tout en bas
 // (pile vide : partie finie). Le joueur du tour est state.current.
 export const topFrame = (s) => s.stack?.[s.stack.length - 1] ?? null
@@ -92,14 +92,15 @@ export const cardPlayedThisTurn = (s) => !!turnFrame(s)?.data.cardPlayed
 // carte forcée (prise dans la défausse / la rivière, Étoile filante,
 // Astronaute) : elle seule peut être jouée
 export const forcedOf = (s) => turnFrame(s)?.data.forced?.card ?? null
-// la carte forcée est-elle le jeu du tour ? (prise dans la défausse ou la
-// rivière : oui, elle doit être jouée ; Étoile filante, Astronaute : non)
-export const forcedConsumesPlay = (s) => !!turnFrame(s)?.data.forced?.consumesPlay
-// choix en cours au-dessus du tour : un flux (achat) sous la forme
-// { type: flow, …data }, sinon l'ancien state.pending (choix pas encore
-// portés en flux, étape 09), sinon null
-export function pendingOf(s) {
+// la carte forcée doit-elle vraiment être jouée ? (prise dans la défausse ou
+// la rivière : c'est le jeu du tour, pas de défausse ; Étoile filante,
+// Astronaute : en plus du jeu, défaussable)
+export const mustPlayForced = (s) => !!turnFrame(s)?.data.forced?.consumesPlay
+// choix en cours au-dessus du tour (achat, Chance, Piston, Anniversaire…) :
+// le cadre du dessus sous la forme { type: flow, step, …data } (tel que le
+// flux le montre dans une vue), sinon null
+export function choiceOf(s) {
   const top = topFrame(s)
-  if (top && top.flow !== 'turn') return { type: top.flow, ...top.data }
-  return s.pending ?? null
+  if (!top || top.flow === 'turn') return null
+  return { type: top.flow, step: top.step, ...top.data }
 }

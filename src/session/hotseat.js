@@ -19,6 +19,7 @@
 //  { kind: 'over' }         fin de partie
 // ---------------------------------------------------------------------------
 import { createDriver } from './driver.js'
+import { choiceOf } from '../game/state.js'
 
 export function createHotseat({ seats, seed, state, now, timers = true } = {}) {
   const driver = createDriver({ seats, seed, state, now, timers, oneAtATime: true })
@@ -33,8 +34,8 @@ export function createHotseat({ seats, seed, state, now, timers = true } = {}) {
 
   // le siège qui doit avoir l'écran maintenant
   function wanted(v) {
-    const pend = v.pending
-    if (pend?.type === 'chercheur-discard' && pend.player !== v.current) return pend.player
+    const choice = choiceOf(v)
+    if (choice?.type === 'chercheur-discard' && choice.player !== v.current) return choice.player
     return v.current
   }
 
