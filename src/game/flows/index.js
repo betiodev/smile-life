@@ -20,6 +20,7 @@
 //
 // Les flux s'emboîtent : un Chercheur licencié par une Vengeance pendant un
 // Arc-en-ciel, c'est trois cadres (tour > vengeance > chercheur-discard).
+// Avant le premier tour, le bas de la pile est la mise en place (setup.js).
 // ---------------------------------------------------------------------------
 import turn from './turn.js'
 import purchase from './purchase.js'
@@ -34,15 +35,28 @@ import birthday from './birthday.js'
 import chercheurDiscard from './chercheur-discard.js'
 import journalist from './journalist.js'
 import medium from './medium.js'
+import setup from './setup.js'
 import { topFrame } from '../state.js'
+import { clearSight } from '../primitives.js'
+
+// flux ajoutés par les extensions (registerFlow), nommés '<ext>.<nom>'
+const EXTRA = {}
+export function registerFlow(name, flow) {
+  if (EXTRA[name] || BUILT_IN().includes(name)) throw new Error(`Flux en double : ${name}`)
+  for (const f of ['start', 'actors', 'legal', 'apply', 'resume', 'fallback', 'view'])
+    if (typeof flow[f] !== 'function') throw new Error(`Flux ${name} : ${f} manquant`)
+  EXTRA[name] = flow
+}
+const BUILT_IN = () => Object.keys(builtIn())
+const builtIn = () => ({
+  setup, turn, purchase, chance, 'discard-pick': discardPick, piston, troc, 'chef-troc': chefTroc,
+  vengeance, 'casino-stake': casinoStake, birthday, 'chercheur-discard': chercheurDiscard,
+  journalist, medium,
+})
 
 // registre lu à l'appel (les modules de flux s'importent entre eux)
 export function flowOf(name) {
-  const flow = {
-    turn, purchase, chance, 'discard-pick': discardPick, piston, troc, 'chef-troc': chefTroc,
-    vengeance, 'casino-stake': casinoStake, birthday, 'chercheur-discard': chercheurDiscard,
-    journalist, medium,
-  }[name]
+  const flow = builtIn()[name] ?? EXTRA[name]
   if (!flow) throw new Error(`Flux inconnu : ${name}`)
   return flow
 }
@@ -57,6 +71,8 @@ export function startFlow(s, name, data = {}) {
 // le flux du dessus est fini : on le retire et le cadre en dessous reprend
 export function endFlow(s, result = null) {
   const done = s.stack.pop()
+  // les regards « jusqu'à la fin du flux » (state.sight) de ce cadre sont finis
+  clearSight(s, 'flow')
   const below = topFrame(s)
   if (below) flowOf(below.flow).resume(s, below, result, done)
 }

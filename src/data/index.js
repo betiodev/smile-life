@@ -6,11 +6,24 @@ import { BASE_DEFS } from './base.js'
 // définitions par extension ; 'base' est toujours dans le jeu
 const SETS = { base: BASE_DEFS }
 
-// extensions que l'on peut ajouter à une partie (aucune pour l'instant)
+// extensions que l'on peut ajouter à une partie (aucune pour l'instant ; les
+// tests enregistrent une extension factice, tests/ext/test-ext.mjs)
 export const EXTENSIONS = Object.keys(SETS).filter((e) => e !== 'base')
 
 // toutes les définitions, par id
 export const CATALOGUE = Object.fromEntries(Object.values(SETS).flat().map((d) => [d.id, d]))
+
+// ajoute les définitions d'une extension (src/game/extensions.js)
+export function registerSet(ext, defs) {
+  if (SETS[ext]) throw new Error(`Extension déjà enregistrée : ${ext}`)
+  for (const d of defs) {
+    if (CATALOGUE[d.id]) throw new Error(`Définition en double : ${d.id}`)
+    if (d.ext !== ext) throw new Error(`${d.id} : ext ${d.ext} au lieu de ${ext}`)
+  }
+  SETS[ext] = defs
+  EXTENSIONS.push(ext)
+  for (const d of defs) CATALOGUE[d.id] = d
+}
 
 // une carte (ou une définition) appartient-elle au groupe `tag` ?
 export const hasTag = (card, tag) => !!card?.tags?.includes(tag)

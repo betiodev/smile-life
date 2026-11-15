@@ -209,7 +209,8 @@ const SPECIALS = {
   },
   'base.chance': {
     onPlace(s, { owner }) {
-      const cards = draw(s, owner, { count: 3, to: 'aside' })
+      // (une carte jouée d'office n'y est jouée que si sa définition le dit : autoPlay.withChance)
+      const cards = draw(s, owner, { count: 3, to: 'aside', chance: true })
       // Chance agit comme une pioche : elle ne consomme pas le jeu du tour
       addPlays(s, 1)
       log(s, `🍀 ${s.players[owner].name} joue Chance : pioche ${cards.length} cartes, en garde une en main`)

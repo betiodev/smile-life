@@ -19,7 +19,7 @@
 // data = { plays, rainbow, cardPlayed, forced: null | { card, consumesPlay },
 //          riverUsed }
 // ---------------------------------------------------------------------------
-import { draw, refill, take, takeAll, put, place, remove, loseJob, log } from '../primitives.js'
+import { draw, refill, take, takeAll, put, place, remove, loseJob, log, tickTimers, clearSight } from '../primitives.js'
 import { emit } from '../events.js'
 import {
   canPlace, canTarget, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays, isInterim,
@@ -65,9 +65,14 @@ export function finishPlay(s) {
   endTurn(s)
 }
 
-// étape start : nouveau cadre de tour pour state.current
+// étape start : nouveau cadre de tour pour state.current, tout en bas de la
+// pile. Les cadres posés au-dessus pendant la fin du tour précédent (une carte
+// jouée d'office en complétant une main) restent : ils se règlent d'abord.
+// Les regards « jusqu'à la fin du tour » (state.sight) sont finis.
 export function beginTurn(s) {
-  s.stack = [turn.start(s)]
+  const above = ['turn', 'setup'].includes(s.stack[0]?.flow) ? s.stack.slice(1) : s.stack
+  s.stack = [turn.start(s), ...above]
+  clearSight(s, 'turn')
   emit(s, 'turnStart', { player: s.current })
 }
 
@@ -89,7 +94,7 @@ export function endTurn(s) {
     else s.riverIdle += 1
     if (s.riverIdle >= s.players.length) {
       for (const c of takeAll(s, 'river')) put(s, c, 'discard')
-      draw(s, null, { count: 3, to: 'river' })
+      draw(s, null, { count: 3, to: 'river', fill: true })
       s.riverIdle = 0
       log(s, `🌊 La rivière est renouvelée`)
       if (s.deck.length === 0) {
@@ -99,14 +104,17 @@ export function endTurn(s) {
     }
   }
 
-  // next : joueur suivant, en consommant les tours passés
+  // next : joueur suivant, en consommant les tours passés. Chaque siège par
+  // lequel passe le tour (joué ou passé) décompte ses cartes à durée.
   let next = (pIdx + 1) % s.players.length
   let wrapped = next <= pIdx
+  tickTimers(s, next)
   while (s.players[next].skipTurns > 0) {
     s.players[next].skipTurns -= 1
     log(s, `⏭️ ${s.players[next].name} passe son tour (${s.players[next].skipTurns} restant)`)
     next = (next + 1) % s.players.length
     if (next === 0) wrapped = true
+    tickTimers(s, next)
   }
   if (wrapped) emit(s, 'roundEnd')
 
@@ -226,7 +234,7 @@ function apply(s, frame, action) {
       if (i < 0 || i >= s.river.length) return false
       if (action.playNow && !canTakeRiverNow(s, s.current, s.river[i])) return false
       const card = take(s, 'river', s.river[i].uid)
-      draw(s, null, { to: 'river', at: i })
+      draw(s, null, { to: 'river', at: i, fill: true })
       d.riverUsed = true
       frame.step = 'play'
       if (action.playNow) {

@@ -17,11 +17,17 @@ import { whoMustAct } from '../src/game/turn.js'
 import { viewFor } from '../src/game/view.js'
 import { makeRng } from '../src/game/rng.js'
 import { buildDeck } from '../src/data/index.js'
-import { boardCards, moneyOf, malusOf, outOfGameCards } from '../src/game/state.js'
+import { boardCards, moneyOf, malusOf, outOfGameCards, tableCards } from '../src/game/state.js'
 import { heldCards, activeFrame } from '../src/game/flows/index.js'
 import { defaultAction } from '../src/game/turn.js'
 
-const DECK_SIZE = buildDeck().length
+// taille du paquet de la partie (jeu de base + extensions en jeu)
+const SIZES = new Map()
+const deckSize = (s) => {
+  const key = (s.extensions ?? []).join()
+  if (!SIZES.has(key)) SIZES.set(key, buildDeck(s.extensions ?? []).length)
+  return SIZES.get(key)
+}
 const random = makeRng('invariants')
 const SAMPLE = 6 // actions hors liste essayées à chaque étape
 
@@ -41,6 +47,9 @@ export function cardPlaces(s) {
   s.discard.forEach((e) => put(e.card, 'défausse'))
   outOfGameCards(s).forEach((c) => put(c, 'hors jeu'))
   s.river.forEach((c) => put(c, 'rivière'))
+  s.center.forEach((c) => put(c, 'centre'))
+  s.pot.forEach((c) => put(c, 'cagnotte'))
+  s.spare.forEach((c) => put(c, 'de côté'))
   put(s.casino?.stake?.card, 'mise du casino')
   // cartes tenues par les cadres de la pile (carte forcée du tour, achat en
   // cours, les 3 cartes de la Chance ; le Médium ne fait que regarder la
@@ -51,13 +60,13 @@ export function cardPlaces(s) {
     p.hand.forEach((c) => put(c, at('main')))
     boardCards(p).forEach((c) => put(c, at('plateau')))
   })
-  if (places.size !== DECK_SIZE) fail(`${places.size} cartes trouvées au lieu de ${DECK_SIZE}`)
+  if (places.size !== deckSize(s)) fail(`${places.size} cartes trouvées au lieu de ${deckSize(s)}`)
   return places
 }
 
 // --- 1 bis. méta des cartes posées ------------------------------------------
 export function checkMeta(s) {
-  const onTable = new Set(s.players.flatMap((p) => boardCards(p).map((c) => c.uid)))
+  const onTable = new Set(tableCards(s).map((c) => c.uid))
   const seqs = new Set()
   for (const [uid, m] of Object.entries(s.meta)) {
     if (!onTable.has(uid)) fail(`méta de la carte ${uid}, qui n'est pas sur la table`)
@@ -65,6 +74,10 @@ export function checkMeta(s) {
     if (seqs.has(m.seq)) fail(`seq ${m.seq} donné à deux cartes`)
     seqs.add(m.seq)
     if (m.on != null && !onTable.has(m.on)) fail(`la carte ${uid} est posée sur ${m.on}, qui n'est pas sur la table`)
+    // protectedBy : un code de raison, ou l'uid d'une carte sur la table
+    if (m.protectedBy != null && /^c\d+$/.test(m.protectedBy) && !onTable.has(m.protectedBy))
+      fail(`la carte ${uid} est protégée par ${m.protectedBy}, qui n'est pas sur la table`)
+    if (m.timer && !(Number.isInteger(m.timer.left) && m.timer.left > 0)) fail(`méta de ${uid} : timer ${JSON.stringify(m.timer)} invalide`)
   }
   for (const uid of onTable) if (!s.meta[uid]) fail(`carte ${uid} posée sans méta (seq)`)
 }
@@ -81,7 +94,9 @@ function candidates(s) {
     p.hand.forEach(add)
     moneyOf(p).forEach(add)
     malusOf(p).forEach(add)
+    boardCards(p).slice(-3).forEach(add)
   })
+  s.center.forEach(add)
   heldCards(s).forEach(add)
   s.discard.slice(-4).forEach((e) => add(e.card))
   const uidList = [...uids, null]
@@ -128,9 +143,10 @@ export function checkInvariants(s, action, next) {
   checkMeta(s)
 
   // 1 ter. la pile des flux : le tour en bas, des cadres de simples données
-  if (s.status === 'playing' && s.stack[0]?.flow !== 'turn') fail(`pas de tour en bas de la pile (${where(s)})`)
+  // (avant le premier tour : la mise en place en bas de la pile)
+  if (s.status === 'playing' && !['turn', 'setup'].includes(s.stack[0]?.flow)) fail(`ni tour ni mise en place en bas de la pile (${where(s)})`)
   if (s.status === 'over' && s.stack.length > 0) fail('pile non vide en fin de partie')
-  if (s.stack.some((f, i) => i > 0 && f.flow === 'turn')) fail(`un tour au-dessus du bas de la pile (${where(s)})`)
+  if (s.stack.some((f, i) => i > 0 && (f.flow === 'turn' || f.flow === 'setup'))) fail(`un tour au-dessus du bas de la pile (${where(s)})`)
 
   const actors = whoMustAct(s)
   const legalBy = new Map(s.players.map((_, i) => [i, legalActions(s, i)]))

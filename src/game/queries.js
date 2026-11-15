@@ -26,16 +26,17 @@
 //   offerte OU payée) ; ignoré sauf si on demande { withOptional: true }.
 //
 // Une carte est EN JEU (ses modificateurs comptent) quand elle est posée sur
-// un plateau (malus reçus compris) et pas retournée (meta.used). Le centre de
-// table, les personnages et les règles bonus d'une extension viendront avec
-// les étapes suivantes (sources 'global', 'character', 'bonus').
+// un plateau (malus reçus compris) et pas retournée (meta.used), ou au centre
+// de la table sur le dessus de sa pile (source 'global', sans propriétaire :
+// seule la portée 'everyone' la concerne). Les personnages et les règles
+// bonus d'une extension viendront avec leurs extensions ('character', 'bonus').
 //
 // Toutes les réponses sont combinées par UNE fonction, resolve() : c'est le
 // seul endroit où la précédence est décidée (§5.3, INTERACTIONS.md G1–G4).
 // Les questions marchent sur l'état complet comme sur une vue (viewFor).
 // ---------------------------------------------------------------------------
-import { BEHAVIOURS } from './cards/index.js'
-import { boardCards, malusOf, metaOf } from './state.js'
+import { BEHAVIOURS, behavioursVersion } from './cards/index.js'
+import { boardCards, malusOf, metaOf, centerInForce } from './state.js'
 
 // --- la liste des questions (§5.1) -------------------------------------------
 // kind : 'bool' (réponse { ok, reason }), 'number', 'set' (liste triée)
@@ -45,7 +46,7 @@ import { boardCards, malusOf, metaOf } from './state.js'
 export const QUERIES = {
   canPlace: { kind: 'bool' },        // poser une carte devant soi { player, card }
   canTarget: { kind: 'bool' },       // jouer un malus { player: attaquant, card, target }
-  isProtected: { kind: 'bool' },     // plus tard : protections (Girl Power…)
+  isProtected: { kind: 'bool' },     // la carte posée est-elle protégée ? { player: propriétaire, card, cause, by } (remove, primitives.js) ; ok = protégée
   salaryLevels: { kind: 'set', bounds: { min: 1, max: 4 } }, // niveaux de salaire posables { player }
   studyLevel: { kind: 'number', bounds: { min: 0 } },        // niveau d'études { player }
   studyReq: { kind: 'number', bounds: { min: 0 } },          // études requises { player, card }
@@ -75,8 +76,10 @@ const NO = (reason) => ({ ok: false, reason })
 
 // --- index : question → définitions qui la modifient (calculé une fois) ------
 let INDEX = null
+let INDEX_VERSION = -1
 function index() {
-  if (INDEX) return INDEX
+  if (INDEX && INDEX_VERSION === behavioursVersion) return INDEX
+  INDEX_VERSION = behavioursVersion
   INDEX = Object.fromEntries(Object.keys(QUERIES).map((q) => [q, new Set()]))
   for (const [id, b] of Object.entries(BEHAVIOURS)) {
     for (const m of b.modifiers ?? []) {
@@ -117,6 +120,19 @@ export function collect(s, name, q) {
       }
     }
   })
+  // cartes au centre de la table (réformes, crises…) : source 'global',
+  // sans propriétaire ; seule la carte du dessus d'une pile compte
+  for (const card of centerInForce(s)) {
+    if (!defs.has(card.def)) continue
+    const self = { card, owner: null }
+    for (const m of BEHAVIOURS[card.def].modifiers) {
+      if (m.query !== name || !appliesTo(m, q, null)) continue
+      if (m.when && !m.when(q, self, s)) continue
+      const effect = typeof m.effect === 'function' ? m.effect(q, self, s) : m.effect
+      if (!effect) continue
+      out.push({ source: 'global', seq: metaOf(s, card.uid).seq, card, owner: null, effect })
+    }
+  }
   return out
 }
 

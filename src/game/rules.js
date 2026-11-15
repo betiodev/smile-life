@@ -16,6 +16,7 @@ import {
   isUsed, moneyTraits, moneyValue, looseMoney, lumpMoney, taxableMoney, giftableMoney, paidWith, spentPaying, phaseOf, choiceOf, forcedOf, mustPlayForced, cardPlayedThisTurn, isRainbow, playsLeft,
 } from './state.js'
 import { ask } from './queries.js'
+import { BEHAVIOURS } from './cards/index.js'
 
 const OK = { ok: true }
 const NO = (reason) => ({ ok: false, reason })
@@ -299,8 +300,12 @@ export function canPlaySpecial(state, pIdx, card) {
       if (!some) return NO('Aucune cible valide pour vos malus reçus')
       return OK
     }
-    default:
-      return NO('Carte spéciale inconnue')
+    default: {
+      // carte spéciale d'une extension : son comportement donne la réponse de
+      // base (canPlay, src/game/cards/)
+      const own = BEHAVIOURS[card.def]?.canPlay
+      return own ? own(state, pIdx, card) : NO('Carte spéciale inconnue')
+    }
   }
 }
 
