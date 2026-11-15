@@ -156,7 +156,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play a full game with a job change, a marriage, a divorce and an Attentat if you can. Boards display as before.
   - Prompt: [docs/prompts/05-zones-selectors.md](prompts/05-zones-selectors.md)
 
-- [ ] **Step 06 — Card meta: one table for the state of placed cards**
+- [x] **Step 06 — Card meta: one table for the state of placed cards**
   - Goal: Give every placed card a placement order and a uniform place for "used", "on top of", "protected".
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/06-card-meta.md and follow it.`

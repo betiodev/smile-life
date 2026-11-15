@@ -4,12 +4,12 @@ import {
   canPoseSelf, canTakeDiscardTop, validatePayment, canPlayFromHand, canDiscardFromHand,
   flirtStealVictims, cheapestPayment, birthdayDonors, canPlayMalus, interimReplaced,
   paidSalaries, spentSalaries, availableLiasses, effectiveSalaryLevel,
-  unusedHeritage, paidCards, spentCards, canStopAdultery, canTakeRiverNow,
+  unusedHeritage, paidCards, spentCards, canStopAdultery, canTakeRiverNow, heritageLiasses,
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import {
   jobOf, setJob, marriageOf, setMarriage, adulteryOf, setAdultery, moneyOf, unspentMoney, setMoney, addMoney,
-  malusOf, setMalus, outOfGameCards, isMarried,
+  malusOf, setMalus, outOfGameCards, isMarried, isUsed, metaOf, placeCard, liftCard,
 } from '../src/game/state.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
@@ -45,12 +45,12 @@ function check(label, cond) {
   p.studies = singles.slice(0, 6)
   check('6 cartes études → 7e refusée', !canPoseSelf(s, 0, singles[10]).ok)
   // Médecin : études continues même au-delà de 6 cartes
-  setJob(p, find((c) => c.key === 'medecin'))
+  setJob(s, p, find((c) => c.key === 'medecin'))
   check('Médecin avec 6 cartes → 7e autorisée', canPoseSelf(s, 0, singles[10]).ok)
-  setJob(p, find((c) => c.key === 'chirurgien'))
+  setJob(s, p, find((c) => c.key === 'chirurgien'))
   check('Chirurgien avec 6 cartes → 7e autorisée', canPoseSelf(s, 0, singles[10]).ok)
   // un autre métier bloque toujours les études
-  setJob(p, find((c) => c.key === 'pizzaiolo'))
+  setJob(s, p, find((c) => c.key === 'pizzaiolo'))
   p.studies = singles.slice(0, 2)
   check('Pizzaïolo → études bloquées', !canPoseSelf(s, 0, singles[10]).ok)
 }
@@ -75,7 +75,7 @@ function check(label, cond) {
   const marriage = find((c) => c.type === 'marriage')
   const flirt = find((c) => c.type === 'flirt')
   const divorce = find((c) => c.key === 'divorce')
-  setMarriage(s2.players[1], marriage)
+  setMarriage(s2, s2.players[1], marriage)
   s2.players[1].flirts = [flirt]
   s2.players[0].hand[0] = divorce
   s2.phase = 'play'
@@ -114,14 +114,14 @@ function check(label, cond) {
   check('La carte s’appelle Barmaid', barmaid.name === 'Barmaid')
   p.flirts = flirts.slice(0, 5)
   check('Sans métier : 6e flirt refusé', !canPoseSelf(s, 0, flirts[6]).ok)
-  setJob(p, barmaid)
+  setJob(s, p, barmaid)
   check('Barmaid célibataire : 6e flirt autorisé', canPoseSelf(s, 0, flirts[6]).ok)
   p.flirts = flirts.slice(0, 7)
   check('Barmaid : 8e flirt autorisé (illimité)', canPoseSelf(s, 0, flirts[8]).ok)
-  setMarriage(p, find((c) => c.type === 'marriage'))
+  setMarriage(s, p, find((c) => c.type === 'marriage'))
   check('Barmaid mariée : flirt interdit', !canPoseSelf(s, 0, flirts[8]).ok)
-  setMarriage(p, null)
-  setJob(p, null) // démission/licenciement
+  setMarriage(s, p, null)
+  setJob(s, p, null) // démission/licenciement
   check('Après le métier : flirts conservés (7) mais plus de pose', !canPoseSelf(s, 0, flirts[8]).ok && p.flirts.length === 7)
 }
 
@@ -143,15 +143,15 @@ function check(label, cond) {
   const sal2 = findAll((c) => c.type === 'salary' && c.level === 2)
   const sal1 = find((c) => c.type === 'salary' && c.level === 1)
   s.phase = 'play'
-  setMoney(s.players[0], [sal2[0], sal2[1], sal1])
+  setMoney(s, s.players[0], [sal2[0], sal2[1], sal1])
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
   const refus = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid, sal1.uid], useHeritage: false })
   check('Reducer : achat avec salaire superflu refusé', refus === s)
   const okBuy = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid], useHeritage: false })
   check('Reducer : surpaie inévitable acceptée (4/3)', okBuy !== s && okBuy.players[0].acquisitions.some((c) => c.uid === travel.uid))
   check('Reducer : les 2 salaires choisis sont investis, le 3e non',
-    moneyOf(okBuy.players[0]).length - unspentMoney(okBuy.players[0]).length === 2 &&
-    unspentMoney(okBuy.players[0]).some((c) => c.uid === sal1.uid))
+    moneyOf(okBuy.players[0]).length - unspentMoney(okBuy, okBuy.players[0]).length === 2 &&
+    unspentMoney(okBuy, okBuy.players[0]).some((c) => c.uid === sal1.uid))
   // un même salaire nommé plusieurs fois ne compte qu'une fois
   check('Reducer : un salaire répété dans le paiement ne compte qu’une fois', travel.cost > 1 &&
     gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: Array(travel.cost).fill(sal1.uid), useHeritage: false }) === s)
@@ -159,14 +159,22 @@ function check(label, cond) {
   // les salaires payés sont rattachés à l'acquisition (posés sous elle)
   const buyer = okBuy.players[0]
   check('Achat : les salaires payés sont liés à l’acquisition',
-    paidSalaries(buyer, travel.uid).map((c) => c.uid).sort().join() === [sal2[0].uid, sal2[1].uid].sort().join())
-  check('Achat : aucun salaire dépensé orphelin', spentSalaries(buyer).length === 0)
+    paidSalaries(okBuy, buyer, travel.uid).map((c) => c.uid).sort().join() === [sal2[0].uid, sal2[1].uid].sort().join())
+  check('Achat : aucun salaire dépensé orphelin', spentSalaries(okBuy, buyer).length === 0)
+  check('Méta : salaires payés retournés et posés sous l’acquisition',
+    [sal2[0], sal2[1]].every((c) => metaOf(okBuy, c.uid).used && metaOf(okBuy, c.uid).on === travel.uid) && !isUsed(okBuy, sal1))
+  check('Méta : l’acquisition est posée après les salaires',
+    metaOf(okBuy, travel.uid).seq > Math.max(...[sal2[0], sal2[1], sal1].map((c) => metaOf(okBuy, c.uid).seq)))
   // acquisition retirée du jeu : ses salaires restent au joueur, retournés
   const score = computeScore(buyer).total
-  const sans = { ...buyer, acquisitions: buyer.acquisitions.filter((c) => c.uid !== travel.uid) }
-  check('Acquisition perdue : ses salaires deviennent « dépensés »', spentSalaries(sans).length === 2)
+  const lost = structuredClone(okBuy)
+  liftCard(lost, lost.players[0].acquisitions, travel.uid)
+  const sans = lost.players[0]
+  check('Acquisition perdue : sa méta disparaît, les salaires ne sont plus posés dessus',
+    !metaOf(lost, travel.uid) && [sal2[0], sal2[1]].every((c) => isUsed(lost, c) && !metaOf(lost, c.uid).on))
+  check('Acquisition perdue : ses salaires deviennent « dépensés »', spentSalaries(lost, sans).length === 2)
   check('Salaires dépensés : smiles conservés', computeScore(sans).total === score - travel.smiles)
-  check('Salaires dépensés : inutilisables pour payer', availableLiasses(sans) === 1)
+  check('Salaires dépensés : inutilisables pour payer', availableLiasses(lost, sans) === 1)
 }
 
 // --- Héritage : visible jusqu'à l'achat, puis sous l'acquisition --------------
@@ -178,18 +186,21 @@ function check(label, cond) {
   s.players[0].hand[0] = her
   s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: her.uid })
   const p0 = s.players[0]
-  check('Héritage posé : 3 liasses, carte visible (non utilisée)', p0.heritage === 3 && unusedHeritage(p0).length === 1)
+  check('Héritage posé : 3 liasses, carte visible (non utilisée)', heritageLiasses(s, p0) === 3 && unusedHeritage(s, p0).length === 1)
   s.current = 0
   s.phase = 'play'
   s.playsRemaining = 1
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
   const buy = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [], useHeritage: true })
   const b0 = buy.players[0]
-  check('Achat avec l’Héritage : il passe sous l’acquisition', b0.heritage === 0 && unusedHeritage(b0).length === 0 &&
-    paidCards(b0, travel.uid).some((c) => c.uid === her.uid))
+  check('Achat avec l’Héritage : il passe sous l’acquisition', heritageLiasses(buy, b0) === 0 && unusedHeritage(buy, b0).length === 0 &&
+    paidCards(buy, b0, travel.uid).some((c) => c.uid === her.uid))
+  check('Méta : l’Héritage est retourné, posé sous l’acquisition', metaOf(buy, her.uid).used && metaOf(buy, her.uid).on === travel.uid)
   check('Héritage : reste parmi les cartes spéciales jouées', b0.specials.some((c) => c.uid === her.uid))
-  const sans = { ...b0, acquisitions: b0.acquisitions.filter((c) => c.uid !== travel.uid) }
-  check('Acquisition perdue : l’Héritage rejoint l’argent dépensé', spentCards(sans).some((c) => c.uid === her.uid))
+  const lost = structuredClone(buy)
+  liftCard(lost, lost.players[0].acquisitions, travel.uid)
+  check('Acquisition perdue : l’Héritage rejoint l’argent dépensé', spentCards(lost, lost.players[0]).some((c) => c.uid === her.uid))
+  check('Acquisition perdue : l’Héritage ne revient pas en liasses', heritageLiasses(lost, lost.players[0]) === 0)
 }
 
 // --- Grand Prix d'excellence : métier perdu → sans effet, smiles conservés ---
@@ -201,18 +212,19 @@ function check(label, cond) {
   const legion = find((c) => c.key === 'legion')
   const ecrivain = JOBS_IN_DECK.find((c) => c.key === 'ecrivain')
   const autre = JOBS_IN_DECK.find((c) => c.tags.includes('trophy') && c.key !== 'ecrivain')
-  setJob(s.players[1], ecrivain)
-  s.players[1].distinctions = [{ card: legion, active: true }, { card: gp, active: true }]
+  setJob(s, s.players[1], ecrivain)
+  placeCard(s, s.players[1].distinctions, legion)
+  placeCard(s, s.players[1].distinctions, gp)
   s.players[0].hand[0] = lic
-  check('Grand Prix actif : salaire niveau 4', effectiveSalaryLevel(s.players[1]) === 4)
+  check('Grand Prix actif : salaire niveau 4', effectiveSalaryLevel(s, s.players[1]) === 4)
   const after = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: lic.uid, target: 1 })
   const v = after.players[1]
   check('Licenciement : Grand Prix sans effet, Légion intacte',
-    !jobOf(v) && !v.distinctions.find((d) => d.card.key === 'grandprix').active && v.distinctions.find((d) => d.card.key === 'legion').active)
+    !jobOf(v) && isUsed(after, gp) && !isUsed(after, legion))
   check('Licenciement : le Grand Prix compte toujours ses smiles', computeScore(v).cat['Distinctions 🏅'] === gp.smiles + legion.smiles)
-  const nouveau = structuredClone(v)
-  setJob(nouveau, autre)
-  check('Nouveau métier : le Grand Prix reste sans effet', effectiveSalaryLevel(nouveau) === autre.salaryLevel)
+  const suite = structuredClone(after)
+  setJob(suite, suite.players[1], autre)
+  check('Nouveau métier : le Grand Prix reste sans effet', effectiveSalaryLevel(suite, suite.players[1]) === autre.salaryLevel)
 }
 
 // --- Anniversaire : chaque donateur choisit le salaire offert ---------------
@@ -226,9 +238,9 @@ function check(label, cond) {
     const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
     s.phase = 'play'
     s.players[0].hand[0] = anniv
-    setMoney(s.players[1], [b1, b3])
-    setMoney(s.players[2], [c2])
-    addMoney(s.players[2], c4, { invested: true })
+    setMoney(s, s.players[1], [b1, b3])
+    setMoney(s, s.players[2], [c2])
+    addMoney(s, s.players[2], c4, { used: true })
     return s
   }
   const uids = (p) => moneyOf(p).map((c) => c.uid).sort().join()
@@ -281,8 +293,8 @@ function check(label, cond) {
 
   // Cléo n'a aucun salaire libre : seul Ben donne
   const sc = setup()
-  setMoney(sc.players[2], [])
-  addMoney(sc.players[2], c4, { invested: true })
+  setMoney(sc, sc.players[2], [])
+  addMoney(sc, sc.players[2], c4, { used: true })
   const pc = gameReducer(sc, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
   check('Anniversaire : sans salaire libre, Cléo n’est pas donatrice', pc.pending.donors.join() === '1' && whoMustAct(pc).join() === '1')
   check('Anniversaire : Cléo ne peut pas offrir', gift(pc, 2, null) === pc)
@@ -292,9 +304,9 @@ function check(label, cond) {
 
   // personne ne peut donner : réglé tout de suite
   const sn = setup()
-  setMoney(sn.players[1], [])
-  setMoney(sn.players[2], [])
-  addMoney(sn.players[2], c4, { invested: true })
+  setMoney(sn, sn.players[1], [])
+  setMoney(sn, sn.players[2], [])
+  addMoney(sn, sn.players[2], c4, { used: true })
   check('Anniversaire : sans salaire non investi, pas de donateur', birthdayDonors(sn, 0).length === 0)
   const rn = gameReducer(sn, { by: 0, type: 'PLAY_SELF', uid: anniv.uid })
   check('Anniversaire sans donateur : réglé tout de suite', rn.pending === null && rn.current === 1 &&
@@ -333,13 +345,13 @@ function check(label, cond) {
 
   const p = s.players[0]
   const lv = (n, k = 0) => findAll((c) => c.type === 'salary' && c.level === n)[k]
-  setMoney(p, [lv(4), lv(2), lv(1), lv(2, 1)])
-  const pay = cheapestPayment(p, 3)
+  setMoney(s, p, [lv(4), lv(2), lv(1), lv(2, 1)])
+  const pay = cheapestPayment(s, p, 3)
   check('Paiement le moins cher pour 3 : 2+1', pay.total === 3 && pay.salaryUids.length === 2)
-  check('Paiement le moins cher pour 6 : 4+2', cheapestPayment(p, 6).total === 6 && cheapestPayment(p, 6).salaryUids.length === 2)
-  check('Paiement impossible → null', cheapestPayment(p, 20) === null)
-  p.heritage = 3
-  check('Héritage seul quand il suffit pour 3 (aucun salaire investi)', cheapestPayment(p, 3).useHeritage && cheapestPayment(p, 3).salaryUids.length === 0)
+  check('Paiement le moins cher pour 6 : 4+2', cheapestPayment(s, p, 6).total === 6 && cheapestPayment(s, p, 6).salaryUids.length === 2)
+  check('Paiement impossible → null', cheapestPayment(s, p, 20) === null)
+  placeCard(s, p.specials, find((c) => c.key === 'heritage'))
+  check('Héritage seul quand il suffit pour 3 (aucun salaire investi)', cheapestPayment(s, p, 3).useHeritage && cheapestPayment(s, p, 3).salaryUids.length === 0)
 }
 
 // --- Intérimaire : Études ou nouveau métier sans démissionner ---------------
@@ -351,8 +363,8 @@ function check(label, cond) {
     const s = freshState()
     s.phase = 'play'
     const p = s.players[0]
-    setJob(p, barmaid)
-    setMoney(p, [sal])
+    setJob(s, p, barmaid)
+    setMoney(s, p, [sal])
     p.hand[0] = card
     return s
   }
@@ -367,7 +379,7 @@ function check(label, cond) {
   let p = s.players[0]
   check('Intérimaire → Études : étude posée, métier retiré', p.studies.some((c) => c.uid === study.uid) && jobOf(p) === null)
   check('Intérimaire → Études : Barmaid à la défausse, au nom du joueur', s.discard.some((e) => e.card.uid === barmaid.uid && e.by === 0))
-  check('Intérimaire → Études : salaire conservé tel quel', moneyOf(p).length === 1 && unspentMoney(p)[0]?.uid === sal.uid)
+  check('Intérimaire → Études : salaire conservé tel quel', moneyOf(p).length === 1 && unspentMoney(s, p)[0]?.uid === sal.uid)
   check('Intérimaire → Études : le jeu du tour est consommé', s.current === 1)
 
   // intérimaire → nouveau métier (exigences remplies)
@@ -390,7 +402,7 @@ function check(label, cond) {
 
   // métier normal → Études : toujours bloqué
   s = setup(study)
-  setJob(s.players[0], pizzaiolo)
+  setJob(s, s.players[0], pizzaiolo)
   const why2 = canPlayFromHand(s, 0, study)
   check('Métier normal → Études : bloqué (démission d’abord)', !why2.ok && /démissionnez/.test(why2.reason))
   check('Métier normal → autre métier : bloqué', !canPlayFromHand(s, 0, find((c) => c.key === 'serveur')).ok)
@@ -411,7 +423,7 @@ function check(label, cond) {
   check('Intérimaire → Piston : salaire conservé', moneyOf(p).length === 1 && moneyOf(p)[0].uid === sal.uid)
   check('Intérimaire → Piston : le jeu du tour est consommé', s.current === 1)
   s = setup(piston)
-  setJob(s.players[0], pizzaiolo)
+  setJob(s, s.players[0], pizzaiolo)
   s.players[0].hand[1] = medecin
   check('Métier normal → Piston : toujours bloqué', !canPlayFromHand(s, 0, piston).ok)
 }
@@ -426,7 +438,7 @@ function check(label, cond) {
     const s = freshState()
     s.phase = 'play'
     s.players[0].hand[0] = lic
-    setJob(s.players[1], job ? find((c) => c.key === job) : null)
+    setJob(s, s.players[1], job ? find((c) => c.key === job) : null)
     return s
   }
   let s = setup('prof_maths')
@@ -466,7 +478,7 @@ function check(label, cond) {
 {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
   s.phase = 'play'
-  setJob(s.players[0], find((c) => c.key === 'chef_achats'))
+  setJob(s, s.players[0], find((c) => c.key === 'chef_achats'))
   const protectedUid = s.players[0].hand[0].uid
   s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid }
   check('whoMustAct : l’adversaire visé en opp-pick', JSON.stringify(whoMustAct(s)) === '[1]')
@@ -485,7 +497,7 @@ function check(label, cond) {
   const RUNS = 200
   const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
   base.phase = 'play'
-  setJob(base.players[0], find((c) => c.key === 'chef_achats'))
+  setJob(base, base.players[0], find((c) => c.key === 'chef_achats'))
   const chefHand = base.players[0].hand
   const oppHand = base.players[1].hand
   const protectedUid = chefHand[0].uid
@@ -528,7 +540,7 @@ function check(label, cond) {
   const setup = () => {
     const s = freshState()
     s.phase = 'play'
-    setJob(s.players[1], chercheur)
+    setJob(s, s.players[1], chercheur)
     s.players[1].hand.push(s.deck.pop())
     s.players[0].hand[0] = licenciement
     return s
@@ -565,7 +577,7 @@ function check(label, cond) {
   // Licenciement par Vengeance : le choix n'est pas écrasé
   const v = setup()
   v.players[0].hand[0] = v.deck.pop()
-  setMalus(v.players[0], [licenciement])
+  setMalus(v, v.players[0], [licenciement])
   v.pending = { type: 'vengeance' }
   v.playsRemaining = 0 // la carte Vengeance a déjà consommé le jeu
   const rv = gameReducer(v, { type: 'VENGEANCE_PICK', uid: licenciement.uid, target: 1, by: 0 })
@@ -575,7 +587,7 @@ function check(label, cond) {
 
   // Démission volontaire pendant son propre tour
   const m = freshState()
-  setJob(m.players[0], chercheur)
+  setJob(m, m.players[0], chercheur)
   m.players[0].hand.push(m.deck.pop())
   const rm = gameReducer(m, { type: 'RESIGN', by: 0 })
   check('Chercheur démissionnaire : le choix s’ouvre, le tour n’est pas fini', rm.pending?.type === 'chercheur-discard' &&
@@ -603,7 +615,7 @@ function check(label, cond) {
   const flirt = find((c) => c.type === 'flirt')
   const setup = () => {
     let s = freshState()
-    setAdultery(s.players[0], adultere)
+    setAdultery(s, s.players[0], adultere)
     s.players[0].flirts = [flirt]
     return s
   }
@@ -786,10 +798,10 @@ function check(label, cond) {
   // Casino : le salaire pris dans la défausse peut être misé (règle vérifiée par Teto)
   let s = freshState()
   const sal = find((c) => c.type === 'salary')
-  setMoney(s.players[1], [])
+  setMoney(s, s.players[1], [])
   s.discard = [{ card: sal, by: 1 }]
   s.casino = { owner: 1, stake: null }
-  setJob(s.players[0], find((c) => c.key === 'pizzaiolo'))
+  setJob(s, s.players[0], find((c) => c.key === 'pizzaiolo'))
   s = gameReducer(s, { type: 'TAKE_DISCARD', by: 0 })
   check('Casino : salaire pris dans la défausse, mise proposée', s.forced?.uid === sal.uid &&
     legalActions(s, 0).some((a) => a.type === 'CASINO_BET' && a.uid === sal.uid))
@@ -803,7 +815,7 @@ function check(label, cond) {
   // Troc du Chef : un index hors de la main est refusé
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
   s.phase = 'play'
-  setJob(s.players[0], find((c) => c.key === 'chef_achats'))
+  setJob(s, s.players[0], find((c) => c.key === 'chef_achats'))
   s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid: s.players[0].hand[0].uid }
   const n = s.players[0].hand.length - 1
   check('Chef troc : la liste propose une pioche par carte non protégée', legalActions(s, 1).length === n)
@@ -819,8 +831,8 @@ function check(label, cond) {
   const travel = find((c) => c.acqType === 'travel' && c.cost === 3)
   const lv = (n) => findAll((c) => c.type === 'salary' && c.level === n)
   const [a1, b1] = lv(1), [a2] = lv(2), [a3] = lv(3)
-  setJob(s.players[0], find((c) => c.key === 'pizzaiolo'))
-  setMoney(s.players[0], [a1, b1, a2, a3])
+  setJob(s, s.players[0], find((c) => c.key === 'pizzaiolo'))
+  setMoney(s, s.players[0], [a1, b1, a2, a3])
   s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
   const pay = legalActions(s, 0).find((a) => a.type === 'PURCHASE_CONFIRM')
   check('Achat : la liste propose le paiement le moins cher (le salaire de 3)', JSON.stringify(pay.salaryUids) === JSON.stringify([a3.uid]))
@@ -848,10 +860,10 @@ function check(label, cond) {
   const p = s.players[0]
   const [pizzaiolo, serveur] = [find((c) => c.key === 'pizzaiolo'), find((c) => c.key === 'serveur')]
   const [m1, m2] = findAll((c) => c.type === 'marriage')
-  setJob(p, pizzaiolo)
+  setJob(s, p, pizzaiolo)
   check('Un seul métier : un 2e métier est refusé', !canPoseSelf(s, 0, serveur).ok)
   p.flirts.push(find((c) => c.type === 'flirt'))
-  setMarriage(p, m1)
+  setMarriage(s, p, m1)
   check('Un seul mariage : un 2e mariage est refusé', !canPoseSelf(s, 0, m2).ok)
   check('Sélecteurs : une seule carte dans chaque liste', jobOf(p) === pizzaiolo && marriageOf(p) === m1 && isMarried(p))
 }
@@ -880,6 +892,32 @@ function check(label, cond) {
   const trois = apres(s, 3)
   check('Arc-en-ciel : après 3 cartes, le tour se termine seul', trois.current === 1 && !trois.rainbow)
   check('Arc-en-ciel : un autre joueur ne peut pas terminer', gameReducer(s, { type: 'END_PLAYS', by: 1 }) === s)
+}
+
+// --- Méta des cartes posées : ordre de pose, carte qui quitte la table ----------
+{
+  const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], seed: 6 })
+  check('Méta : vide au début de la partie', Object.keys(s.meta).length === 0 && s.seqCounter === 0)
+  s.phase = 'play'
+  const [f1, f2] = findAll((c) => c.type === 'flirt' && c.place === findAll((x) => x.type === 'flirt')[0].place)
+  const mariage = find((c) => c.type === 'marriage')
+  const divorce = find((c) => c.key === 'divorce')
+  // Ben a un flirt et un mariage ; Ana pose un flirt au même endroit et vole celui de Ben
+  placeCard(s, s.players[1].flirts, f1)
+  setMarriage(s, s.players[1], mariage)
+  s.players[0].hand[0] = f2
+  const seqBefore = s.meta[f1.uid].seq
+  const vol = gameReducer(s, { by: 0, type: 'PLAY_SELF', uid: f2.uid })
+  check('Méta : la carte posée reçoit le numéro suivant', vol.meta[f2.uid].seq === s.seqCounter + 1)
+  check('Méta : le flirt volé est posé de nouveau chez le voleur (plus récent)',
+    vol.players[0].flirts.at(-1).uid === f1.uid && vol.meta[f1.uid].seq > seqBefore && vol.meta[f1.uid].seq > vol.meta[f2.uid].seq)
+  check('Méta : l’état précédent n’est pas modifié', s.meta[f1.uid].seq === seqBefore && !s.meta[f2.uid])
+  // Ben subit un Divorce : le mariage quitte la table, sa méta disparaît ; le Divorce est posé
+  vol.current = 0; vol.phase = 'play'; vol.playsRemaining = 1
+  vol.players[0].hand[0] = divorce
+  const d = gameReducer(vol, { by: 0, type: 'PLAY_MALUS', uid: divorce.uid, target: 1 })
+  check('Méta : la carte qui quitte la table perd sa méta', !d.meta[mariage.uid] && d.discard.some((e) => e.card.uid === mariage.uid))
+  check('Méta : le malus reçu est posé avec un numéro', d.meta[divorce.uid]?.seq === vol.seqCounter + 1)
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

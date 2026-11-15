@@ -6,12 +6,14 @@ import { buildDeck, shuffle } from '../data/index.js'
 import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard, canTakeRiverNow,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost, hasTag, isGrandProf,
-  availableLiasses, validatePayment, canStopAdultery, canEndPlays, birthdayDonors, lowestUnusedSalary,
+  validatePayment, canStopAdultery, canEndPlays, birthdayDonors, lowestUnusedSalary,
+  activeGrandPrix, unusedHeritage, heritageLiasses,
 } from './rules.js'
 import { canAct } from './turn.js'
 import {
   jobOf, addJob, removeJob, marriageOf, addMarriage, removeMarriage, adulteryOf, addAdultery, removeAdultery,
   topFlirt, unspentMoney, addMoney, takeMoney, investMoney, malusOf, addMalus, takeMalus, putOutOfGame,
+  placeCard, liftCard, liftAll, markUsed,
 } from './state.js'
 import { seedFrom, randomSeed, rngOf, pick } from './rng.js'
 
@@ -24,50 +26,19 @@ function makePlayer(name, color = null) {
     hand: [],
     studies: [],
     jobs: [],           // métiers (jeu de base : un seul, règle dans rules.js)
-    money: [],          // [{ card, invested, paidFor }] paidFor = uid de l'acquisition payée
+    money: [],          // cartes d'argent ; dépensées : state.meta (used, on = acquisition payée)
     flirts: [],         // dernier élément = dessus de la pile
     marriages: [],      // mariages (jeu de base : un seul)
     adultery: [],       // au plus une carte
     children: [],
     acquisitions: [],
-    distinctions: [],   // [{ card, active }]
+    distinctions: [],   // Grand Prix sans effet : state.meta (used)
     specials: [],       // cartes spéciales utilisées (retournées)
     malus: [],          // malus reçus (retournés)
     skipTurns: 0,
     wasBandit: false,
     didAttentat: false,
-    heritage: 0,        // liasses d'héritage disponibles
-    heritageFor: {},    // uid carte Héritage → uid de l'acquisition qu'elle a payée
     architectFreeUsed: false,
-  }
-}
-
-// clone superficiel profond-suffisant : on clone les joueurs et les listes
-function cloneState(state) {
-  return {
-    ...state,
-    deck: [...state.deck],
-    discard: [...state.discard],
-    outOfGame: state.outOfGame.map((e) => ({ ...e })),
-    river: [...state.river],
-    log: [...state.log],
-    players: state.players.map((p) => ({
-      ...p,
-      hand: [...p.hand],
-      studies: [...p.studies],
-      jobs: [...p.jobs],
-      money: p.money.map((m) => ({ ...m })),
-      flirts: [...p.flirts],
-      marriages: [...p.marriages],
-      adultery: [...p.adultery],
-      children: [...p.children],
-      acquisitions: [...p.acquisitions],
-      distinctions: p.distinctions.map((d) => ({ ...d })),
-      specials: [...p.specials],
-      heritageFor: { ...p.heritageFor },
-      malus: [...p.malus],
-    })),
-    casino: state.casino ? { ...state.casino, stake: state.casino.stake ? { ...state.casino.stake } : null } : null,
   }
 }
 
@@ -109,14 +80,13 @@ function loseJob(s, pIdx, destination = 'discard', resume = 'finish-play') {
   const p = s.players[pIdx]
   const job = jobOf(p)
   if (!job) return false
-  removeJob(p, job.uid)
+  removeJob(s, p, job.uid)
   p.architectFreeUsed = false
   // Grand Prix : retourné mais conserve ses smiles
-  for (const d of p.distinctions) {
-    if (d.card.key === 'grandprix' && d.active) {
-      d.active = false
-      log(s, `Le Grand Prix de ${p.name} est retourné (smiles conservés)`)
-    }
+  const gp = activeGrandPrix(s, p)
+  if (gp) {
+    markUsed(s, gp.uid)
+    log(s, `Le Grand Prix de ${p.name} est retourné (smiles conservés)`)
   }
   if (destination === 'discard') toDiscard(s, job, pIdx)
   // Chercheur : défausse 1 carte en plus (main 6 → 5), choisie par le joueur
@@ -139,41 +109,40 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
     case 'maladie':
     case 'burnout':
       t.skipTurns += 1
-      addMalus(t, card)
+      addMalus(s, t, card)
       log(s, `${a.name} inflige ${card.name} à ${t.name} : passe 1 tour`, 'malus')
       break
     case 'licenciement':
       log(s, `${a.name} licencie ${t.name} (${jobOf(t).name})`, 'malus')
       loseJob(s, targetIdx)
-      addMalus(t, card)
+      addMalus(s, t, card)
       break
     case 'impot': {
       // le dernier salaire non investi
-      const last = unspentMoney(t).at(-1)
+      const last = unspentMoney(s, t).at(-1)
       if (last) {
-        toDiscard(s, takeMoney(t, last.uid), targetIdx)
+        toDiscard(s, takeMoney(s, t, last.uid), targetIdx)
         log(s, `${a.name} impose ${t.name} : salaire niveau ${last.level} défaussé`, 'malus')
       }
-      addMalus(t, card)
+      addMalus(s, t, card)
       break
     }
     case 'divorce': {
-      toDiscard(s, removeMarriage(t, marriageOf(t).uid), targetIdx)
+      toDiscard(s, removeMarriage(s, t, marriageOf(t).uid), targetIdx)
       if (adulteryOf(t)) {
-        toDiscard(s, removeAdultery(t, adulteryOf(t).uid), targetIdx)
-        for (const child of t.children) toDiscard(s, child, targetIdx)
-        t.children = []
+        toDiscard(s, removeAdultery(s, t, adulteryOf(t).uid), targetIdx)
+        for (const child of liftAll(s, t.children)) toDiscard(s, child, targetIdx)
         log(s, `${a.name} divorce ${t.name} en plein adultère : mariage, adultère et enfants perdus !`, 'malus')
       } else {
         log(s, `${a.name} inflige un Divorce à ${t.name} (enfants conservés)`, 'malus')
       }
-      addMalus(t, card)
+      addMalus(s, t, card)
       break
     }
     case 'redoublement': {
-      const study = t.studies.pop()
-      if (study) toDiscard(s, study, targetIdx)
-      addMalus(t, card)
+      const study = t.studies.at(-1)
+      if (study) toDiscard(s, liftCard(s, t.studies, study.uid), targetIdx)
+      addMalus(s, t, card)
       log(s, `${a.name} fait redoubler ${t.name} : 1 carte études défaussée`, 'malus')
       break
     }
@@ -184,11 +153,9 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
       toDiscard(s, card, attackerIdx)
       break
     case 'attentat': {
-      for (const child of a.children) putOutOfGame(s, child, 'attentat', attackerIdx)
-      for (const child of t.children) putOutOfGame(s, child, 'attentat', attackerIdx)
       const na = a.children.length, nt = t.children.length
-      a.children = []
-      t.children = []
+      for (const child of liftAll(s, a.children)) putOutOfGame(s, child, 'attentat', attackerIdx)
+      for (const child of liftAll(s, t.children)) putOutOfGame(s, child, 'attentat', attackerIdx)
       a.didAttentat = true
       putOutOfGame(s, card, 'attentat', attackerIdx)
       log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${na + nt} enfant(s) retirés du jeu`, 'malus')
@@ -240,7 +207,7 @@ function poseSelf(s, pIdx, card) {
   }
   switch (card.type) {
     case 'study':
-      p.studies.push(card)
+      placeCard(s, p.studies, card)
       log(s, `${p.name} pose ${card.name} (${p.studies.length} carte(s), niveau ${p.studies.reduce((t, c) => t + c.levels, 0)})`)
       break
 
@@ -248,12 +215,12 @@ function poseSelf(s, pIdx, card) {
       if (isGrandProf(card)) {
         // promotion : le Prof est défaussé
         const prof = jobOf(p)
-        toDiscard(s, removeJob(p, prof.uid), pIdx)
-        addJob(p, card)
+        toDiscard(s, removeJob(s, p, prof.uid), pIdx)
+        addJob(s, p, card)
         log(s, `${p.name} est promu Grand Prof !`)
         break
       }
-      addJob(p, card)
+      addJob(s, p, card)
       if (card.key === 'bandit') p.wasBandit = true
       log(s, `${p.name} devient ${card.name}`)
       // Policier : purge les Bandits et Gourous déjà posés
@@ -270,20 +237,20 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'salary':
-      addMoney(p, card)
+      addMoney(s, p, card)
       log(s, `${p.name} pose un salaire niveau ${card.level}`)
       break
 
     case 'flirt': {
-      p.flirts.push(card)
+      placeCard(s, p.flirts, card)
       log(s, `${p.name} flirte ${card.name} ${card.emoji}`)
       // Vol de flirt : même lieu que le flirt du DESSUS d'un adversaire
       s.players.forEach((q, qi) => {
         if (qi === pIdx) return
         const top = topFlirt(q)
         if (top && top.place === card.place) {
-          q.flirts.pop()
-          p.flirts.push(top)
+          // le flirt volé est posé de nouveau, chez le voleur
+          placeCard(s, p.flirts, liftCard(s, q.flirts, top.uid))
           log(s, `💘 ${p.name} vole le flirt ${top.name} de ${q.name} !`, 'malus')
         }
       })
@@ -291,28 +258,28 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'marriage':
-      addMarriage(p, card)
+      addMarriage(s, p, card)
       log(s, `💒 ${p.name} se marie à ${card.name} !`)
       break
 
     case 'adultery':
-      addAdultery(p, card)
+      addAdultery(s, p, card)
       log(s, `😏 ${p.name} commence un adultère...`)
       break
 
     case 'child':
-      p.children.push(card)
+      placeCard(s, p.children, card)
       log(s, `👶 ${p.name} accueille ${card.name} !`)
       break
 
     case 'acquisition': {
       if (hasTag(card, 'animal')) {
-        p.acquisitions.push(card)
+        placeCard(s, p.acquisitions, card)
         log(s, `${p.name} adopte ${card.name} ${card.emoji || ''}`)
         break
       }
       if (hasTag(card, 'travel') && hasJob(p, 'pilote')) {
-        p.acquisitions.push(card)
+        placeCard(s, p.acquisitions, card)
         log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (Pilote)`)
         break
       }
@@ -322,7 +289,7 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'distinction': {
-      p.distinctions.push({ card, active: true })
+      placeCard(s, p.distinctions, card)
       log(s, `🏅 ${p.name} reçoit ${card.name} !`)
       break
     }
@@ -340,9 +307,9 @@ function giveBirthdayGifts(s, pIdx, gifts) {
   let count = 0
   s.players.forEach((q, qi) => {
     if (qi === pIdx) return
-    const gift = takeMoney(q, gifts[qi])
+    const gift = takeMoney(s, q, gifts[qi])
     if (gift) {
-      addMoney(p, gift)
+      addMoney(s, p, gift)
       count++
       log(s, `🎂 ${q.name} offre un salaire niveau ${gift.level} à ${p.name}`)
     } else {
@@ -359,7 +326,7 @@ function applySpecial(s, pIdx, card) {
   const p = s.players[pIdx]
   switch (card.key) {
     case 'anniversaire': {
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       // chaque adversaire ayant un salaire non investi choisit celui qu'il offre
       // (action BIRTHDAY_GIFT) ; sans donateur, l'anniversaire est réglé tout de suite
       const donors = birthdayDonors(s, pIdx)
@@ -371,14 +338,14 @@ function applySpecial(s, pIdx, card) {
       return true
     }
     case 'arcenciel':
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       // +3 jeux : après consommation de la pose de l'Arc-en-ciel, il en reste 3
       s.playsRemaining += 3
       s.rainbow = true // le joueur peut s'arrêter quand il veut (END_PLAYS)
       log(s, `🌈 ${p.name} joue Arc-en-ciel : jusqu’à 3 cartes d’un coup !`)
       return false
     case 'chance': {
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       const cards = []
       for (let i = 0; i < 3; i++) {
         const c = drawCard(s)
@@ -391,25 +358,24 @@ function applySpecial(s, pIdx, card) {
       return true
     }
     case 'etoile':
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       log(s, `🌠 ${p.name} joue Étoile filante`)
       s.pending = { type: 'discard-pick', source: 'Étoile filante' }
       return true
     case 'heritage':
-      p.specials.push(card)
-      p.heritage += 3
+      placeCard(s, p.specials, card)
       log(s, `💵 ${p.name} touche un Héritage : 3 liasses pour ses futurs achats`)
       return false
     case 'piston':
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       s.pending = { type: 'piston' }
       return true
     case 'troc':
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       s.pending = { type: 'troc' }
       return true
     case 'tsunami': {
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       let pool = []
       s.players.forEach((q) => { pool = pool.concat(q.hand); q.hand = [] })
       pool = shuffle(pool, rngOf(s))
@@ -436,11 +402,11 @@ function applySpecial(s, pIdx, card) {
       return false
     }
     case 'vengeance':
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       s.pending = { type: 'vengeance' }
       return true
     case 'casino':
-      p.specials.push(card)
+      placeCard(s, p.specials, card)
       s.casino = { owner: pIdx, stake: null }
       log(s, `🎰 ${p.name} ouvre un Casino !`)
       if (p.hand.some((c) => c.type === 'salary')) {
@@ -515,7 +481,7 @@ function gameOver(s) {
   // casino non résolu : le miseur récupère son salaire (avec son smile)
   if (s.casino?.stake) {
     const { card, by } = s.casino.stake
-    addMoney(s.players[by], card)
+    addMoney(s, s.players[by], card)
     log(s, `🎰 Personne n’a relevé la mise : ${s.players[by].name} récupère son salaire`)
     s.casino.stake = null
   }
@@ -560,6 +526,8 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
       deck: [],
       discard: [],
       outOfGame: [],      // cartes retirées du jeu : [{ card, cause, by }], public
+      meta: {},           // état des cartes posées, par uid : { seq, used?, on? } (state.js)
+      seqCounter: 0,      // dernier numéro d'ordre de pose (meta[uid].seq)
       river: [],
       riverEnabled: river,
       riverIdle: 0,
@@ -594,7 +562,8 @@ export function gameReducer(prev, action) {
   // Chercheur qui perd son métier : seule sa défausse est attendue
   if ((prev.pending?.type === 'chercheur-discard') !== (action.type === 'CHERCHEUR_DISCARD')) return prev
 
-  const s = cloneState(prev)
+  // copie complète : aucune zone ne peut être oubliée dans la copie
+  const s = structuredClone(prev)
   // p = joueur dont c'est le tour. Hors troc du Chef (étape opp-pick, où
   // l'adversaire choisit dans la main du Chef) et cadeaux d'Anniversaire (chaque
   // donateur offre son salaire), c'est aussi l'auteur de l'action.
@@ -649,9 +618,9 @@ export function gameReducer(prev, action) {
     }
     case 'DIVORCE_VOLUNTARY': {
       if (s.phase !== 'draw' || !marriageOf(p)) return prev
-      toDiscard(s, removeMarriage(p, marriageOf(p).uid), s.current)
+      toDiscard(s, removeMarriage(s, p, marriageOf(p).uid), s.current)
       if (adulteryOf(p)) {
-        toDiscard(s, removeAdultery(p, adulteryOf(p).uid), s.current)
+        toDiscard(s, removeAdultery(s, p, adulteryOf(p).uid), s.current)
         log(s, `${p.name} divorce volontairement (adultère défaussé, enfants et flirts conservés) et passe son tour`)
       } else {
         log(s, `${p.name} divorce volontairement (enfants conservés) et passe son tour`)
@@ -661,7 +630,7 @@ export function gameReducer(prev, action) {
     }
     case 'STOP_ADULTERY': {
       if (!canStopAdultery(s, s.current).ok) return prev
-      toDiscard(s, removeAdultery(p, adulteryOf(p).uid), s.current)
+      toDiscard(s, removeAdultery(s, p, adulteryOf(p).uid), s.current)
       log(s, `${p.name} met fin à son adultère (flirts conservés)`)
       return s
     }
@@ -738,8 +707,8 @@ export function gameReducer(prev, action) {
           winnerIdx = first.by
           log(s, `🎰 Niveaux différents (${first.card.level} vs ${card.level}) : ${firstP.name} remporte les deux salaires !`)
         }
-        addMoney(s.players[winnerIdx], first.card)
-        addMoney(s.players[winnerIdx], card)
+        addMoney(s, s.players[winnerIdx], first.card)
+        addMoney(s, s.players[winnerIdx], card)
         s.casino.stake = null
       }
       consumePlay(s, fromForced)
@@ -762,29 +731,26 @@ export function gameReducer(prev, action) {
       const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
       if (!isFree) {
         const chosen = []
-        const unspent = unspentMoney(p)
+        const unspent = unspentMoney(s, p)
         for (const su of action.salaryUids || []) {
           const sal = unspent.find((c) => c.uid === su)
           if (sal && !chosen.includes(sal)) chosen.push(sal)
         }
-        const heritage = action.useHeritage && p.heritage > 0 ? p.heritage : 0
+        const heritage = action.useHeritage ? heritageLiasses(s, p) : 0
         // pas de salaire superflu : impossible de sur-investir pour échapper à l'Impôt
         if (!validatePayment(cost, chosen.map((c) => c.level), heritage).ok) return prev
         const paid = chosen.reduce((t, c) => t + c.level, 0) + heritage
         // les salaires passent sous l'acquisition qu'ils ont payée
-        for (const sal of chosen) investMoney(p, sal.uid, card.uid)
-        if (heritage > 0) {
-          p.heritage = 0
-          // l'Héritage (tout ou rien) passe sous l'acquisition, avec les salaires
-          for (const c of p.specials) if (c.key === 'heritage' && !p.heritageFor[c.uid]) p.heritageFor[c.uid] = card.uid
-        }
+        for (const sal of chosen) investMoney(s, p, sal.uid, card.uid)
+        // l'Héritage (tout ou rien) passe sous l'acquisition, avec les salaires
+        if (heritage > 0) for (const c of unusedHeritage(s, p)) markUsed(s, c.uid, card.uid)
         log(s, `${p.name} achète ${card.name} pour ${cost} liasses (${paid} investies${paid > cost ? ' — pas de monnaie !' : ''})`)
       } else {
         p.architectFreeUsed = true
         log(s, `🏠 ${p.name} (Architecte) obtient ${card.name} gratuitement !`)
       }
       const wasForced = s.pending.fromForced
-      p.acquisitions.push(card)
+      placeCard(s, p.acquisitions, card)
       s.pending = null
       consumePlay(s, wasForced)
       finishPlay(s)
@@ -833,7 +799,7 @@ export function gameReducer(prev, action) {
       if (hasTag(card, 'outlaw') && s.players.some((q) => hasJob(q, 'policier'))) return prev
       if (jobOf(p)) return prev
       removeFromHand(p, card.uid)
-      addJob(p, card)
+      addJob(s, p, card)
       if (card.key === 'bandit') p.wasBandit = true
       log(s, `🤝 Grâce au Piston, ${p.name} devient ${card.name} sans les études !`)
       s.pending = null
@@ -921,7 +887,7 @@ export function gameReducer(prev, action) {
       const malus = malusOf(p).find((c) => c.uid === action.uid)
       if (!malus) return prev
       if (!canPlayMalus(s, s.current, malus, action.target).ok) return prev
-      takeMalus(p, malus.uid)
+      takeMalus(s, p, malus.uid)
       log(s, `😈 ${p.name} se venge avec ${malus.name} !`)
       // avant applyMalus : un licenciement de Chercheur ouvre un nouveau choix
       s.pending = null
@@ -951,10 +917,9 @@ export function gameReducer(prev, action) {
       if (pend?.type !== 'birthday' || !pend.donors.includes(action.by) || action.by in pend.gifts) return prev
       const donor = s.players[action.by]
       const gift = action.uid == null
-        ? lowestUnusedSalary(donor)
-        : unspentMoney(donor).find((c) => c.uid === action.uid)
+        ? lowestUnusedSalary(s, donor)
+        : unspentMoney(s, donor).find((c) => c.uid === action.uid)
       if (!gift) return prev
-      // nouvel objet : cloneState ne copie pas le pending
       const gifts = { ...pend.gifts, [action.by]: gift.uid }
       if (pend.donors.some((i) => !(i in gifts))) {
         s.pending = { ...pend, gifts }

@@ -1,6 +1,6 @@
 import Card from './Card'
 import { computeScore } from '../game/scoring'
-import { studyLevel, effectiveSalaryLevel } from '../game/rules'
+import { studyLevel, effectiveSalaryLevel, heritageLiasses } from '../game/rules'
 import { jobOf, jobs, moneyOf, marriages, isMarried, adulteries, adulteryOf, malusOf, topFlirt } from '../game/state'
 
 function Zone({ title, children, empty, compact }) {
@@ -20,6 +20,7 @@ export default function PlayerBoard({ player, state, compact = false }) {
   const p = player
   const score = computeScore(p)
   const casinoHere = state.casino && state.players[state.casino.owner] === p
+  const heritage = heritageLiasses(state, p)
   const size = compact ? 'xs' : 'sm'
   // appel de fonction (et non composant local) : les cartes ne sont pas recréées à chaque rendu
   const show = ({ card, className }) => <Card key={card.uid} card={card} size={size} zoomable className={className} />
@@ -30,7 +31,7 @@ export default function PlayerBoard({ player, state, compact = false }) {
         <Zone compact={compact}
           title={compact
             ? `Vie pro · niv. ${studyLevel(p)}`
-            : `📚💼 Vie pro — ${p.studies.length}/6 cartes études (niv. ${studyLevel(p)})${jobOf(p) ? ` · salaire max ${effectiveSalaryLevel(p)}` : ''}`}
+            : `📚💼 Vie pro — ${p.studies.length}/6 cartes études (niv. ${studyLevel(p)})${jobOf(p) ? ` · salaire max ${effectiveSalaryLevel(state, p)}` : ''}`}
           empty={!p.studies.length && !jobs(p).length && !moneyOf(p).length ? (compact ? '—' : 'Sans emploi ni diplôme') : null}>
           {p.studies.map((c) => show({ card: c }))}
           {jobs(p).map((c) => show({ card: c }))}
@@ -48,18 +49,16 @@ export default function PlayerBoard({ player, state, compact = false }) {
         </Zone>
 
         <Zone compact={compact} title={compact ? 'Acquisitions' : '🏠 Acquisitions'}
-          empty={!p.acquisitions.length && p.heritage === 0 ? (compact ? '—' : 'Aucun bien') : null}>
+          empty={!p.acquisitions.length && heritage === 0 ? (compact ? '—' : 'Aucun bien') : null}>
           {p.acquisitions.map((c) => show({ card: c }))}
-          {p.heritage > 0 && (
-            <span className="text-xs font-bold bg-green-100 text-green-700 rounded-lg px-2 py-1">💵 Héritage : {p.heritage} liasses</span>
+          {heritage > 0 && (
+            <span className="text-xs font-bold bg-green-100 text-green-700 rounded-lg px-2 py-1">💵 Héritage : {heritage} liasses</span>
           )}
         </Zone>
 
         <Zone compact={compact} title={compact ? 'Distinctions · malus' : '🏅⭐⚡ Distinctions · Spéciales · Malus'}
           empty={!p.distinctions.length && !p.specials.length && !malusOf(p).length && !casinoHere ? (compact ? '—' : 'Rien à signaler') : null}>
-          {p.distinctions.map((d) => (
-            show({ card: d.card })
-          ))}
+          {p.distinctions.map((c) => show({ card: c }))}
           {p.specials.map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
           {malusOf(p).map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
           {casinoHere && (

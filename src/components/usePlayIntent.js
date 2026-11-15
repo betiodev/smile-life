@@ -134,7 +134,7 @@ export default function usePlayIntent({ state, viewer, act, remember, setView })
     if (flow === 'purchase') {
       const cost = purchaseCost(p, card)
       const free = architectFree(p, card)
-      const best = cheapestPayment(p, cost)
+      const best = cheapestPayment(state, p, cost)
       const payment = free
         ? { architect: true, salaryUids: [], useHeritage: false }
         : { architect: false, salaryUids: best?.salaryUids ?? [], useHeritage: best?.useHeritage ?? false }

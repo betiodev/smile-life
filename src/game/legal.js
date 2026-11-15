@@ -44,7 +44,7 @@ function pendingActions(state, actor) {
     case 'purchase': {
       const out = []
       if (architectFree(p, pend.card)) out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
-      const best = cheapestPayment(p, purchaseCost(p, pend.card))
+      const best = cheapestPayment(state, p, purchaseCost(p, pend.card))
       if (best) out.push({ type: 'PURCHASE_CONFIRM', salaryUids: best.salaryUids, useHeritage: best.useHeritage })
       out.push({ type: 'PURCHASE_CANCEL' })
       return out
@@ -96,7 +96,7 @@ function pendingActions(state, actor) {
     case 'birthday': {
       const donor = state.players[actor]
       return [
-        ...unspentMoney(donor).map((c) => ({ type: 'BIRTHDAY_GIFT', uid: c.uid })),
+        ...unspentMoney(state, donor).map((c) => ({ type: 'BIRTHDAY_GIFT', uid: c.uid })),
         { type: 'BIRTHDAY_GIFT', uid: null },
       ]
     }

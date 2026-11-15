@@ -5,8 +5,8 @@
 // ---------------------------------------------------------------------------
 import { Fragment } from 'react'
 import Card from './Card'
-import { paidCards, spentCards, unusedHeritage } from '../game/rules'
-import { jobs, unspentMoney, marriages, adulteries, malusOf } from '../game/state'
+import { paidCards, spentCards, unusedHeritage, heritageLiasses } from '../game/rules'
+import { jobs, unspentMoney, marriages, adulteries, malusOf, isUsed } from '../game/state'
 
 export const CARD_RATIO = 1417 / 968 // hauteur / largeur
 // au-delà de cette largeur, la carte affiche son texte d'effet complet
@@ -25,19 +25,19 @@ const peekFor = (w) => Math.max(3, Math.round(w * CARD_RATIO * PEEK))
 // ordre du tableau de vie : pro, perso, acquisitions, distinctions, spéciales, malus
 // (seuls les salaires non investis restent dans la pile des salaires ; l'Héritage
 // reste face visible jusqu'à l'achat qu'il paie, puis passe sous l'acquisition)
-function boardStacks(p) {
+function boardStacks(s, p) {
   const entries = [
     ...p.studies.map((card) => ({ card, group: 'study' })),
     ...jobs(p).map((card) => ({ card, group: 'job' })),
-    ...unspentMoney(p).map((card) => ({ card, group: 'salary' })),
+    ...unspentMoney(s, p).map((card) => ({ card, group: 'salary' })),
     ...p.flirts.map((card) => ({ card, group: 'flirt' })),
     ...marriages(p).map((card) => ({ card, group: 'marriage' })),
     ...adulteries(p).map((card) => ({ card, group: 'adultery' })),
     ...p.children.map((card) => ({ card, group: 'child' })),
-    ...unusedHeritage(p).map((card) => ({ card, group: 'heritage', note: `${p.heritage} liasses pour un futur achat` })),
-    ...p.acquisitions.map((card) => ({ card, group: 'acquisition', under: paidCards(p, card.uid) })),
-    ...spentCards(p).map((card) => ({ card, group: 'spent', faceDown: true, note: card.type === 'salary' ? 'Salaire dépensé : compte ses smiles, ne peut plus servir' : 'Héritage dépensé' })),
-    ...p.distinctions.map((d) => ({ card: d.card, group: 'distinction', badge: d.active ? null : 'Sans effet', note: d.active ? null : 'Sans effet : métier perdu (smiles conservés)' })),
+    ...unusedHeritage(s, p).map((card) => ({ card, group: 'heritage', note: `${heritageLiasses(s, p)} liasses pour un futur achat` })),
+    ...p.acquisitions.map((card) => ({ card, group: 'acquisition', under: paidCards(s, p, card.uid) })),
+    ...spentCards(s, p).map((card) => ({ card, group: 'spent', faceDown: true, note: card.type === 'salary' ? 'Salaire dépensé : compte ses smiles, ne peut plus servir' : 'Héritage dépensé' })),
+    ...p.distinctions.map((card) => ({ card, group: 'distinction', badge: isUsed(s, card) ? 'Sans effet' : null, note: isUsed(s, card) ? 'Sans effet : métier perdu (smiles conservés)' : null })),
     ...p.specials.filter((c) => c.key !== 'heritage').map((card) => ({ card, group: 'special', faceDown: true })),
     ...malusOf(p).map((card) => ({ card, group: 'malus', faceDown: true })),
   ].filter(Boolean)
@@ -130,7 +130,7 @@ function Stack({ group, cards, width, peekK, onZoom, hiddenUid }) {
 // onZoom(cartes, { under, notes }) : toucher une pile l'agrandit (lecture seule)
 // hiddenUid : carte montrée ailleurs par un fantôme (métier intérimaire en partance)
 export default function PlayedStacks({ player, state, boxWidth, boxHeight, empty = 'Aucune carte posée', onZoom = null, hiddenUid = null }) {
-  const stacks = boardStacks(player)
+  const stacks = boardStacks(state, player)
   const casinoHere = state.casino && state.players[state.casino.owner] === player
   const chips = casinoHere ? 1 : 0
   const { width, split } = layout(stacks, chips, boxWidth, boxHeight)
