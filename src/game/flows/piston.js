@@ -11,16 +11,12 @@
 // data = { pistonUid } : la carte Piston jouée (déjà posée).
 // ---------------------------------------------------------------------------
 import { take, place, refill, attach, log } from '../primitives.js'
-import { hasJob, hasTag, isGrandProf } from '../rules.js'
+import { pistonable } from '../rules.js'
 import { jobOf } from '../state.js'
-import { policeSweep, triggerJobApi } from '../effects.js'
+import { runOnPlace } from '../effects.js'
 import { finishFlow, resumeDone } from './index.js'
 
 const copy = (x) => JSON.parse(JSON.stringify(x))
-
-const pistonable = (state, card) =>
-  card.type === 'job' && !isGrandProf(card) &&
-  !(hasTag(card, 'outlaw') && state.players.some((q) => hasJob(q, 'policier')))
 
 const piston = {
   start: (state, { card }) => ({ flow: 'piston', step: 'pick', data: { pistonUid: card?.uid ?? null } }),
@@ -28,25 +24,23 @@ const piston = {
   legal(state, frame) {
     const p = state.players[state.current]
     if (frame.step !== 'pick' || jobOf(p)) return []
-    return p.hand.filter((c) => pistonable(state, c)).map((c) => ({ type: 'PISTON_PICK', uid: c.uid }))
+    return p.hand.filter((c) => pistonable(state, state.current, c)).map((c) => ({ type: 'PISTON_PICK', uid: c.uid }))
   },
   apply(s, frame, action) {
     if (action.type !== 'PISTON_PICK' || frame.step !== 'pick') return false
     const p = s.players[s.current]
     const card = p.hand.find((c) => c.uid === action.uid)
-    if (!card || !pistonable(s, card) || jobOf(p)) return false
+    if (!card || !pistonable(s, s.current, card) || jobOf(p)) return false
     take(s, { hand: s.current }, card.uid)
     place(s, s.current, card)
     // le Piston reste derrière le métier qu'il a donné
     if (frame.data.pistonUid) attach(s, frame.data.pistonUid, card.uid)
-    if (card.key === 'bandit') p.wasBandit = true
     log(s, `🤝 Grâce au Piston, ${p.name} devient ${card.name} sans les études !`)
     // "repiochez pour avoir 5 cartes"
     refill(s, s.current)
-    // le métier pistonné déclenche aussi son avantage instantané
-    triggerJobApi(s, s.current, card)
-    // Policier pistonné : purge les Bandits et Gourous
-    if (card.key === 'policier') policeSweep(s, s.current)
+    // le métier pistonné déclenche aussi son avantage instantané (Journaliste,
+    // Médium, Astronaute, Chefs ; Policier : purge ; Bandit) : cards/base.js
+    runOnPlace(s, s.current, card)
     finishFlow(s, frame)
     return true
   },

@@ -8,7 +8,7 @@ import Card from './Card'
 import { Ghost, cardRect, prefersReducedMotion } from './flights'
 import { TOAST_MS } from './usePlayIntent'
 import { playerColor } from './theme'
-import { validatePayment, malusHasTarget, hasTag, hasJob, heritageLiasses } from '../game/rules'
+import { validatePayment, malusHasTarget, hasTag, architectFree, heritageLiasses } from '../game/rules'
 import { isMarried, unspentMoney, malusOf } from '../game/state'
 
 // carte en attente : arrive en volant depuis l'endroit où on l'a lâchée
@@ -74,7 +74,7 @@ export function PaymentSheet({ intent, state, player, patch, onCancel, onConfirm
       salaryUids: pay.salaryUids.includes(uid) ? pay.salaryUids.filter((u) => u !== uid) : [...pay.salaryUids, uid],
     },
   }))
-  const canArchitect = hasTag(intent.card, 'house') && hasJob(player, 'architecte') && !player.architectFreeUsed
+  const canArchitect = architectFree(state, state.players.indexOf(player), intent.card)
   return (
     <Sheet intent={intent} title={`Payer ${intent.card.name}`}>
       <p className="text-sm opacity-80">Prix : <b>{cost} liasses</b>{isMarried(player) && hasTag(intent.card, 'house') ? ' (prix marié)' : ''}</p>

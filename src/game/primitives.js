@@ -11,7 +11,7 @@
 //    forcée, cartes de la Chance, mise du Casino, malus de la Vengeance…
 //  - les primitives ne vérifient AUCUNE règle : le reducer valide avant.
 // ---------------------------------------------------------------------------
-import { handTarget } from './rules.js'
+import { handSize } from './rules.js'
 import { jobOf } from './state.js'
 import { emit } from './events.js'
 import { startFlow } from './flows/index.js'
@@ -119,10 +119,10 @@ export function draw(s, player, { count = 1, to = 'hand', at = null } = {}) {
   return drawn
 }
 
-// complète la main du joueur jusqu'à sa taille (handTarget). Événement handRefilled.
+// complète la main du joueur jusqu'à sa taille (handSize). Événement handRefilled.
 export function refill(s, player) {
   const p = s.players[player]
-  const missing = Math.max(0, handTarget(p) - p.hand.length)
+  const missing = Math.max(0, handSize(s, player) - p.hand.length)
   const drawn = draw(s, player, { count: missing })
   emit(s, 'handRefilled', { player, count: drawn.length })
 }
@@ -199,7 +199,8 @@ function findOnBoard(s, uid) {
 //           'aside'     — rendue à l'appelant (Vengeance : le malus est rejoué)
 //           { player }  — posée sur le plateau de ce joueur (vol, cadeau)
 // Efface sa méta ; les cartes posées sous elle n'y sont plus rattachées.
-// Les protections (isProtected) arriveront avec les requêtes (étape 10).
+// La question isProtected existe (queries.js) mais remove ne la pose pas encore :
+// aucune carte du jeu de base ne protège (Girl Power la branchera).
 // Événement cardLeft. → la carte, ou null si elle n'est sur aucun plateau.
 export function remove(s, uid, { cause, by = null, to = 'discard' }) {
   const where = findOnBoard(s, uid)
@@ -234,12 +235,14 @@ export function loseJob(s, player, { cause, by = null }) {
   const p = s.players[player]
   const job = jobOf(p)
   if (!job) return false
+  const handBefore = handSize(s, player)
   remove(s, job.uid, { cause, by })
   p.architectFreeUsed = false
   emit(s, 'jobLost', { player, card: job, cause, by })
-  // Chercheur : défausse 1 carte en plus (main 6 → 5), choisie par le joueur
-  // lui-même (action CHERCHEUR_DISCARD), même pendant le tour d'un autre
-  if (job.key === 'chercheur' && p.hand.length > 0) {
+  // la main rétrécit (Chercheur : 6 → 5) : défausse 1 carte en plus, choisie
+  // par le joueur lui-même (action CHERCHEUR_DISCARD), même pendant le tour
+  // d'un autre
+  if (handSize(s, player) < handBefore && p.hand.length > 0) {
     startFlow(s, 'chercheur-discard', { player })
     return true
   }

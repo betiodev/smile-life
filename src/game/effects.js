@@ -4,13 +4,12 @@
 // (Piston, Vengeance, Anniversaire). Les zones ne changent que par les
 // primitives ; un effet qui attend un joueur pose un flux sur la pile.
 // ---------------------------------------------------------------------------
-import { shuffle } from '../data/index.js'
-import { isPlayableFromDiscard, hasJob, interimReplaced, handTarget, hasTag, isGrandProf, birthdayDonors } from './rules.js'
+import { interimReplaced, hasTag, isGrandProf, needsPayment } from './rules.js'
+import { setBy } from './queries.js'
 import { jobOf, marriageOf, adulteryOf, topFlirt, unspentMoney } from './state.js'
-import { log, draw, takeAll, put, place, remove, removeAll, steal, loseJob, skip } from './primitives.js'
-import { rngOf } from './rng.js'
+import { log, put, place, remove, removeAll, steal, loseJob, skip } from './primitives.js'
 import { startFlow } from './flows/index.js'
-import { addPlays, startRainbow } from './flows/turn.js'
+import { BEHAVIOURS } from './cards/index.js'
 // ---------------------------------------------------------------------------
 // Effets des malus (utilisé pour jeu direct ET Vengeance)
 // ---------------------------------------------------------------------------
@@ -79,42 +78,12 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
   }
 }
 
-// Policier (posé ou pistonné) : les Bandits et Gourous déjà posés sont défaussés
-export function policeSweep(s, pIdx) {
-  s.players.forEach((q, qi) => {
-    if (qi !== pIdx && hasTag(jobOf(q), 'outlaw')) {
-      log(s, `👮 Le Policier fait défausser le ${jobOf(q).name} de ${q.name}`, 'malus')
-      loseJob(s, qi, { cause: 'policier', by: pIdx })
-    }
-  })
-}
-
-// Avantages instantanés (API) déclenchés à la pose d'un métier
-// (pose normale ou via Piston) — retourne true si un flux est posé
-export function triggerJobApi(s, pIdx, card) {
-  if (card.key === 'journaliste') {
-    startFlow(s, 'journalist')
-    return true
-  }
-  if (card.key === 'medium') {
-    startFlow(s, 'medium')
-    return true
-  }
-  if (card.key === 'astronaute') {
-    if (s.discard.some((e) => isPlayableFromDiscard(s, pIdx, e.card))) {
-      startFlow(s, 'discard-pick', { source: 'Astronaute' })
-      return true
-    }
-    log(s, `L’avantage de l’Astronaute est perdu (rien de jouable dans la défausse)`)
-  }
-  if (card.key === 'chef_achats' || card.key === 'chef_ventes') {
-    if (s.players.some((q, qi) => qi !== pIdx && q.hand.length > 0)) {
-      startFlow(s, 'chef-troc')
-      return true
-    }
-    log(s, `L’avantage du ${card.name} est perdu (aucun adversaire avec des cartes)`)
-  }
-  return false
+// Ce que fait une carte quand son propriétaire la joue (déjà posée) :
+// comportement onPlace (src/game/cards/) → true si un flux est posé.
+// Avantages instantanés des métiers (pose normale ou Piston), cartes spéciales.
+export function runOnPlace(s, pIdx, card) {
+  const onPlace = BEHAVIOURS[card.def]?.onPlace
+  return onPlace ? !!onPlace(s, { card, owner: pIdx }) : false
 }
 
 // ---------------------------------------------------------------------------
@@ -146,12 +115,9 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
         break
       }
       place(s, pIdx, card)
-      if (card.key === 'bandit') p.wasBandit = true
       log(s, `${p.name} devient ${card.name}`)
-      // Policier : purge les Bandits et Gourous déjà posés
-      if (card.key === 'policier') policeSweep(s, pIdx)
-      // Avantages instantanés (API)
-      return triggerJobApi(s, pIdx, card)
+      // Policier (purge), Bandit, avantages instantanés : cards/base.js
+      return runOnPlace(s, pIdx, card)
     }
 
     case 'salary':
@@ -196,9 +162,11 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
         log(s, `${p.name} adopte ${card.name} ${card.emoji || ''}`)
         break
       }
-      if (hasTag(card, 'travel') && hasJob(p, 'pilote')) {
+      if (!needsPayment(s, pIdx, card)) {
+        // gratuite (Pilote : voyages) : posée sans passer par l'achat
+        const by = setBy(s, 'price', { player: pIdx, card })
         place(s, pIdx, card)
-        log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (Pilote)`)
+        log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (${by?.effect.note ?? by?.card.name})`)
         break
       }
       // achat à payer : le flux d'achat attend le paiement (flows/purchase.js)
@@ -213,7 +181,8 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
     }
 
     case 'special':
-      return applySpecial(s, pIdx, card)
+      place(s, pIdx, card)
+      return runOnPlace(s, pIdx, card)
   }
   return false
 }
@@ -235,99 +204,4 @@ export function giveBirthdayGifts(s, pIdx, gifts) {
     }
   })
   if (count === 0) log(s, `🎂 Triste anniversaire pour ${p.name}...`)
-}
-
-// ---------------------------------------------------------------------------
-// Cartes spéciales — retourne true si un flux est posé
-// ---------------------------------------------------------------------------
-function applySpecial(s, pIdx, card) {
-  const p = s.players[pIdx]
-  switch (card.key) {
-    case 'anniversaire': {
-      place(s, pIdx, card)
-      // chaque adversaire ayant un salaire non investi choisit celui qu'il offre
-      // (action BIRTHDAY_GIFT) ; sans donateur, l'anniversaire est réglé tout de suite
-      const donors = birthdayDonors(s, pIdx)
-      if (donors.length === 0) {
-        giveBirthdayGifts(s, pIdx, {})
-        return false
-      }
-      startFlow(s, 'birthday', { card, donors })
-      return true
-    }
-    case 'arcenciel':
-      place(s, pIdx, card)
-      // +3 jeux : après consommation de la pose de l'Arc-en-ciel, il en reste 3
-      addPlays(s, 3)
-      startRainbow(s) // le joueur peut s'arrêter quand il veut (END_PLAYS)
-      log(s, `🌈 ${p.name} joue Arc-en-ciel : jusqu’à 3 cartes d’un coup !`)
-      return false
-    case 'chance': {
-      place(s, pIdx, card)
-      const cards = draw(s, pIdx, { count: 3, to: 'aside' })
-      // Chance agit comme une pioche : elle ne consomme pas le jeu du tour
-      addPlays(s, 1)
-      log(s, `🍀 ${p.name} joue Chance : pioche ${cards.length} cartes, en garde une en main`)
-      startFlow(s, 'chance', { cards })
-      return true
-    }
-    case 'etoile':
-      place(s, pIdx, card)
-      log(s, `🌠 ${p.name} joue Étoile filante`)
-      startFlow(s, 'discard-pick', { source: 'Étoile filante' })
-      return true
-    case 'heritage':
-      place(s, pIdx, card)
-      log(s, `💵 ${p.name} touche un Héritage : 3 liasses pour ses futurs achats`)
-      return false
-    case 'piston':
-      place(s, pIdx, card)
-      startFlow(s, 'piston', { card })
-      return true
-    case 'troc':
-      place(s, pIdx, card)
-      startFlow(s, 'troc')
-      return true
-    case 'tsunami': {
-      place(s, pIdx, card)
-      let pool = []
-      s.players.forEach((q, qi) => { pool = pool.concat(takeAll(s, { hand: qi })) })
-      pool = shuffle(pool, rngOf(s))
-      // redistribution équitable : chacun vers sa taille de main cible
-      const order = s.players.map((_, i) => (pIdx + i) % s.players.length)
-      let active = true
-      while (pool.length > 0 && active) {
-        active = false
-        for (const qi of order) {
-          if (pool.length === 0) break
-          if (s.players[qi].hand.length < handTarget(s.players[qi])) {
-            put(s, pool.pop(), { hand: qi })
-            active = true
-          }
-        }
-      }
-      // s'il reste des cartes (mains inégales), distribution round-robin
-      let k = 0
-      while (pool.length > 0) {
-        put(s, pool.pop(), { hand: order[k % order.length] })
-        k++
-      }
-      log(s, `🌊 ${p.name} déclenche un Tsunami : toutes les mains sont redistribuées !`)
-      return false
-    }
-    case 'vengeance':
-      place(s, pIdx, card)
-      startFlow(s, 'vengeance')
-      return true
-    case 'casino':
-      place(s, pIdx, card)
-      s.casino = { owner: pIdx, stake: null }
-      log(s, `🎰 ${p.name} ouvre un Casino !`)
-      if (p.hand.some((c) => c.type === 'salary')) {
-        startFlow(s, 'casino-stake')
-        return true
-      }
-      return false
-  }
-  return false
 }

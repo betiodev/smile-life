@@ -188,7 +188,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play a game using as many special cards as you can (Troc, Chance, Anniversaire, Casino, Piston). Each one behaves as before.
   - Prompt: [docs/prompts/09-flow-stack-port.md](prompts/09-flow-stack-port.md)
 
-- [ ] **Step 10 — Queries, modifiers and one precedence function**
+- [x] **Step 10 — Queries, modifiers and one precedence function**
   - Goal: Move the base game's perks and immunities onto the mechanism the extensions will use, which proves the mechanism.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/10-queries-modifiers.md and follow it.`

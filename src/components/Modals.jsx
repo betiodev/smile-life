@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
-import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
+import { canTarget, purchaseCost, architectFree as freeForArchitect, pistonable, validatePayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
 import { legalActions } from '../game/legal'
 import { jobOf, isMarried, unspentMoney, malusOf, choiceOf } from '../game/state'
 
@@ -41,8 +41,8 @@ function PurchaseModal({ state, dispatch, until }) {
   const card = choiceOf(state).card
   const [chosen, setChosen] = useState([])
   const [useHeritage, setUseHeritage] = useState(false)
-  const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
-  const architectFree = hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed
+  const cost = purchaseCost(state, state.current, card)
+  const architectFree = freeForArchitect(state, state.current, card)
 
   const available = unspentMoney(state, p)
   const liasses = heritageLiasses(state, p)
@@ -132,13 +132,12 @@ function DiscardPickModal({ state, dispatch, until }) {
 // --- Piston : choisir un métier en main --------------------------------------
 function PistonModal({ state, dispatch, until }) {
   const p = state.players[state.current]
-  const policier = state.players.some((q) => hasJob(q, 'policier'))
   const jobs = p.hand.filter((c) => c.type === 'job' && !isGrandProf(c))
   return (
     <Modal until={until} title="🤝 Piston — posez le métier de votre choix, sans condition d’études" wide>
       <div className="flex gap-2 flex-wrap justify-center">
         {jobs.map((c) => {
-          const blocked = hasTag(c, 'outlaw') && policier
+          const blocked = !pistonable(state, state.current, c)
           return (
             <Card
               key={c.uid}
@@ -272,7 +271,7 @@ function VengeanceModal({ state, dispatch, until }) {
           <div className="space-y-2">
             {state.players.map((q, i) => {
               if (i === state.current) return null
-              const check = canPlayMalus(state, state.current, malus, i)
+              const check = canTarget(state, state.current, malus, i)
               return (
                 <button
                   key={i}
