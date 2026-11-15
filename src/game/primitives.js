@@ -221,7 +221,7 @@ export const steal = (s, uid, player, { cause, by = player }) => remove(s, uid, 
 // retourne une carte posée : elle compte ses smiles mais n'agit plus
 export const flip = (s, uid) => markUsed(s, uid)
 // retourne la carte uid et la glisse sous la carte ontoUid (argent qui a payé
-// une acquisition)
+// une acquisition, Piston sous le métier qu'il a donné)
 export const attach = (s, uid, ontoUid) => markUsed(s, uid, ontoUid)
 
 // --- métier perdu -------------------------------------------------------------

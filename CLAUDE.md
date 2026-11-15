@@ -30,6 +30,7 @@ Do not use official Blackrock Games artwork or logos — all visuals must be ori
 Verified rules (from the physical game — do not "correct" these)
 Flirts are never flipped; only the top/most recent flirt can be stolen.
 Piston cannot be used for the Grand Prof promotion.
+The Piston card stays behind the métier it gave (meta.on = that job), face up, so everyone sees why that player has the job. When that métier is lost (Licenciement, démission…), the Piston joins the other used cartes spéciales.
 Licorne doubles only with BOTH Arc-en-ciel AND Étoile filante.
 A salary taken from the discard pile (must be played immediately) may instead be bet at the Casino.
 Purchases: each salary invested must be necessary to reach the cost (no over-investing to dodge Impôt); overpaying for lack of change is allowed.

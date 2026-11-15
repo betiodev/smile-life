@@ -63,7 +63,8 @@ function paidLabel(cards) {
 
 // cards : la pile touchée (on peut passer d'une carte à l'autre)
 // hand : null (lecture seule) ou { gate, onSwipe(dir, rect), onHint, hint, from }
-// extras : { under: uid → salaires/Héritage posés sous l'acquisition, notes: uid → état }
+// extras : { under: uid → salaires/Héritage posés sous l'acquisition, ou Piston
+//           sous le métier ; notes: uid → état }
 // action : null, ou { label, onClick } (bouton, ex. « Prendre et jouer ») ou { reason } (pourquoi c'est impossible)
 // onClose(rect) : rect = position de la carte au moment de fermer
 export default function CardZoom({ cards, index = cards.length - 1, hand = null, extras = null, action = null, onClose }) {
@@ -132,7 +133,7 @@ export default function CardZoom({ cards, index = cards.length - 1, hand = null,
         )}
         {under.length > 0 && (
           <div className="mt-1">
-            <p className="text-[11px] font-bold opacity-70">Payée avec {paidLabel(under)}</p>
+            <p className="text-[11px] font-bold opacity-70">{base.type === 'job' ? 'Obtenu grâce au Piston' : `Payée avec ${paidLabel(under)}`}</p>
             <div className="flex gap-1 flex-wrap mt-1">
               {under.map((c) => (
                 <button key={c.uid} type="button" onClick={(e) => { e.stopPropagation(); setSub(sub?.uid === c.uid ? null : c) }}

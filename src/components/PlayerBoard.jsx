@@ -1,7 +1,7 @@
 import Card from './Card'
 import { computeScore } from '../game/scoring'
 import { studyLevel, effectiveSalaryLevel, heritageLiasses } from '../game/rules'
-import { jobOf, jobs, moneyOf, marriages, isMarried, adulteries, adulteryOf, malusOf, topFlirt } from '../game/state'
+import { jobOf, jobs, moneyOf, marriages, isMarried, adulteries, adulteryOf, malusOf, topFlirt, looseSpecials } from '../game/state'
 
 function Zone({ title, children, empty, compact }) {
   return (
@@ -59,7 +59,7 @@ export default function PlayerBoard({ player, state, compact = false }) {
         <Zone compact={compact} title={compact ? 'Distinctions · malus' : '🏅⭐⚡ Distinctions · Spéciales · Malus'}
           empty={!p.distinctions.length && !p.specials.length && !malusOf(p).length && !casinoHere ? (compact ? '—' : 'Rien à signaler') : null}>
           {p.distinctions.map((c) => show({ card: c }))}
-          {p.specials.map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
+          {looseSpecials(state, p).map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
           {malusOf(p).map((c) => <Card key={c.uid} card={c} size={size} faceDown />)}
           {casinoHere && (
             <span className="text-xs font-bold bg-amber-100 text-amber-700 rounded-lg px-2 py-1">
