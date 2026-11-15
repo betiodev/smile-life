@@ -9,7 +9,7 @@ import useElementSize from './useElementSize'
 import { playerColor, enterLandscapeFullscreen } from './theme'
 import { computeScore } from '../game/scoring'
 import { isInterim } from '../game/rules'
-import { jobOf, isMarried } from '../game/state'
+import { jobOf, isMarried, phaseOf, playsLeft, forcedOf } from '../game/state'
 
 const Btn = ({ onClick, disabled, children, tone = 'light', title }) => {
   const tones = {
@@ -84,7 +84,7 @@ function Piles({ game }) {
               return (
                 <div key={c.uid} className="flex flex-col items-center gap-0.5">
                   <Card card={c} size="xs" style={{ width: Math.min(44, (width - 20) / 3) }} />
-                  {drawPhase && !state.riverUsedThisTurn && (
+                  {drawPhase && (
                     <>
                       <button onClick={() => act({ type: 'TAKE_RIVER', index: i, playNow: false })}
                         className="text-[9px] font-bold bg-white/15 rounded px-1">Garder</button>
@@ -120,7 +120,7 @@ function TopBar({ game }) {
         <span className="text-xs font-bold text-[#FFC93C] whitespace-nowrap truncate">
           c’est ton tour
           <span className="font-semibold text-[#F4EFE6]/60">
-            {' · '}{state.phase === 'draw' ? 'pioche' : state.playsRemaining > 1 ? `joue (${state.playsRemaining} restantes)` : 'joue une carte'}
+            {' · '}{phaseOf(state) === 'draw' ? 'pioche' : playsLeft(state) > 1 ? `joue (${playsLeft(state)} restantes)` : 'joue une carte'}
           </span>
         </span>
       )}
@@ -153,7 +153,7 @@ function MyPlayed({ game }) {
 function Hand({ game }) {
   const { state, p, isForced, hiddenUid, gateFor, onSwipe, onHint, onTapHand, hint } = game
   const [ref, { width, height }] = useElementSize()
-  const cards = isForced ? [state.forced] : p.hand
+  const cards = isForced ? [forcedOf(state)] : p.hand
   const n = cards.length
   const mid = (n - 1) / 2
   const drop = 4 // px : chute des cartes aux extrémités (× distance²)
@@ -220,7 +220,7 @@ function Actions({ game }) {
         </>
       )}
 
-      {state.phase === 'play' && (
+      {phaseOf(state) === 'play' && (
         <>
           {isForced && (
             <p className="text-[10px] leading-tight font-bold text-[#FFC93C] text-center">⚠️ À jouer immédiatement</p>

@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 import { whoMustAct } from './turn.js'
 import { boardCards } from './state.js'
+import { stackView } from './flows/index.js'
 
 // copie profonde, sérialisable ; ne touche jamais à l'état d'origine
 const copy = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)))
@@ -52,7 +53,7 @@ function pendingFor(pending, state, viewer) {
       return pub
     }
     default:
-      // achat, anniversaire, Étoile filante, Piston, Troc, Vengeance, Casino,
+      // anniversaire, Étoile filante, Piston, Troc, Vengeance, Casino,
       // défausse du Chercheur (seul son joueur voit sa main) : publics
       return copy(pending)
   }
@@ -65,7 +66,7 @@ export function viewFor(state, viewer) {
   }
 
   // rng et seed : jamais dans une vue (ils permettraient de prédire la pioche)
-  const { deck, players, pending, casino, rng, seed, meta, ...rest } = state
+  const { deck, players, pending, casino, rng, seed, meta, stack, ...rest } = state
   const view = copy(rest)
   view.deckCount = deck.length
   view.players = players.map((p, i) => {
@@ -78,6 +79,8 @@ export function viewFor(state, viewer) {
   // publics dans le jeu de base)
   const seen = new Set(players.flatMap((p) => boardCards(p).map((c) => c.uid)))
   view.meta = Object.fromEntries(Object.entries(meta ?? {}).filter(([uid]) => seen.has(uid)).map(([uid, m]) => [uid, { ...m }]))
+  // pile des flux : chaque flux dit ce que ce joueur en sait (view)
+  view.stack = stackView(state, viewer)
   view.pending = pendingFor(pending, state, viewer)
   // mise du Casino : face cachée pour tous sauf celui qui a misé
   view.casino = casino && {

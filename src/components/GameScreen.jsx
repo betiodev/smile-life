@@ -8,7 +8,7 @@ import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, G
 import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
 import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
 import { legalActions } from '../game/legal'
-import { malusOf } from '../game/state'
+import { malusOf, phaseOf, forcedOf, pendingOf } from '../game/state'
 
 const rectOf = (el) => {
   if (!el) return null
@@ -218,7 +218,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   })
   rememberRef.current = rememberAnim
 
-  useEffect(() => { setZoom(null) }, [state.current, state.phase, state.forced?.uid])
+  useEffect(() => { setZoom(null) }, [state.current, phaseOf(state), forcedOf(state)?.uid])
 
   // petite bulle d'explication au-dessus de la main
   const showHint = useCallback((text) => setHint({ text, id: Date.now() }), [])
@@ -239,13 +239,13 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   const p = state.players[viewer]
   // viewer ≠ joueur courant : un Chercheur licencié tient l'écran le temps de son choix
   const myTurn = !locked && viewer === state.current
-  const isForced = myTurn && !!state.forced
+  const isForced = myTurn && !!forcedOf(state)
 
   // le geste est-il permis ? (base commune au swipe et aux boutons)
   const baseGate = () => {
     if (!myTurn) return { ok: false, reason: 'Ce n’est pas ton tour' }
-    if (it || state.pending) return { ok: false }
-    if (state.phase === 'draw') return { ok: false, reason: 'Pioche d’abord' }
+    if (it || pendingOf(state)) return { ok: false }
+    if (phaseOf(state) === 'draw') return { ok: false, reason: 'Pioche d’abord' }
     return { ok: true }
   }
   const gateFor = (card) => (dir) => {
@@ -257,7 +257,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     state, viewer, p, act, locked, myTurn, isForced, hit,
     // actions permises maintenant pour ce joueur (src/game/legal.js)
     legal: legalActions(state, viewer),
-    drawPhase: myTurn && state.phase === 'draw' && !it,
+    drawPhase: myTurn && phaseOf(state) === 'draw' && !it,
     takeDiscard: canTakeDiscardTop(state, state.current),
     // carte sortie de la main : en attente, agrandie, ou qui y retourne
     hiddenUid: it ? it.card.uid : zoom?.fromHand ? zoom.cards[0].uid : zoomBack?.card.uid ?? null,
@@ -270,7 +270,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     onHint: showHint,
     // Casino : miser un salaire de sa main (même toast d'annulation)
     casinoSalaries: baseGate().ok && state.casino && (!state.casino.stake || state.casino.stake.by !== state.current)
-      ? (isForced ? [state.forced] : p.hand).filter((c) => c.type === 'salary') : [],
+      ? (isForced ? [forcedOf(state)] : p.hand).filter((c) => c.type === 'salary') : [],
     onCasinoBet: (card) => pi.start(card, 'play', spots.hand(card.uid), { casino: true }),
     onTapHand: (card) => { if (!zoomBack) setZoom({ cards: [card], fromHand: true, from: spots.hand(card.uid) }) },
     onZoom: (cards, extras) => setZoom({ cards, extras, fromHand: false }),

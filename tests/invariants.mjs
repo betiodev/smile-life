@@ -18,12 +18,16 @@ import { viewFor } from '../src/game/view.js'
 import { makeRng } from '../src/game/rng.js'
 import { buildDeck } from '../src/data/index.js'
 import { boardCards, moneyOf, malusOf, outOfGameCards } from '../src/game/state.js'
+import { heldCards, activeFrame } from '../src/game/flows/index.js'
+import { defaultAction } from '../src/game/turn.js'
 
 const DECK_SIZE = buildDeck().length
 const random = makeRng('invariants')
 const SAMPLE = 6 // actions hors liste essayées à chaque étape
 
 const fail = (msg) => { throw new Error('INVARIANT : ' + msg) }
+// où en est la partie (messages d'erreur)
+export const where = (s) => `pile=${(s.stack ?? []).map((f) => `${f.flow}:${f.step}`).join('>')} pending=${s.pending?.type}`
 
 // --- 1. chaque carte à un seul endroit -----------------------------------------
 export function cardPlaces(s) {
@@ -37,12 +41,12 @@ export function cardPlaces(s) {
   s.discard.forEach((e) => put(e.card, 'défausse'))
   outOfGameCards(s).forEach((c) => put(c, 'hors jeu'))
   s.river.forEach((c) => put(c, 'rivière'))
-  put(s.forced, 'carte forcée')
   put(s.casino?.stake?.card, 'mise du casino')
+  // cartes tenues par les cadres de la pile (carte forcée du tour, achat en cours)
+  heldCards(s).forEach((c) => put(c, 'pile des flux'))
   // cartes « en l'air » pendant un choix (le Médium ne fait que regarder la pioche,
   // l'Anniversaire est déjà posé)
   if (s.pending?.type === 'chance') s.pending.cards.forEach((c) => put(c, 'Chance'))
-  if (s.pending?.type === 'purchase' && !s.pending.fromForced) put(s.pending.card, 'achat en cours')
   s.players.forEach((p, i) => {
     const at = (z) => `J${i + 1} ${z}`
     p.hand.forEach((c) => put(c, at('main')))
@@ -79,7 +83,7 @@ function candidates(s) {
     moneyOf(p).forEach(add)
     malusOf(p).forEach(add)
   })
-  add(s.forced)
+  heldCards(s).forEach(add)
   s.discard.slice(-4).forEach((e) => add(e.card))
   if (s.pending?.type === 'chance') s.pending.cards.forEach(add)
   const uidList = [...uids, null]
@@ -125,6 +129,11 @@ export function checkInvariants(s, action, next) {
   cardPlaces(s)
   checkMeta(s)
 
+  // 1 ter. la pile des flux : le tour en bas, des cadres de simples données
+  if (s.status === 'playing' && s.stack[0]?.flow !== 'turn') fail(`pas de tour en bas de la pile (${where(s)})`)
+  if (s.status === 'over' && s.stack.length > 0) fail('pile non vide en fin de partie')
+  if (s.stack.some((f, i) => i > 0 && f.flow === 'turn')) fail(`un tour au-dessus du bas de la pile (${where(s)})`)
+
   const actors = whoMustAct(s)
   const legalBy = new Map(s.players.map((_, i) => [i, legalActions(s, i)]))
 
@@ -134,7 +143,7 @@ export function checkInvariants(s, action, next) {
     return
   }
   if (!actors.some((i) => legalBy.get(i).length > 0))
-    fail(`personne ne peut agir (phase=${s.phase} pending=${s.pending?.type} forced=${s.forced?.name})`)
+    fail(`personne ne peut agir (${where(s)})`)
   for (const [i, l] of legalBy) if (!actors.includes(i) && l.length > 0) fail(`J${i + 1} a des actions alors que ce n'est pas à lui d'agir`)
 
   const listed = new Set()
@@ -144,6 +153,11 @@ export function checkInvariants(s, action, next) {
     const fromView = legalActions(viewFor(s, i), i).map(actionKey).join('\n')
     if (fromView !== legal.map(actionKey).join('\n'))
       fail(`legalActions diffère sur la vue de J${i + 1} :\n  état : ${legal.map(actionKey).join(' ')}\n  vue  : ${fromView.replace(/\n/g, ' ')}`)
+    // 2 bis. chaque attente d'un cadre a une action par défaut, permise
+    if (activeFrame(s)) {
+      const fb = defaultAction(s, i)
+      if (!fb || !legal.some((a) => actionKey(a) === actionKey(fb))) fail(`fallback absent ou hors liste pour J${i + 1} : ${fb && actionKey(fb)} (${where(s)})`)
+    }
     // 3. chaque action de la liste change l'état
     for (const a of legal) {
       listed.add(actionKey(a))
@@ -153,7 +167,7 @@ export function checkInvariants(s, action, next) {
 
   // 4. un échantillon d'actions hors de la liste est refusé
   for (const a of sampleOutside(s, listed, SAMPLE)) {
-    if (gameReducer(s, a) !== s) fail(`action hors de la liste acceptée par le reducer : ${actionKey(a)} (phase=${s.phase} pending=${s.pending?.type})`)
+    if (gameReducer(s, a) !== s) fail(`action hors de la liste acceptée par le reducer : ${actionKey(a)} (${where(s)})`)
   }
 
   if (!action) return

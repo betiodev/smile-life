@@ -3,6 +3,9 @@
 // des 40 parties simulées, pour chaque joueur et pour un spectateur.
 import { gameReducer } from '../src/game/reducer.js'
 import { viewFor } from '../src/game/view.js'
+import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
+import { startFlow } from '../src/game/flows/index.js'
+import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn } from '../src/game/state.js'
 import { buildDeck } from '../src/data/index.js'
 import { jobOf, marriageOf, adulteryOf, moneyOf, malusOf, outOfGameCards } from '../src/game/state.js'
 import { setJob, setMarriage, setAdultery, setMoney, setMalus, putOutOfGame } from '../src/game/primitives.js'
@@ -67,7 +70,7 @@ const findAll = (pred) => deck.filter(pred)
 // partie à 3 joueurs, joueur 0 en phase de jeu ; `hand` remplace sa main
 function gameAt(hand = null) {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
-  s.phase = 'play'
+  setStep(s, 'play')
   if (hand) s.players[0].hand = take(s, hand)
   return s
 }

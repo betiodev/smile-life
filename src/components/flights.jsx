@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 import { useLayoutEffect, useRef, useState } from 'react'
 import Card from './Card'
-import { boardCards } from '../game/state'
+import { boardCards, forcedOf } from '../game/state'
 
 export const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -18,7 +18,7 @@ export function locateCards(state) {
   const put = (c, where) => c && !c.hidden && m.set(c.uid, { where, card: c })
   state.discard.forEach((e) => put(e.card, 'discard'))
   state.river.forEach((c) => put(c, 'river'))
-  put(state.forced, 'forced')
+  put(forcedOf(state), 'forced')
   state.players.forEach((p, i) => {
     p.hand.forEach((c) => put(c, `hand:${i}`))
     const b = `board:${i}`

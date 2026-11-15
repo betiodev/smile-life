@@ -14,6 +14,9 @@ import {
   setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard,
 } from '../src/game/primitives.js'
 import { whoMustAct } from '../src/game/turn.js'
+import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
+import { startFlow } from '../src/game/flows/index.js'
+import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn } from '../src/game/state.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/index.js'
@@ -64,11 +67,11 @@ function check(label, cond) {
   const redoublement = find((c) => c.key === 'redoublement')
   s.players[1].studies = [study]
   s.players[0].hand[0] = redoublement
-  s.phase = 'play'
+  setStep(s, 'play')
   s = gameReducer(s, { by: s.current, type: 'PLAY_MALUS', uid: redoublement.uid, target: 1 })
   const top = s.discard[s.discard.length - 1]
   check('Redoublement : l’étude défaussée est au nom de la victime', top.card.uid === study.uid && top.by === 1)
-  s.current = 1; s.phase = 'draw'
+  s.current = 1; setStep(s, 'draw')
   check('La victime ne peut pas reprendre son étude de la défausse', !canTakeDiscardTop(s, 1).ok)
   check('Un autre joueur peut la reprendre', canTakeDiscardTop(s, 0).ok)
 
@@ -80,11 +83,11 @@ function check(label, cond) {
   setMarriage(s2, s2.players[1], marriage)
   s2.players[1].flirts = [flirt]
   s2.players[0].hand[0] = divorce
-  s2.phase = 'play'
+  setStep(s2, 'play')
   s2 = gameReducer(s2, { by: s2.current, type: 'PLAY_MALUS', uid: divorce.uid, target: 1 })
   const top2 = s2.discard[s2.discard.length - 1]
   check('Divorce : le mariage défaussé est au nom de la victime', top2.card.uid === marriage.uid && top2.by === 1)
-  s2.current = 1; s2.phase = 'draw'
+  s2.current = 1; setStep(s2, 'draw')
   check('La victime ne peut pas reprendre son mariage', !canTakeDiscardTop(s2, 1).ok)
 }
 
@@ -93,7 +96,7 @@ function check(label, cond) {
   let s = freshState()
   const chance = find((c) => c.key === 'chance')
   s.players[0].hand[0] = chance
-  s.phase = 'play'
+  setStep(s, 'play')
   const before = s.players[0].hand.length // 5
   s = gameReducer(s, { by: s.current, type: 'PLAY_SELF', uid: chance.uid })
   check('Chance ouvre le choix des 3 cartes', s.pending?.type === 'chance' && s.pending.cards.length === 3)
@@ -101,8 +104,8 @@ function check(label, cond) {
   s = gameReducer(s, { by: s.current, type: 'CHANCE_PICK', uid: kept.uid })
   const p = s.players[0]
   check('La carte gardée est en main', p.hand.some((c) => c.uid === kept.uid))
-  check('Pas de carte forcée après Chance', !s.forced)
-  check('Le joueur doit encore jouer sa carte du tour', s.phase === 'play' && s.playsRemaining === 1 && s.status === 'playing')
+  check('Pas de carte forcée après Chance', !forcedOf(s))
+  check('Le joueur doit encore jouer sa carte du tour', phaseOf(s) === 'play' && playsLeft(s) === 1 && s.status === 'playing')
   check('Main = 5 (a joué Chance, gardé 1)', p.hand.length === before)
   check('Les 2 autres cartes sont défaussées à son nom', s.discard.slice(-2).every((e) => e.by === 0))
 }
@@ -144,9 +147,9 @@ function check(label, cond) {
   const travel = find((c) => c.acqType === 'travel')
   const sal2 = findAll((c) => c.type === 'salary' && c.level === 2)
   const sal1 = find((c) => c.type === 'salary' && c.level === 1)
-  s.phase = 'play'
+  setStep(s, 'play')
   setMoney(s, s.players[0], [sal2[0], sal2[1], sal1])
-  s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
+  startFlow(s, 'purchase', { card: travel })
   const refus = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid, sal1.uid], useHeritage: false })
   check('Reducer : achat avec salaire superflu refusé', refus === s)
   const okBuy = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [sal2[0].uid, sal2[1].uid], useHeritage: false })
@@ -182,7 +185,7 @@ function check(label, cond) {
 // --- Héritage : visible jusqu'à l'achat, puis sous l'acquisition --------------
 {
   let s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   const her = find((c) => c.key === 'heritage')
   const travel = find((c) => c.acqType === 'travel')
   s.players[0].hand[0] = her
@@ -190,9 +193,9 @@ function check(label, cond) {
   const p0 = s.players[0]
   check('Héritage posé : 3 liasses, carte visible (non utilisée)', heritageLiasses(s, p0) === 3 && unusedHeritage(s, p0).length === 1)
   s.current = 0
-  s.phase = 'play'
-  s.playsRemaining = 1
-  s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
+  setStep(s, 'play')
+  setPlays(s, 1)
+  startFlow(s, 'purchase', { card: travel })
   const buy = gameReducer(s, { by: s.current, type: 'PURCHASE_CONFIRM', salaryUids: [], useHeritage: true })
   const b0 = buy.players[0]
   check('Achat avec l’Héritage : il passe sous l’acquisition', heritageLiasses(buy, b0) === 0 && unusedHeritage(buy, b0).length === 0 &&
@@ -208,7 +211,7 @@ function check(label, cond) {
 // --- Grand Prix d'excellence : métier perdu → sans effet, smiles conservés ---
 {
   const s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   const lic = find((c) => c.key === 'licenciement')
   const gp = find((c) => c.key === 'grandprix')
   const legion = find((c) => c.key === 'legion')
@@ -238,7 +241,7 @@ function check(label, cond) {
   const [b1, b3, c2, c4] = [lv(1), lv(3), lv(2), lv(4)]
   const setup = () => {
     const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
-    s.phase = 'play'
+    setStep(s, 'play')
     s.players[0].hand[0] = anniv
     setMoney(s, s.players[1], [b1, b3])
     setMoney(s, s.players[2], [c2])
@@ -316,26 +319,25 @@ function check(label, cond) {
 
   // pendant un Arc-en-ciel : Ana continue de jouer après les cadeaux
   const sa = setup()
-  sa.playsRemaining = 3
+  setPlays(sa, 3)
   const ra = gift(gift(gameReducer(sa, { by: 0, type: 'PLAY_SELF', uid: anniv.uid }), 1, null), 2, null)
   check('Anniversaire pendant un Arc-en-ciel : le tour continue', ra.pending === null && ra.current === 0 &&
-    ra.phase === 'play' && ra.playsRemaining === 2 && whoMustAct(ra).join() === '0')
+    phaseOf(ra) === 'play' && playsLeft(ra) === 2 && whoMustAct(ra).join() === '0')
   const next = gameReducer(ra, { by: 0, type: 'DISCARD_CARD', uid: ra.players[0].hand[0].uid })
-  check('Anniversaire pendant un Arc-en-ciel : Ana peut rejouer', next !== ra && next.playsRemaining === 1)
+  check('Anniversaire pendant un Arc-en-ciel : Ana peut rejouer', next !== ra && playsLeft(next) === 1)
 }
 
 // --- Aides d'interface : jouabilité, défausse forcée, vol de flirt, paiement --
 {
   const s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   const sal = find((c) => c.type === 'salary' && c.level === 1)
   check('Salaire sans métier : injouable, avec la raison du moteur', canPlayFromHand(s, 0, sal).reason === 'Il faut un métier pour poser un salaire')
   const prison = find((c) => c.key === 'prison')
   check('Prison sans Bandit en jeu : injouable', !canPlayFromHand(s, 0, prison).ok)
-  s.forced = sal
-  s.forcedConsumesPlay = true
+  setForced(s, sal, true)
   check('Carte prise dans la défausse : défausse interdite', !canDiscardFromHand(s, 0, sal).ok)
-  s.forcedConsumesPlay = false
+  setForced(s, forcedOf(s), false)
   check('Carte d’Étoile filante : défausse permise', canDiscardFromHand(s, 0, sal).ok)
 
   const bars = findAll((c) => c.type === 'flirt' && c.place === 'Au bar')
@@ -363,7 +365,7 @@ function check(label, cond) {
   const barmaid = find((c) => c.key === 'barmaid')
   const setup = (card) => {
     const s = freshState()
-    s.phase = 'play'
+    setStep(s, 'play')
     const p = s.players[0]
     setJob(s, p, barmaid)
     setMoney(s, p, [sal])
@@ -438,7 +440,7 @@ function check(label, cond) {
   const lic = find((c) => c.key === 'licenciement')
   const setup = (job) => {
     const s = freshState()
-    s.phase = 'play'
+    setStep(s, 'play')
     s.players[0].hand[0] = lic
     setJob(s, s.players[1], job ? find((c) => c.key === job) : null)
     return s
@@ -471,7 +473,7 @@ function check(label, cond) {
   check('Tour normal : pioche d’un autre joueur ignorée', gameReducer(s, { type: 'DRAW_DECK', by: 1 }) === s)
   check('Tour normal : pioche d’un 3e joueur ignorée', gameReducer(s, { type: 'DRAW_DECK', by: 2 }) === s)
   s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
-  check('Tour normal : le joueur courant pioche', s.phase === 'play' && s.players[0].hand.length === 6)
+  check('Tour normal : le joueur courant pioche', phaseOf(s) === 'play' && s.players[0].hand.length === 6)
   const uid = s.players[0].hand[0].uid
   check('Tour normal : défausse par un autre joueur ignorée', gameReducer(s, { type: 'DISCARD_CARD', uid, by: 1 }) === s)
 }
@@ -479,7 +481,7 @@ function check(label, cond) {
 // --- Troc du Chef : à l'étape opp-pick, c'est l'adversaire qui choisit ------
 {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'] })
-  s.phase = 'play'
+  setStep(s, 'play')
   setJob(s, s.players[0], find((c) => c.key === 'chef_achats'))
   const protectedUid = s.players[0].hand[0].uid
   s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid }
@@ -498,7 +500,7 @@ function check(label, cond) {
 {
   const RUNS = 200
   const base = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
-  base.phase = 'play'
+  setStep(base, 'play')
   setJob(base, base.players[0], find((c) => c.key === 'chef_achats'))
   const chefHand = base.players[0].hand
   const oppHand = base.players[1].hand
@@ -541,7 +543,7 @@ function check(label, cond) {
   // Ana (0) joue, Ben (1) est Chercheur avec 6 cartes en main
   const setup = () => {
     const s = freshState()
-    s.phase = 'play'
+    setStep(s, 'play')
     setJob(s, s.players[1], chercheur)
     s.players[1].hand.push(s.deck.pop())
     s.players[0].hand[0] = licenciement
@@ -581,7 +583,7 @@ function check(label, cond) {
   v.players[0].hand[0] = v.deck.pop()
   setMalus(v, v.players[0], [licenciement])
   v.pending = { type: 'vengeance' }
-  v.playsRemaining = 0 // la carte Vengeance a déjà consommé le jeu
+  setPlays(v, 0) // la carte Vengeance a déjà consommé le jeu
   const rv = gameReducer(v, { type: 'VENGEANCE_PICK', uid: licenciement.uid, target: 1, by: 0 })
   check('Chercheur licencié par Vengeance : le choix s’ouvre pour Ben', rv.pending?.type === 'chercheur-discard' && rv.current === 0)
   const dv = gameReducer(rv, { type: 'CHERCHEUR_DISCARD', uid: null, by: 1 })
@@ -630,13 +632,13 @@ function check(label, cond) {
   // avant la pioche
   let r = gameReducer(s, { type: 'STOP_ADULTERY', by: 0 })
   check('Adultère : arrêt autorisé avant la pioche', adulteryOf(r.players[0]) === null &&
-    r.players[0].flirts.length === 1 && r.discard.at(-1).card.uid === adultere.uid && r.phase === 'draw')
+    r.players[0].flirts.length === 1 && r.discard.at(-1).card.uid === adultere.uid && phaseOf(r) === 'draw')
 
   // après la pioche, avant de jouer
   s = gameReducer(s, { type: 'DRAW_DECK', by: 0 })
   r = gameReducer(s, { type: 'STOP_ADULTERY', by: 0 })
   check('Adultère : arrêt autorisé après la pioche, sans consommer le jeu', adulteryOf(r.players[0]) === null &&
-    r.phase === 'play' && r.playsRemaining === 1 && r.current === 0)
+    phaseOf(r) === 'play' && playsLeft(r) === 1 && r.current === 0)
 
   // le joueur joue ensuite normalement
   const study = find((c) => c.type === 'study' && c.levels === 1)
@@ -651,7 +653,7 @@ function check(label, cond) {
   s.players[0].hand[0] = arc
   const arcJoue = gameReducer(s, { type: 'PLAY_SELF', uid: arc.uid, by: 0 })
   check('Adultère : autorisé avant l’Arc-en-ciel', adulteryOf(avant.players[0]) === null)
-  check('Adultère : refusé entre les jeux de l’Arc-en-ciel', arcJoue.playsRemaining === 3 &&
+  check('Adultère : refusé entre les jeux de l’Arc-en-ciel', playsLeft(arcJoue) === 3 &&
     !canStopAdultery(arcJoue, 0).ok && gameReducer(arcJoue, { type: 'STOP_ADULTERY', by: 0 }) === arcJoue)
 
   // refusé aussi après une Chance (le jeu revient à 1, mais une carte a été jouée)
@@ -659,17 +661,18 @@ function check(label, cond) {
   s.players[0].hand[0] = chance
   let ch = gameReducer(s, { type: 'PLAY_SELF', uid: chance.uid, by: 0 })
   ch = gameReducer(ch, { type: 'CHANCE_PICK', uid: ch.pending.cards[0].uid, by: 0 })
-  check('Adultère : refusé après avoir joué Chance', ch.playsRemaining === 1 &&
+  check('Adultère : refusé après avoir joué Chance', playsLeft(ch) === 1 &&
     gameReducer(ch, { type: 'STOP_ADULTERY', by: 0 }) === ch)
 
   // au tour suivant, de nouveau autorisé
   const tourSuivant = gameReducer(arcJoue, { type: 'END_PLAYS', by: 0 })
-  check('Adultère : le marqueur est remis à zéro au tour suivant', tourSuivant.cardPlayed === false)
+  check('Adultère : le marqueur est remis à zéro au tour suivant', cardPlayedThisTurn(tourSuivant) === false)
 
   // refusé pendant un choix en attente ou avec une carte forcée
   const pend = { ...s, pending: { type: 'journalist' } }
   check('Adultère : refusé pendant un choix en attente', gameReducer(pend, { type: 'STOP_ADULTERY', by: 0 }) === pend)
-  const forced = { ...s, forced: study }
+  const forced = structuredClone(s)
+  setForced(forced, study, false)
   check('Adultère : refusé avec une carte forcée', gameReducer(forced, { type: 'STOP_ADULTERY', by: 0 }) === forced)
 }
 
@@ -690,7 +693,7 @@ function check(label, cond) {
   s.deck = buildDeck().slice(0, 2).map((c, i) => ({ ...c, uid: 'test-pioche-' + i }))
   check('Rivière : Chance jouable s’il reste une carte après le remplacement', canTakeRiverNow(s, 0, chance))
   const joue = gameReducer(s, { type: 'TAKE_RIVER', index: 0, playNow: true, by: 0 })
-  check('Rivière : Chance prise et forcée', joue.forced?.uid === chance.uid && joue.deck.length === 1)
+  check('Rivière : Chance prise et forcée', forcedOf(joue)?.uid === chance.uid && joue.deck.length === 1)
 }
 
 // --- Règles vérifiées (CLAUDE.md) sans test jusqu'ici --------------------------
@@ -702,7 +705,7 @@ function check(label, cond) {
   const parc = findAll((c) => c.type === 'flirt' && c.place !== 'Au bar' && c.place !== 'Au zoo')
   const play = (setup) => {
     const s = freshState()
-    s.phase = 'play'
+    setStep(s, 'play')
     setup(s)
     return s
   }
@@ -739,7 +742,7 @@ function check(label, cond) {
   const grandProf = find((c) => c.key === 'grand_prof')
   const medecin = find((c) => c.key === 'medecin')
   const s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   s.players[0].hand = [piston, grandProf]
   check('Piston : injouable avec le seul Grand Prof en main', !canPlayFromHand(s, 0, piston).ok)
   s.players[0].hand = [piston, grandProf, medecin]
@@ -782,11 +785,10 @@ function check(label, cond) {
 {
   // carte forcée : elle seule peut être jouée
   const s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   const study = find((c) => c.type === 'study')
   const sal = find((c) => c.type === 'salary')
-  s.forced = study
-  s.forcedConsumesPlay = true
+  setForced(s, study, true)
   s.players[0].hand[0] = sal
   s.casino = { owner: 1, stake: null }
   const other = s.players[0].hand[1]
@@ -805,18 +807,18 @@ function check(label, cond) {
   s.casino = { owner: 1, stake: null }
   setJob(s, s.players[0], find((c) => c.key === 'pizzaiolo'))
   s = gameReducer(s, { type: 'TAKE_DISCARD', by: 0 })
-  check('Casino : salaire pris dans la défausse, mise proposée', s.forced?.uid === sal.uid &&
+  check('Casino : salaire pris dans la défausse, mise proposée', forcedOf(s)?.uid === sal.uid &&
     legalActions(s, 0).some((a) => a.type === 'CASINO_BET' && a.uid === sal.uid))
   const r = gameReducer(s, { type: 'CASINO_BET', uid: sal.uid, by: 0 })
   check('Casino : salaire de la défausse misé, le tour se termine', r !== s && r.casino.stake?.card.uid === sal.uid &&
-    r.forced === null && r.current === 1 && r.phase === 'draw')
+    forcedOf(r) === null && r.current === 1 && phaseOf(r) === 'draw')
   check('Casino : la carte misée n’est plus nulle part ailleurs',
     !r.players[0].hand.some((c) => c.uid === sal.uid) && !r.discard.some((e) => e.card.uid === sal.uid))
 }
 {
   // Troc du Chef : un index hors de la main est refusé
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'] })
-  s.phase = 'play'
+  setStep(s, 'play')
   setJob(s, s.players[0], find((c) => c.key === 'chef_achats'))
   s.pending = { type: 'chef-troc', step: 'opp-pick', target: 1, protectedUid: s.players[0].hand[0].uid }
   const n = s.players[0].hand.length - 1
@@ -829,13 +831,13 @@ function check(label, cond) {
 {
   // achat : la liste donne le paiement le moins cher ; toute autre combinaison valide reste acceptée
   const s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   const travel = find((c) => c.acqType === 'travel' && c.cost === 3)
   const lv = (n) => findAll((c) => c.type === 'salary' && c.level === n)
   const [a1, b1] = lv(1), [a2] = lv(2), [a3] = lv(3)
   setJob(s, s.players[0], find((c) => c.key === 'pizzaiolo'))
   setMoney(s, s.players[0], [a1, b1, a2, a3])
-  s.pending = { type: 'purchase', cardUid: travel.uid, card: travel, fromForced: false }
+  startFlow(s, 'purchase', { card: travel })
   const pay = legalActions(s, 0).find((a) => a.type === 'PURCHASE_CONFIRM')
   check('Achat : la liste propose le paiement le moins cher (le salaire de 3)', JSON.stringify(pay.salaryUids) === JSON.stringify([a3.uid]))
   check('Achat : un autre paiement valide reste accepté (2 + 1)',
@@ -846,7 +848,7 @@ function check(label, cond) {
 {
   // un état n'est jamais modifié par une action essayée dessus (pile des cartes retirées comprise)
   const s = freshState()
-  s.phase = 'play'
+  setStep(s, 'play')
   const attentat = find((c) => c.key === 'attentat')
   s.players[0].hand[0] = attentat
   const before = JSON.stringify(s)
@@ -879,20 +881,20 @@ function check(label, cond) {
     gameReducer(s, { type: 'END_PLAYS', by: 0 }) === s)
   s.players[0].hand[0] = arc
   s = gameReducer(s, { type: 'PLAY_SELF', uid: arc.uid, by: 0 })
-  check('Arc-en-ciel : 3 jeux, on peut terminer tout de suite', s.playsRemaining === 3 && peutTerminer(s))
+  check('Arc-en-ciel : 3 jeux, on peut terminer tout de suite', playsLeft(s) === 3 && peutTerminer(s))
   const apres = (st, n) => {
     for (let i = 0; i < n; i++) st = gameReducer(st, { type: 'DISCARD_CARD', uid: st.players[0].hand[0].uid, by: 0 })
     return st
   }
   for (const n of [1, 2]) {
     const r = apres(s, n)
-    check(`Arc-en-ciel : après ${n} carte(s), on peut terminer`, r.current === 0 && r.playsRemaining === 3 - n && peutTerminer(r))
+    check(`Arc-en-ciel : après ${n} carte(s), on peut terminer`, r.current === 0 && playsLeft(r) === 3 - n && peutTerminer(r))
     const fin = gameReducer(r, { type: 'END_PLAYS', by: 0 })
     check(`Arc-en-ciel : terminer après ${n} carte(s) passe au joueur suivant`, fin.current === 1 &&
-      fin.phase === 'draw' && fin.players[0].hand.length === 5 && !fin.rainbow && !peutTerminer(fin))
+      phaseOf(fin) === 'draw' && fin.players[0].hand.length === 5 && !isRainbow(fin) && !peutTerminer(fin))
   }
   const trois = apres(s, 3)
-  check('Arc-en-ciel : après 3 cartes, le tour se termine seul', trois.current === 1 && !trois.rainbow)
+  check('Arc-en-ciel : après 3 cartes, le tour se termine seul', trois.current === 1 && !isRainbow(trois))
   check('Arc-en-ciel : un autre joueur ne peut pas terminer', gameReducer(s, { type: 'END_PLAYS', by: 1 }) === s)
 }
 
@@ -900,7 +902,7 @@ function check(label, cond) {
 {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], seed: 6 })
   check('Méta : vide au début de la partie', Object.keys(s.meta).length === 0 && s.seqCounter === 0)
-  s.phase = 'play'
+  setStep(s, 'play')
   const [f1, f2] = findAll((c) => c.type === 'flirt' && c.place === findAll((x) => x.type === 'flirt')[0].place)
   const mariage = find((c) => c.type === 'marriage')
   const divorce = find((c) => c.key === 'divorce')
@@ -915,7 +917,7 @@ function check(label, cond) {
     vol.players[0].flirts.at(-1).uid === f1.uid && vol.meta[f1.uid].seq > seqBefore && vol.meta[f1.uid].seq > vol.meta[f2.uid].seq)
   check('Méta : l’état précédent n’est pas modifié', s.meta[f1.uid].seq === seqBefore && !s.meta[f2.uid])
   // Ben subit un Divorce : le mariage quitte la table, sa méta disparaît ; le Divorce est posé
-  vol.current = 0; vol.phase = 'play'; vol.playsRemaining = 1
+  vol.current = 0; setStep(vol, 'play'); setPlays(vol, 1)
   vol.players[0].hand[0] = divorce
   const d = gameReducer(vol, { by: 0, type: 'PLAY_MALUS', uid: divorce.uid, target: 1 })
   check('Méta : la carte qui quitte la table perd sa méta', !d.meta[mariage.uid] && d.discard.some((e) => e.card.uid === mariage.uid))

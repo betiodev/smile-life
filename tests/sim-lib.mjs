@@ -7,7 +7,7 @@ import { gameReducer as rawReducer, newGameState } from '../src/game/reducer.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { makeRng } from '../src/game/rng.js'
 import { legalActions } from '../src/game/legal.js'
-import { checkInvariants } from './invariants.mjs'
+import { checkInvariants, where } from './invariants.mjs'
 
 export const stats = { birthdayGifts: 0, chercheurDiscards: 0 }
 
@@ -38,7 +38,7 @@ export function chooseAction(s) {
   const by = rand(whoMustAct(s))
   const legal = legalActions(s, by)
   if (legal.length === 0)
-    throw new Error(`aucune action possible pour J${by + 1} (phase=${s.phase} pending=${s.pending?.type} forced=${s.forced?.name})`)
+    throw new Error(`aucune action possible pour J${by + 1} (${where(s)})`)
   const common = legal.filter((a) => !RARE.has(a.type) || random() < 0.02)
   const a = rand(common.length > 0 ? common : legal)
   if (a.type === 'BIRTHDAY_GIFT') stats.birthdayGifts++
@@ -71,7 +71,7 @@ export function playGame(g, seed = g, { onStep, invariants = false } = {}) {
       const action = chooseAction(s)
       const next = gameReducer(s, action)
       if (next === s)
-        throw new Error(`action sans effet ! ${JSON.stringify(action)} phase=${s.phase} pending=${s.pending?.type} forced=${s.forced?.name}`)
+        throw new Error(`action sans effet ! ${JSON.stringify(action)} ${where(s)}`)
       // vérifications d'intégrité après chaque action (tests/invariants.mjs)
       if (invariants) checkInvariants(s, action, next)
       s = next

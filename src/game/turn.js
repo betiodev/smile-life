@@ -4,7 +4,11 @@
 // refuse toute action dont l'auteur n'est pas dans whoMustAct(state).
 // ---------------------------------------------------------------------------
 
-// Étapes où ce n'est PAS le joueur courant qui choisit.
+import { flowOf, activeFrame, frameFallback } from './flows/index.js'
+
+// Le cadre actif de la pile des flux (src/game/flows/) dit qui agit.
+// Pour les choix encore dans state.pending (étape 09 : portés en flux) :
+// étapes où ce n'est PAS le joueur courant qui choisit.
 // Chaque règle reçoit l'état et renvoie la liste des joueurs autorisés,
 // ou null si elle ne s'applique pas. Pour ajouter un cas, il suffit
 // d'ajouter une règle ici.
@@ -21,6 +25,8 @@ const RULES = [
 ]
 
 export function whoMustAct(state) {
+  const frame = activeFrame(state)
+  if (frame) return flowOf(frame.flow).actors(state, frame)
   for (const rule of RULES) {
     const who = rule(state)
     if (who) return who
@@ -36,6 +42,8 @@ export function canAct(state, by) {
 // Action par défaut d'un joueur qui doit agir mais ne le fait pas à temps.
 // Le moteur ne connaît pas le temps : c'est le pilote (src/session/driver.js)
 // qui décide quand l'appliquer. null : pas d'action par défaut (on attend).
+// Seuls ces deux choix ont un délai aujourd'hui ; les flux (tour, achat) ont
+// leur fallback (defaultAction plus bas) mais le pilote n'en minute aucun.
 //  - Anniversaire : uid null → le moteur offre le plus petit salaire libre ;
 //  - Chercheur qui perd son métier : uid null → une carte au hasard.
 // ---------------------------------------------------------------------------
@@ -45,4 +53,13 @@ export function fallbackAction(state, seat) {
   if (pend?.type === 'birthday') return { type: 'BIRTHDAY_GIFT', uid: null, by: seat }
   if (pend?.type === 'chercheur-discard') return { type: 'CHERCHEUR_DISCARD', uid: null, by: seat }
   return null
+}
+
+// Action par défaut de n'importe quelle attente : le fallback du cadre actif
+// (tour, achat), sinon celle d'un choix pending qui en a une. Pour les bots et
+// les joueurs partis (plus tard) ; le pilote, lui, n'utilise que fallbackAction.
+export function defaultAction(state, seat) {
+  if (state?.status !== 'playing' || !canAct(state, seat)) return null
+  const a = frameFallback(state, seat) ?? fallbackAction(state, seat)
+  return a && { ...a, by: seat }
 }

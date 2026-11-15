@@ -172,7 +172,7 @@ Twelve steps that change how the game works inside without changing how it plays
   - How you test it: Play one full game. Nothing should look different.
   - Prompt: [docs/prompts/07-primitives-events.md](prompts/07-primitives-events.md)
 
-- [ ] **Step 08 — Flow stack, part 1: the turn and the purchase**
+- [x] **Step 08 — Flow stack, part 1: the turn and the purchase**
   - Goal: Replace the single "choice in progress" slot with a stack of step-by-step flows, starting with the turn itself.
   - Where: New Claude Code session · Model: Opus 5.5
   - Paste: `Read docs/prompts/08-flow-stack-core.md and follow it.`

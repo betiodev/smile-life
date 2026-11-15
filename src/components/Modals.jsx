@@ -7,7 +7,7 @@ import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
 import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
 import { legalActions } from '../game/legal'
-import { jobOf, isMarried, unspentMoney, malusOf } from '../game/state'
+import { jobOf, isMarried, unspentMoney, malusOf, pendingOf } from '../game/state'
 
 function Modal({ title, children, wide }) {
   return (
@@ -35,7 +35,7 @@ const Btn = ({ onClick, disabled, children, secondary, title }) => (
 // --- Achat (voyage / maison) : choisir les salaires à investir ---------------
 function PurchaseModal({ state, dispatch }) {
   const p = state.players[state.current]
-  const card = state.pending.card
+  const card = pendingOf(state).card
   const [chosen, setChosen] = useState([])
   const [useHeritage, setUseHeritage] = useState(false)
   const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
@@ -380,8 +380,10 @@ function ChercheurDiscardModal({ state, dispatch }) {
 }
 
 export default function Modals({ state, dispatch }) {
-  if (!state.pending) return null
-  switch (state.pending.type) {
+  // choix en cours : le flux du dessus de la pile (achat), sinon state.pending
+  const pend = pendingOf(state)
+  if (!pend) return null
+  switch (pend.type) {
     case 'purchase': return <PurchaseModal state={state} dispatch={dispatch} />
     case 'chance': return <ChanceModal state={state} dispatch={dispatch} />
     case 'discard-pick': return <DiscardPickModal state={state} dispatch={dispatch} />
