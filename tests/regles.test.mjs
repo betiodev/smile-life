@@ -12,7 +12,7 @@ import {
   jobOf, marriageOf, adulteryOf, moneyOf, unspentMoney, malusOf, outOfGameCards, isMarried, isUsed, metaOf,
 } from '../src/game/state.js'
 import {
-  setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard,
+  setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard, loseJob,
 } from '../src/game/primitives.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { setStep, setPlays, setForced, beginTurn } from '../src/game/flows/turn.js'
@@ -1036,6 +1036,55 @@ function check(label, cond) {
   check('Écrivain : niveau 1 seulement', salaryLevels(s, 1).join() === '1')
   placeCard(s, ben.distinctions, find((c) => c.key === 'grandprix'))
   check('Écrivain + Grand Prix : niveaux 1 à 4', salaryLevels(s, 1).join() === '1,2,3,4')
+}
+
+// --- Pilote et Architecte (décisions de Teto, 2026-11-15) ---------------------
+{
+  const job = (key) => find((c) => c.type === 'job' && c.key === key)
+  const travels = findAll((c) => hasTag(c, 'travel'))
+  const houses = findAll((c) => hasTag(c, 'house'))
+  const arc = find((c) => c.key === 'arcenciel')
+  const fresh = () => { const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben'], seed: 1 }); setStep(s, 'play'); return s }
+  const play = (s, uid) => gameReducer(s, { by: 0, type: 'PLAY_SELF', uid })
+
+  // Arc-en-ciel : Pilote posé, puis 2 voyages gratuits au même tour
+  let s = fresh()
+  s.players[0].hand = [arc, job('pilote'), travels[0], travels[1]]
+  for (const c of findAll((c) => c.type === 'study').slice(0, 5)) placeCard(s, s.players[0].studies, c)
+  s = play(s, arc.uid)
+  s = play(s, job('pilote').uid)
+  s = play(s, travels[0].uid)
+  s = play(s, travels[1].uid)
+  check('Pilote : Arc-en-ciel → Pilote puis 2 voyages gratuits au même tour',
+    jobOf(s.players[0])?.key === 'pilote' && s.players[0].acquisitions.length === 2 && unspentMoney(s, s.players[0]).length === 0)
+
+  // Pilote en poste + Arc-en-ciel : 3 voyages gratuits
+  s = fresh()
+  setJob(s, s.players[0], job('pilote'))
+  s.players[0].hand = [arc, ...travels.slice(0, 3)]
+  s = play(s, arc.uid)
+  for (const t of travels.slice(0, 3)) s = play(s, t.uid)
+  check('Pilote : Arc-en-ciel → 3 voyages gratuits', s.players[0].acquisitions.length === 3)
+
+  // sans Arc-en-ciel : un voyage, et le tour passe
+  s = fresh()
+  setJob(s, s.players[0], job('pilote'))
+  s.players[0].hand = [travels[0], travels[1]]
+  s = play(s, travels[0].uid)
+  check('Pilote : un voyage gratuit est le jeu du tour', s.players[0].acquisitions.length === 1 && s.current === 1)
+
+  // Architecte : une maison offerte par métier d'Architecte
+  s = fresh()
+  setJob(s, s.players[0], job('architecte'))
+  s.players[0].hand = [houses[0], houses[1]]
+  s = play(s, houses[0].uid)
+  s = gameReducer(s, { by: 0, type: 'PURCHASE_CONFIRM', useArchitect: true })
+  check('Architecte : 1re maison offerte', s.players[0].acquisitions.some((c) => c.uid === houses[0].uid))
+  s.current = 0; setStep(s, 'play'); setPlays(s, 1)
+  check('Architecte : pas de 2e maison offerte au tour suivant', !architectFree(s, 0, houses[1]) && !canPlace(s, 0, houses[1]).ok)
+  loseJob(s, 0, { cause: 'licenciement', by: 1 })
+  setJob(s, s.players[0], job('architecte'))
+  check('Architecte : un nouveau métier d’Architecte redonne une maison offerte', architectFree(s, 0, houses[1]))
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)
