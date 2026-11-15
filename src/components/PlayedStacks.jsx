@@ -6,7 +6,7 @@
 import { Fragment } from 'react'
 import Card from './Card'
 import { paidCards, spentCards, unusedHeritage, heritageLiasses } from '../game/rules'
-import { jobs, unspentMoney, marriages, adulteries, malusOf, isUsed } from '../game/state'
+import { jobs, unspentMoney, marriages, adulteries, malusOf, isUsed, specialsUnder, looseSpecials } from '../game/state'
 
 export const CARD_RATIO = 1417 / 968 // hauteur / largeur
 // au-delà de cette largeur, la carte affiche son texte d'effet complet
@@ -28,7 +28,7 @@ const peekFor = (w) => Math.max(3, Math.round(w * CARD_RATIO * PEEK))
 function boardStacks(s, p) {
   const entries = [
     ...p.studies.map((card) => ({ card, group: 'study' })),
-    ...jobs(p).map((card) => ({ card, group: 'job' })),
+    ...jobs(p).map((card) => ({ card, group: 'job', under: specialsUnder(s, p, card.uid) })),
     ...unspentMoney(s, p).map((card) => ({ card, group: 'salary' })),
     ...p.flirts.map((card) => ({ card, group: 'flirt' })),
     ...marriages(p).map((card) => ({ card, group: 'marriage' })),
@@ -38,7 +38,7 @@ function boardStacks(s, p) {
     ...p.acquisitions.map((card) => ({ card, group: 'acquisition', under: paidCards(s, p, card.uid) })),
     ...spentCards(s, p).map((card) => ({ card, group: 'spent', faceDown: true, note: card.type === 'salary' ? 'Salaire dépensé : compte ses smiles, ne peut plus servir' : 'Héritage dépensé' })),
     ...p.distinctions.map((card) => ({ card, group: 'distinction', badge: isUsed(s, card) ? 'Sans effet' : null, note: isUsed(s, card) ? 'Sans effet : métier perdu (smiles conservés)' : null })),
-    ...p.specials.filter((c) => c.key !== 'heritage').map((card) => ({ card, group: 'special', faceDown: true })),
+    ...looseSpecials(s, p).filter((c) => c.key !== 'heritage').map((card) => ({ card, group: 'special', faceDown: true })),
     ...malusOf(p).map((card) => ({ card, group: 'malus', faceDown: true })),
   ].filter(Boolean)
   const stacks = new Map()
@@ -77,7 +77,8 @@ function layout(stacks, chips, boxW, boxH) {
 }
 
 // une pile : la carte la plus récente devant, les précédentes décalées derrière ;
-// les salaires qui ont payé une acquisition dépassent au-dessus d'elle
+// les salaires qui ont payé une acquisition dépassent au-dessus d'elle (et le
+// Piston au-dessus du métier qu'il a donné)
 function Stack({ group, cards, width, peekK, onZoom, hiddenUid }) {
   const shown = cards.slice(-VISIBLE)
   const off = offFor(width)

@@ -5,8 +5,12 @@
 // au-dessus de celui-ci, qui attend alors (étape 'done') qu'il finisse.
 // Grand Prof exclu (promotion seulement) ; Bandit / Gourou bloqués par un
 // Policier en poste. Public.
+// La carte Piston passe sous le métier obtenu (meta.on) : tout le monde voit
+// pourquoi ce joueur a ce métier sans les études. Quand il perd ce métier
+// (licenciement, démission…), le Piston rejoint les cartes spéciales utilisées.
+// data = { pistonUid } : la carte Piston jouée (déjà posée).
 // ---------------------------------------------------------------------------
-import { take, place, refill, log } from '../primitives.js'
+import { take, place, refill, attach, log } from '../primitives.js'
 import { hasJob, hasTag, isGrandProf } from '../rules.js'
 import { jobOf } from '../state.js'
 import { policeSweep, triggerJobApi } from '../effects.js'
@@ -19,7 +23,7 @@ const pistonable = (state, card) =>
   !(hasTag(card, 'outlaw') && state.players.some((q) => hasJob(q, 'policier')))
 
 const piston = {
-  start: () => ({ flow: 'piston', step: 'pick', data: {} }),
+  start: (state, { card }) => ({ flow: 'piston', step: 'pick', data: { pistonUid: card?.uid ?? null } }),
   actors: (state) => [state.current],
   legal(state, frame) {
     const p = state.players[state.current]
@@ -33,6 +37,8 @@ const piston = {
     if (!card || !pistonable(s, card) || jobOf(p)) return false
     take(s, { hand: s.current }, card.uid)
     place(s, s.current, card)
+    // le Piston reste derrière le métier qu'il a donné
+    if (frame.data.pistonUid) attach(s, frame.data.pistonUid, card.uid)
     if (card.key === 'bandit') p.wasBandit = true
     log(s, `🤝 Grâce au Piston, ${p.name} devient ${card.name} sans les études !`)
     // "repiochez pour avoir 5 cartes"

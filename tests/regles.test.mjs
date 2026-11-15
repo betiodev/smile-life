@@ -14,9 +14,9 @@ import {
   setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard,
 } from '../src/game/primitives.js'
 import { whoMustAct } from '../src/game/turn.js'
-import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
+import { setStep, setPlays, setForced, beginTurn } from '../src/game/flows/turn.js'
 import { startFlow, setFlow } from '../src/game/flows/index.js'
-import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn, choiceOf } from '../src/game/state.js'
+import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn, choiceOf, onOf, specialsUnder, looseSpecials } from '../src/game/state.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck } from '../src/data/index.js'
@@ -755,6 +755,40 @@ function check(label, cond) {
   check('Piston : le Grand Prof est refusé', gameReducer(r, { type: 'PISTON_PICK', uid: grandProf.uid, by: 0 }) === r)
   const ok = gameReducer(r, { type: 'PISTON_PICK', uid: medecin.uid, by: 0 })
   check('Piston : un métier normal est accepté', jobOf(ok.players[0])?.uid === medecin.uid)
+}
+
+// Piston : la carte reste derrière le métier obtenu (tout le monde voit
+// pourquoi), puis rejoint les spéciales utilisées quand ce métier est perdu
+{
+  const piston = find((c) => c.key === 'piston')
+  const medecin = find((c) => c.key === 'medecin')
+  const licenciement = find((c) => c.key === 'licenciement')
+  const s = freshState()
+  setStep(s, 'play')
+  s.players[0].hand = [piston, medecin]
+  let r = gameReducer(s, { type: 'PLAY_SELF', uid: piston.uid, by: 0 })
+  r = gameReducer(r, { type: 'PISTON_PICK', uid: medecin.uid, by: 0 })
+  const a = r.players[0]
+  check('Piston : la carte est sous le métier obtenu', onOf(r, piston) === medecin.uid &&
+    specialsUnder(r, a, medecin.uid).map((c) => c.uid).join() === piston.uid && !looseSpecials(r, a).some((c) => c.uid === piston.uid))
+  check('Piston : visible de tous, sous le métier', [1, null].every((v) => viewFor(r, v).meta[piston.uid]?.on === medecin.uid))
+  // licenciement : le Piston rejoint les spéciales utilisées
+  const l = structuredClone(r)
+  l.players[1].hand[0] = licenciement
+  setStep(l, 'play')
+  const fired = gameReducer(l, { type: 'PLAY_MALUS', uid: licenciement.uid, target: 0, by: 1 })
+  check('Piston : métier perdu par licenciement → spéciale utilisée',
+    jobOf(fired.players[0]) === null && onOf(fired, piston) === null &&
+    looseSpecials(fired, fired.players[0]).some((c) => c.uid === piston.uid))
+  // démission : pareil
+  const d = structuredClone(r)
+  d.current = 0
+  beginTurn(d)
+  const quit = gameReducer(d, { type: 'RESIGN', by: 0 })
+  check('Piston : métier perdu par démission → spéciale utilisée',
+    jobOf(quit.players[0]) === null && onOf(quit, piston) === null &&
+    looseSpecials(quit, quit.players[0]).some((c) => c.uid === piston.uid))
+  check('Piston : il compte toujours parmi les spéciales du joueur', quit.players[0].specials.some((c) => c.uid === piston.uid))
 }
 
 // Licorne : doublée seulement avec l'Arc-en-ciel ET l'Étoile filante

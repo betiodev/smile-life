@@ -55,6 +55,13 @@ export const moneyPaidFor = (s, p, acqUid) => p.money.filter((c) => isUsed(s, c)
 export const spentMoney = (s, p) =>
   p.money.filter((c) => isUsed(s, c) && !p.acquisitions.some((a) => a.uid === onOf(s, c)))
 
+// --- cartes spéciales ------------------------------------------------------
+// posées sous une autre carte (le Piston sous le métier qu'il a donné)
+export const specialsUnder = (s, p, uid) => p.specials.filter((c) => onOf(s, c) === uid)
+// les autres (pile des spéciales utilisées) ; un Piston dont le métier est
+// perdu y revient (sa méta « on » disparaît avec le métier)
+export const looseSpecials = (s, p) => p.specials.filter((c) => !onOf(s, c))
+
 // --- malus reçus -----------------------------------------------------------
 export const malusOf = (p) => p.malus
 

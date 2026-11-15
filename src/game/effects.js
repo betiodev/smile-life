@@ -282,7 +282,7 @@ function applySpecial(s, pIdx, card) {
       return false
     case 'piston':
       place(s, pIdx, card)
-      startFlow(s, 'piston')
+      startFlow(s, 'piston', { card })
       return true
     case 'troc':
       place(s, pIdx, card)
