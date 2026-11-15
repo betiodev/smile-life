@@ -35,6 +35,8 @@ The Piston card stays behind the métier it gave (meta.on = that job), face up, 
 Licorne doubles only with BOTH Arc-en-ciel AND Étoile filante.
 A salary taken from the discard pile (must be played immediately) may instead be bet at the Casino.
 Purchases: each salary invested must be necessary to reach the cost (no over-investing to dodge Impôt); overpaying for lack of change is allowed.
+Pilote: every voyage is free, with no limit and from the moment the Pilote is in place; only the normal play limits apply (one card per turn; Arc-en-ciel → Pilote then 2 free voyages, or 3 free voyages). A voyage taken with Étoile filante is free too.
+Architecte: one free house per Architecte job (the player may still pay instead). Using it is not per turn. Losing the job and later placing a new Architecte gives one new free house.
 Losing the Chercheur job (Licenciement, resignation): the player discards 1 extra card from their hand and THEY choose it, even during another player's turn (flow chercheur-discard). Empty hand → no extra discard.
 Ce que chaque joueur voit (src/game/view.js — verified, do not change)
 The UI must only read from viewFor(state, viewer) (through the driver's view(seat)), never from the full state; actions go through the driver, which stamps `by`. viewer = player index, or null for a spectator (hand-over and game-over screens).
