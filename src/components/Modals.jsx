@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
-import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf } from '../game/rules'
+import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
 import { legalActions } from '../game/legal'
 import { jobOf, isMarried, unspentMoney, malusOf } from '../game/state'
 
@@ -41,9 +41,10 @@ function PurchaseModal({ state, dispatch }) {
   const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
   const architectFree = hasTag(card, 'house') && hasJob(p, 'architecte') && !p.architectFreeUsed
 
-  const available = unspentMoney(p)
+  const available = unspentMoney(state, p)
+  const liasses = heritageLiasses(state, p)
   const levels = chosen.map((u) => available.find((c) => c.uid === u).level)
-  const heritage = useHeritage ? p.heritage : 0
+  const heritage = useHeritage ? liasses : 0
   const total = levels.reduce((a, b) => a + b, 0) + heritage
   const check = validatePayment(cost, levels, heritage)
   const toggle = (u) => setChosen(chosen.includes(u) ? chosen.filter((x) => x !== u) : [...chosen, u])
@@ -71,10 +72,10 @@ function PurchaseModal({ state, dispatch }) {
             ))}
             {available.length === 0 && <span className="text-xs text-gray-400 italic">Aucun salaire disponible</span>}
           </div>
-          {p.heritage > 0 && (
+          {liasses > 0 && (
             <label className="flex items-center gap-2 mt-2 text-sm font-semibold cursor-pointer">
               <input type="checkbox" checked={useHeritage} onChange={(e) => setUseHeritage(e.target.checked)} className="w-4 h-4 accent-green-500" />
-              💵 Utiliser l’Héritage ({p.heritage} liasses, tout ou rien)
+              💵 Utiliser l’Héritage ({liasses} liasses, tout ou rien)
             </label>
           )}
           <div className={`mt-2 font-black ${check.ok ? 'text-green-600' : 'text-red-500'}`}>

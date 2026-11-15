@@ -1,6 +1,8 @@
 // Vérifications d'intégrité, lancées après CHAQUE action des parties simulées
 // (tests/sim.mjs) :
 // - chaque carte (uid) est à un seul endroit, et le total est la taille du paquet ;
+// - méta des cartes posées (state.meta) : une entrée par carte sur la table, et
+//   seulement pour elles ; chaque « on » désigne une carte sur la table ;
 // - quelqu'un peut agir, sauf si la partie est finie ;
 // - chaque action de legalActions change l'état ;
 // - un échantillon d'actions hors de la liste est refusé par le reducer ;
@@ -48,6 +50,20 @@ export function cardPlaces(s) {
   })
   if (places.size !== DECK_SIZE) fail(`${places.size} cartes trouvées au lieu de ${DECK_SIZE}`)
   return places
+}
+
+// --- 1 bis. méta des cartes posées ------------------------------------------
+export function checkMeta(s) {
+  const onTable = new Set(s.players.flatMap((p) => boardCards(p).map((c) => c.uid)))
+  const seqs = new Set()
+  for (const [uid, m] of Object.entries(s.meta)) {
+    if (!onTable.has(uid)) fail(`méta de la carte ${uid}, qui n'est pas sur la table`)
+    if (!Number.isInteger(m.seq) || m.seq < 1 || m.seq > s.seqCounter) fail(`méta de ${uid} : seq ${m.seq} invalide`)
+    if (seqs.has(m.seq)) fail(`seq ${m.seq} donné à deux cartes`)
+    seqs.add(m.seq)
+    if (m.on != null && !onTable.has(m.on)) fail(`la carte ${uid} est posée sur ${m.on}, qui n'est pas sur la table`)
+  }
+  for (const uid of onTable) if (!s.meta[uid]) fail(`carte ${uid} posée sans méta (seq)`)
 }
 
 // --- 4. actions candidates hors liste ------------------------------------------
@@ -107,6 +123,7 @@ function sampleOutside(s, listed, k) {
 export function checkInvariants(s, action, next) {
   // 1. les cartes
   cardPlaces(s)
+  checkMeta(s)
 
   const actors = whoMustAct(s)
   const legalBy = new Map(s.players.map((_, i) => [i, legalActions(s, i)]))

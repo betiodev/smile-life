@@ -10,6 +10,7 @@
 // cachée ne doit JAMAIS apparaître avec son uid, ni ailleurs dans la vue.
 // ---------------------------------------------------------------------------
 import { whoMustAct } from './turn.js'
+import { boardCards } from './state.js'
 
 // copie profonde, sérialisable ; ne touche jamais à l'état d'origine
 const copy = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)))
@@ -64,7 +65,7 @@ export function viewFor(state, viewer) {
   }
 
   // rng et seed : jamais dans une vue (ils permettraient de prédire la pioche)
-  const { deck, players, pending, casino, rng, seed, ...rest } = state
+  const { deck, players, pending, casino, rng, seed, meta, ...rest } = state
   const view = copy(rest)
   view.deckCount = deck.length
   view.players = players.map((p, i) => {
@@ -73,6 +74,10 @@ export function viewFor(state, viewer) {
     q.hand = viewer != null && i === viewer ? copy(hand) : hand.map((_, k) => placeholder(i, k))
     return q
   })
+  // méta des cartes posées : seulement celles que le joueur voit (les plateaux,
+  // publics dans le jeu de base)
+  const seen = new Set(players.flatMap((p) => boardCards(p).map((c) => c.uid)))
+  view.meta = Object.fromEntries(Object.entries(meta ?? {}).filter(([uid]) => seen.has(uid)).map(([uid, m]) => [uid, { ...m }]))
   view.pending = pendingFor(pending, state, viewer)
   // mise du Casino : face cachée pour tous sauf celui qui a misé
   view.casino = casino && {

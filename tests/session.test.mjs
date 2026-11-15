@@ -57,8 +57,8 @@ function birthdayState() {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 3 })
   s.phase = 'play'
   s.players[0].hand[0] = anniv
-  setMoney(s.players[1], [lv(3), lv(1)])
-  setMoney(s.players[2], [lv(2)])
+  setMoney(s, s.players[1], [lv(3), lv(1)])
+  setMoney(s, s.players[2], [lv(2)])
   return s
 }
 {
@@ -112,7 +112,7 @@ const licenciement = find((c) => c.key === 'licenciement')
 function chercheurState() {
   const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'], seed: 5 })
   s.phase = 'play'
-  setJob(s.players[1], chercheur)
+  setJob(s, s.players[1], chercheur)
   s.players[1].hand.push(s.deck.pop())
   s.players[0].hand[0] = licenciement
   return s

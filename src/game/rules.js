@@ -6,6 +6,7 @@
 import { hasTag } from '../data/index.js'
 import {
   jobs, jobOf, marriages, isMarried, adulteryOf, topFlirt, unspentMoney, moneyPaidFor, spentMoney, malusOf,
+  isUsed, onOf,
 } from './state.js'
 
 const OK = { ok: true }
@@ -40,18 +41,21 @@ export function interimReplaced(p, card) {
   return null
 }
 
+// Grand Prix d'excellence encore actif (il est retourné, sans effet, quand
+// le métier est perdu)
+export const activeGrandPrix = (s, p) => p.distinctions.find((c) => c.key === 'grandprix' && !isUsed(s, c)) ?? null
+
 // Niveau de salaire effectif : niveau du métier, ou 4 si Grand Prix actif
-export function effectiveSalaryLevel(p) {
+export function effectiveSalaryLevel(s, p) {
   const job = jobOf(p)
   if (!job) return 0
-  const gp = p.distinctions.find((d) => d.card.key === 'grandprix' && d.active)
-  return gp ? 4 : job.salaryLevel
+  return activeGrandPrix(s, p) ? 4 : job.salaryLevel
 }
 
 export const handTarget = (p) => (hasJob(p, 'chercheur') ? 6 : 5)
 
 // Liasses disponibles (salaires non investis), hors héritage
-export const availableLiasses = (p) => unspentMoney(p).reduce((t, c) => t + c.level, 0)
+export const availableLiasses = (s, p) => unspentMoney(s, p).reduce((t, c) => t + c.level, 0)
 
 // Salaires investis dans une acquisition (posés sous elle)
 export const paidSalaries = moneyPaidFor
@@ -61,16 +65,20 @@ export const paidSalaries = moneyPaidFor
 export const spentSalaries = spentMoney
 
 // Héritage : posé face visible tant qu'il n'a rien payé
-export const unusedHeritage = (p) => p.specials.filter((c) => c.key === 'heritage' && !p.heritageFor?.[c.uid])
+const heritageCards = (p) => p.specials.filter((c) => c.key === 'heritage')
+export const unusedHeritage = (s, p) => heritageCards(p).filter((c) => !isUsed(s, c))
+// une carte Héritage vaut 3 liasses ; elles se dépensent toutes ensemble
+export const HERITAGE_LIASSES = 3
+export const heritageLiasses = (s, p) => HERITAGE_LIASSES * unusedHeritage(s, p).length
 
 // Cartes posées sous une acquisition : salaires et Héritage qui l'ont payée
-export const paidCards = (p, acqUid) =>
-  [...paidSalaries(p, acqUid), ...p.specials.filter((c) => c.key === 'heritage' && p.heritageFor?.[c.uid] === acqUid)]
+export const paidCards = (s, p, acqUid) =>
+  [...paidSalaries(s, p, acqUid), ...heritageCards(p).filter((c) => isUsed(s, c) && onOf(s, c) === acqUid)]
 
 // Argent dépensé dont l'acquisition a quitté le jeu (salaires + Héritage), retourné
-export const spentCards = (p) => [
-  ...spentSalaries(p),
-  ...p.specials.filter((c) => c.key === 'heritage' && p.heritageFor?.[c.uid] && !p.acquisitions.some((a) => a.uid === p.heritageFor[c.uid])),
+export const spentCards = (s, p) => [
+  ...spentSalaries(s, p),
+  ...heritageCards(p).filter((c) => isUsed(s, c) && !p.acquisitions.some((a) => a.uid === onOf(s, c))),
 ]
 
 export function houseCost(p, card) {
@@ -134,7 +142,7 @@ export function canPoseSelf(state, pIdx, card) {
     }
     case 'salary': {
       if (!jobOf(p)) return NO('Il faut un métier pour poser un salaire')
-      const max = effectiveSalaryLevel(p)
+      const max = effectiveSalaryLevel(state, p)
       if (card.level > max) return NO(`Votre métier autorise le niveau ${max} maximum`)
       return OK
     }
@@ -160,15 +168,15 @@ export function canPoseSelf(state, pIdx, card) {
       if (hasTag(card, 'animal')) return OK
       if (hasTag(card, 'travel')) {
         if (hasJob(p, 'pilote')) return OK
-        if (availableLiasses(p) + p.heritage < card.cost)
-          return NO(`Coût : ${card.cost} liasses (vous avez ${availableLiasses(p) + p.heritage})`)
+        if (availableLiasses(state, p) + heritageLiasses(state, p) < card.cost)
+          return NO(`Coût : ${card.cost} liasses (vous avez ${availableLiasses(state, p) + heritageLiasses(state, p)})`)
         return OK
       }
       // maison
       if (hasJob(p, 'architecte') && !p.architectFreeUsed) return OK
       const cost = houseCost(p, card)
-      if (availableLiasses(p) + p.heritage < cost)
-        return NO(`Coût : ${cost} liasses${isMarried(p) ? ' (prix marié)' : ''} — vous avez ${availableLiasses(p) + p.heritage}`)
+      if (availableLiasses(state, p) + heritageLiasses(state, p) < cost)
+        return NO(`Coût : ${cost} liasses${isMarried(p) ? ' (prix marié)' : ''} — vous avez ${availableLiasses(state, p) + heritageLiasses(state, p)}`)
       return OK
     }
     case 'distinction': {
@@ -179,7 +187,7 @@ export function canPoseSelf(state, pIdx, card) {
       }
       // grand prix
       if (!anyJobTagged(p, 'trophy')) return NO('Réservé aux métiers 🏆 : Écrivain, Chercheur, Journaliste')
-      if (p.distinctions.some((d) => d.card.key === 'grandprix' && d.active))
+      if (activeGrandPrix(state, p))
         return NO('Un seul Grand Prix par métier exercé')
       return OK
     }
@@ -268,7 +276,7 @@ export function canPlayMalus(state, attackerIdx, card, targetIdx) {
     case 'impot':
       if (!jobOf(t)) return NO('La cible doit avoir un métier')
       if (hasJob(t, 'bandit')) return NO('Le Bandit : ni impôt, ni licenciement')
-      if (unspentMoney(t).length === 0) return NO('Aucun salaire non-investi à imposer')
+      if (unspentMoney(state, t).length === 0) return NO('Aucun salaire non-investi à imposer')
       return OK
     case 'divorce':
       if (!isMarried(t)) return NO('La cible doit être mariée')
@@ -385,11 +393,12 @@ export const architectFree = (p, card) => hasTag(card, 'house') && hasJob(p, 'ar
 
 // Paiement valide le moins cher : moins de liasses dépensées, puis moins de
 // salaires investis. → { salaryUids, useHeritage, total } ou null
-export function cheapestPayment(p, cost) {
-  const sal = unspentMoney(p).slice(0, 14)
+export function cheapestPayment(s, p, cost) {
+  const sal = unspentMoney(s, p).slice(0, 14)
+  const liasses = heritageLiasses(s, p)
   let best = null
-  for (const h of p.heritage > 0 ? [false, true] : [false]) {
-    const heritage = h ? p.heritage : 0
+  for (const h of liasses > 0 ? [false, true] : [false]) {
+    const heritage = h ? liasses : 0
     for (let mask = 0; mask < 1 << sal.length; mask++) {
       const picked = sal.filter((_, i) => mask & (1 << i))
       const levels = picked.map((c) => c.level)
@@ -409,11 +418,11 @@ export const vengeanceChoices = (state, pIdx) =>
 
 // Anniversaire : adversaires ayant au moins un salaire non investi
 export const birthdayDonors = (state, pIdx) =>
-  state.players.map((q, i) => i).filter((i) => i !== pIdx && unspentMoney(state.players[i]).length > 0)
+  state.players.map((q, i) => i).filter((i) => i !== pIdx && unspentMoney(state, state.players[i]).length > 0)
 
 // Salaire non investi le plus petit (cadeau par défaut)
-export function lowestUnusedSalary(p) {
+export function lowestUnusedSalary(s, p) {
   let best = null
-  for (const c of unspentMoney(p)) if (!best || c.level < best.level) best = c
+  for (const c of unspentMoney(s, p)) if (!best || c.level < best.level) best = c
   return best
 }

@@ -27,7 +27,7 @@ export function computeScore(p) {
     else acq += c.smiles
   }
   cat['Acquisitions 🏠'] = acq
-  cat['Distinctions 🏅'] = p.distinctions.reduce((s, d) => s + d.card.smiles, 0)
+  cat['Distinctions 🏅'] = sum(p.distinctions)
 
   const total = Object.values(cat).reduce((a, b) => a + b, 0)
   return { cat, total }

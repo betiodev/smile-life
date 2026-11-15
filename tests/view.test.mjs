@@ -225,7 +225,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   const placed = take(s, [job, marriage, adultery, salary, malus, child, attentat])
   const [pj, pm, pa, ps, pk, pc, pt] = placed
   const ben = s.players[1]
-  setJob(ben, pj); setMarriage(ben, pm); setAdultery(ben, pa); setMoney(ben, [ps]); setMalus(ben, [pk])
+  setJob(s, ben, pj); setMarriage(s, ben, pm); setAdultery(s, ben, pa); setMoney(s, ben, [ps]); setMalus(s, ben, [pk])
   putOutOfGame(s, pc, 'attentat', 2)
   putOutOfGame(s, pt, 'attentat', 2)
   const uid = (c) => c?.uid
@@ -243,6 +243,25 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
     v.outOfGame.every((e) => e.cause === 'attentat' && e.by === 2))
   check('plus d’anciens noms de zones dans la vue',
     !('removed' in v) && ['job', 'marriage', 'salaries', 'malusKept'].every((z) => !(z in v.players[1])))
+}
+
+// --- méta des cartes posées : seulement les cartes visibles -----------------------
+{
+  const s = gameAt()
+  const [job, sal] = take(s, [find((c) => c.key === 'pizzaiolo'), find((c) => c.type === 'salary')])
+  const ben = s.players[1]
+  setJob(s, ben, job); setMoney(s, ben, [sal])
+  // une entrée de méta pour une carte qui n'est pas sur la table (main d'Ana) ne doit pas sortir
+  const inHand = s.players[0].hand[0]
+  s.meta[inHand.uid] = { seq: 999 }
+  for (const viewer of [0, 1, null]) {
+    const v = viewFor(s, viewer)
+    check(`méta vue par ${viewer ?? 'le spectateur'} : les cartes posées, et elles seules`,
+      Object.keys(v.meta).sort().join() === [job.uid, sal.uid].sort().join() && v.meta[job.uid].seq === s.meta[job.uid].seq)
+  }
+  const v = viewFor(s, 1)
+  v.meta[job.uid].seq = -1
+  check('méta de la vue : une copie (l’état n’est pas touché)', s.meta[job.uid].seq > 0)
 }
 
 // --- pureté ---------------------------------------------------------------------------
@@ -279,7 +298,7 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
     // pour que la défausse du Chercheur (pending public) soit bien vérifiée
     if (g % 2 === 0) {
       const i = s.deck.findIndex((c) => c.key === 'chercheur')
-      if (i >= 0) setJob(s.players[g % s.players.length], s.deck.splice(i, 1)[0])
+      if (i >= 0) setJob(s, s.players[g % s.players.length], s.deck.splice(i, 1)[0])
     }
     const viewers = [...s.players.keys(), null]
     let guard = 0

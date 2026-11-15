@@ -8,7 +8,7 @@ import Card from './Card'
 import { Ghost, cardRect, prefersReducedMotion } from './flights'
 import { TOAST_MS } from './usePlayIntent'
 import { playerColor } from './theme'
-import { validatePayment, malusHasTarget, hasTag, hasJob } from '../game/rules'
+import { validatePayment, malusHasTarget, hasTag, hasJob, heritageLiasses } from '../game/rules'
 import { isMarried, unspentMoney, malusOf } from '../game/state'
 
 // carte en attente : arrive en volant depuis l'endroit où on l'a lâchée
@@ -59,12 +59,13 @@ const chip = (on) =>
   `rounded-full px-3 py-1.5 text-sm font-bold border-2 active:scale-95 transition-transform ${on
     ? 'bg-[#8FCB6B] text-[#1F2228] border-[#8FCB6B]' : 'bg-transparent text-[#F4EFE6] border-white/25'}`
 
-export function PaymentSheet({ intent, player, patch, onCancel, onConfirm }) {
+export function PaymentSheet({ intent, state, player, patch, onCancel, onConfirm }) {
   const { cost, payment } = intent
   const free = payment.architect
-  const unused = unspentMoney(player)
+  const unused = unspentMoney(state, player)
+  const liasses = heritageLiasses(state, player)
   const levels = unused.filter((c) => payment.salaryUids.includes(c.uid)).map((c) => c.level)
-  const heritage = payment.useHeritage ? player.heritage : 0
+  const heritage = payment.useHeritage ? liasses : 0
   const total = levels.reduce((a, b) => a + b, 0) + heritage
   const check = free ? { ok: true } : validatePayment(cost, levels, heritage)
   const toggle = (uid) => patch(({ payment: pay }) => ({
@@ -89,10 +90,10 @@ export function PaymentSheet({ intent, player, patch, onCancel, onConfirm }) {
             💰 {c.level}
           </button>
         ))}
-        {player.heritage > 0 && (
+        {liasses > 0 && (
           <button type="button" className={chip(!free && payment.useHeritage)}
             onClick={() => patch(({ payment: pay }) => ({ payment: { ...pay, architect: false, useHeritage: !pay.useHeritage } }))}>
-            💵 Héritage {player.heritage}
+            💵 Héritage {liasses}
           </button>
         )}
       </div>
@@ -169,7 +170,7 @@ export function GiftsOverlay({ gifts, state }) {
   const { pending, asking, until, give } = gifts
   const me = state.players[state.current]
   const d = state.players[asking]
-  const unused = unspentMoney(d)
+  const unused = unspentMoney(state, d)
   return (
     <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3 anim-fade">
       <div className="ui-zoom bg-[#2A2E36] rounded-2xl shadow-2xl p-3 flex gap-3 max-w-[min(680px,96vw)] w-full max-h-[94vh]">
