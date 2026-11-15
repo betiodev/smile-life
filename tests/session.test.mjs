@@ -3,7 +3,8 @@
 // Horloge factice : rien n'attend vraiment 30 s.
 import { gameReducer } from '../src/game/reducer.js'
 import { buildDeck } from '../src/data/index.js'
-import { setJob, setMoney, moneyOf } from '../src/game/state.js'
+import { moneyOf } from '../src/game/state.js'
+import { setJob, setMoney } from '../src/game/primitives.js'
 import { createDriver, WAIT_MS } from '../src/session/driver.js'
 import { createHotseat } from '../src/session/hotseat.js'
 

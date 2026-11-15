@@ -8,9 +8,11 @@ import {
 } from '../src/game/rules.js'
 import { computeScore } from '../src/game/scoring.js'
 import {
-  jobOf, setJob, marriageOf, setMarriage, adulteryOf, setAdultery, moneyOf, unspentMoney, setMoney, addMoney,
-  malusOf, setMalus, outOfGameCards, isMarried, isUsed, metaOf, placeCard, liftCard,
+  jobOf, marriageOf, adulteryOf, moneyOf, unspentMoney, malusOf, outOfGameCards, isMarried, isUsed, metaOf,
 } from '../src/game/state.js'
+import {
+  setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard,
+} from '../src/game/primitives.js'
 import { whoMustAct } from '../src/game/turn.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
 import { viewFor } from '../src/game/view.js'

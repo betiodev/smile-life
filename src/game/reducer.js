@@ -7,14 +7,14 @@ import {
   canPoseSelf, canPlayMalus, canPlaySpecial, isPlayableFromDiscard, canTakeRiverNow,
   canTakeDiscardTop, hasJob, isProf, isInterim, interimReplaced, handTarget, houseCost, hasTag, isGrandProf,
   validatePayment, canStopAdultery, canEndPlays, birthdayDonors, lowestUnusedSalary,
-  activeGrandPrix, unusedHeritage, heritageLiasses,
+  unusedHeritage, heritageLiasses,
 } from './rules.js'
 import { canAct } from './turn.js'
+import { jobOf, marriageOf, adulteryOf, topFlirt, unspentMoney, malusOf } from './state.js'
 import {
-  jobOf, addJob, removeJob, marriageOf, addMarriage, removeMarriage, adulteryOf, addAdultery, removeAdultery,
-  topFlirt, unspentMoney, addMoney, takeMoney, investMoney, malusOf, addMalus, takeMalus, putOutOfGame,
-  placeCard, liftCard, liftAll, markUsed,
-} from './state.js'
+  log, fillDeck, draw, refill, take, takeAll, put, move, place, remove, removeAll, steal, attach, loseJob, skip,
+} from './primitives.js'
+import { emit } from './events.js'
 import { seedFrom, randomSeed, rngOf, pick } from './rng.js'
 
 // --- helpers ---------------------------------------------------------------
@@ -42,62 +42,6 @@ function makePlayer(name, color = null) {
   }
 }
 
-// les id du journal sont numérotés dans l'état (partie rejouable à l'identique)
-function log(s, text, kind = 'info') {
-  s.nextLogId = (s.nextLogId ?? 0) + 1
-  s.log.push({ id: s.nextLogId, text, kind })
-  if (s.log.length > 60) s.log.shift()
-}
-
-function drawCard(s) {
-  return s.deck.length > 0 ? s.deck.pop() : null
-}
-
-function toDiscard(s, card, byIdx = null) {
-  s.discard.push({ card, by: byIdx })
-}
-
-function refillHand(s, pIdx) {
-  const p = s.players[pIdx]
-  const target = handTarget(p)
-  while (p.hand.length < target) {
-    const c = drawCard(s)
-    if (!c) break
-    p.hand.push(c)
-  }
-}
-
-function removeFromHand(p, uidToRemove) {
-  const i = p.hand.findIndex((c) => c.uid === uidToRemove)
-  return i >= 0 ? p.hand.splice(i, 1)[0] : null
-}
-
-// Perte de métier (démission, licenciement, purge Policier, prison)
-// Le métier est défaussé au nom de son propriétaire : il ne peut pas le reprendre.
-// Retourne true si un choix reste à faire (Chercheur : carte à défausser) ;
-// resume = ce qui reprend après ce choix ('finish-play' ou 'end-turn').
-function loseJob(s, pIdx, destination = 'discard', resume = 'finish-play') {
-  const p = s.players[pIdx]
-  const job = jobOf(p)
-  if (!job) return false
-  removeJob(s, p, job.uid)
-  p.architectFreeUsed = false
-  // Grand Prix : retourné mais conserve ses smiles
-  const gp = activeGrandPrix(s, p)
-  if (gp) {
-    markUsed(s, gp.uid)
-    log(s, `Le Grand Prix de ${p.name} est retourné (smiles conservés)`)
-  }
-  if (destination === 'discard') toDiscard(s, job, pIdx)
-  // Chercheur : défausse 1 carte en plus (main 6 → 5), choisie par le joueur
-  // lui-même (action CHERCHEUR_DISCARD), même pendant le tour d'un autre
-  if (job.key === 'chercheur' && p.hand.length > 0) {
-    s.pending = { type: 'chercheur-discard', player: pIdx, resume }
-    return true
-  }
-  return false
-}
-
 // ---------------------------------------------------------------------------
 // Effets des malus (utilisé pour jeu direct ET Vengeance)
 // ---------------------------------------------------------------------------
@@ -108,60 +52,72 @@ function applyMalus(s, attackerIdx, card, targetIdx) {
     case 'accident':
     case 'maladie':
     case 'burnout':
-      t.skipTurns += 1
-      addMalus(s, t, card)
+      skip(s, targetIdx, 1)
+      place(s, targetIdx, card)
       log(s, `${a.name} inflige ${card.name} à ${t.name} : passe 1 tour`, 'malus')
       break
     case 'licenciement':
       log(s, `${a.name} licencie ${t.name} (${jobOf(t).name})`, 'malus')
-      loseJob(s, targetIdx)
-      addMalus(s, t, card)
+      loseJob(s, targetIdx, { cause: 'licenciement', by: attackerIdx })
+      place(s, targetIdx, card)
       break
     case 'impot': {
       // le dernier salaire non investi
       const last = unspentMoney(s, t).at(-1)
       if (last) {
-        toDiscard(s, takeMoney(s, t, last.uid), targetIdx)
+        remove(s, last.uid, { cause: 'impot', by: attackerIdx })
         log(s, `${a.name} impose ${t.name} : salaire niveau ${last.level} défaussé`, 'malus')
       }
-      addMalus(s, t, card)
+      place(s, targetIdx, card)
       break
     }
     case 'divorce': {
-      toDiscard(s, removeMarriage(s, t, marriageOf(t).uid), targetIdx)
+      const cause = { cause: 'divorce', by: attackerIdx }
+      remove(s, marriageOf(t).uid, cause)
       if (adulteryOf(t)) {
-        toDiscard(s, removeAdultery(s, t, adulteryOf(t).uid), targetIdx)
-        for (const child of liftAll(s, t.children)) toDiscard(s, child, targetIdx)
+        remove(s, adulteryOf(t).uid, cause)
+        removeAll(s, targetIdx, 'children', cause)
         log(s, `${a.name} divorce ${t.name} en plein adultère : mariage, adultère et enfants perdus !`, 'malus')
       } else {
         log(s, `${a.name} inflige un Divorce à ${t.name} (enfants conservés)`, 'malus')
       }
-      addMalus(s, t, card)
+      place(s, targetIdx, card)
       break
     }
     case 'redoublement': {
       const study = t.studies.at(-1)
-      if (study) toDiscard(s, liftCard(s, t.studies, study.uid), targetIdx)
-      addMalus(s, t, card)
+      if (study) remove(s, study.uid, { cause: 'redoublement', by: attackerIdx })
+      place(s, targetIdx, card)
       log(s, `${a.name} fait redoubler ${t.name} : 1 carte études défaussée`, 'malus')
       break
     }
     case 'prison':
-      t.skipTurns += 3
+      skip(s, targetIdx, 3)
       log(s, `${a.name} envoie ${t.name} en Prison : passe 3 tours, le Bandit est défaussé`, 'malus')
-      loseJob(s, targetIdx)
-      toDiscard(s, card, attackerIdx)
+      loseJob(s, targetIdx, { cause: 'prison', by: attackerIdx })
+      put(s, card, 'discard', { by: attackerIdx })
       break
     case 'attentat': {
       const na = a.children.length, nt = t.children.length
-      for (const child of liftAll(s, a.children)) putOutOfGame(s, child, 'attentat', attackerIdx)
-      for (const child of liftAll(s, t.children)) putOutOfGame(s, child, 'attentat', attackerIdx)
+      const cause = { cause: 'attentat', by: attackerIdx, to: 'outOfGame' }
+      removeAll(s, attackerIdx, 'children', cause)
+      removeAll(s, targetIdx, 'children', cause)
       a.didAttentat = true
-      putOutOfGame(s, card, 'attentat', attackerIdx)
+      put(s, card, 'outOfGame', cause)
       log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${na + nt} enfant(s) retirés du jeu`, 'malus')
       break
     }
   }
+}
+
+// Policier (posé ou pistonné) : les Bandits et Gourous déjà posés sont défaussés
+function policeSweep(s, pIdx) {
+  s.players.forEach((q, qi) => {
+    if (qi !== pIdx && hasTag(jobOf(q), 'outlaw')) {
+      log(s, `👮 Le Policier fait défausser le ${jobOf(q).name} de ${q.name}`, 'malus')
+      loseJob(s, qi, { cause: 'policier', by: pIdx })
+    }
+  })
 }
 
 // Avantages instantanés (API) déclenchés à la pose d'un métier
@@ -203,11 +159,11 @@ function poseSelf(s, pIdx, card) {
   const replaced = interimReplaced(p, card)
   if (replaced) {
     log(s, `${p.name} quitte son poste de ${replaced.name} (métier intérimaire défaussé)`)
-    loseJob(s, pIdx)
+    loseJob(s, pIdx, { cause: 'interim', by: pIdx })
   }
   switch (card.type) {
     case 'study':
-      placeCard(s, p.studies, card)
+      place(s, pIdx, card)
       log(s, `${p.name} pose ${card.name} (${p.studies.length} carte(s), niveau ${p.studies.reduce((t, c) => t + c.levels, 0)})`)
       break
 
@@ -215,34 +171,27 @@ function poseSelf(s, pIdx, card) {
       if (isGrandProf(card)) {
         // promotion : le Prof est défaussé
         const prof = jobOf(p)
-        toDiscard(s, removeJob(s, p, prof.uid), pIdx)
-        addJob(s, p, card)
+        remove(s, prof.uid, { cause: 'promotion', by: pIdx })
+        place(s, pIdx, card)
         log(s, `${p.name} est promu Grand Prof !`)
         break
       }
-      addJob(s, p, card)
+      place(s, pIdx, card)
       if (card.key === 'bandit') p.wasBandit = true
       log(s, `${p.name} devient ${card.name}`)
       // Policier : purge les Bandits et Gourous déjà posés
-      if (card.key === 'policier') {
-        s.players.forEach((q, qi) => {
-          if (qi !== pIdx && hasTag(jobOf(q), 'outlaw')) {
-            log(s, `👮 Le Policier fait défausser le ${jobOf(q).name} de ${q.name}`, 'malus')
-            loseJob(s, qi)
-          }
-        })
-      }
+      if (card.key === 'policier') policeSweep(s, pIdx)
       // Avantages instantanés (API)
       return triggerJobApi(s, pIdx, card)
     }
 
     case 'salary':
-      addMoney(s, p, card)
+      place(s, pIdx, card)
       log(s, `${p.name} pose un salaire niveau ${card.level}`)
       break
 
     case 'flirt': {
-      placeCard(s, p.flirts, card)
+      place(s, pIdx, card)
       log(s, `${p.name} flirte ${card.name} ${card.emoji}`)
       // Vol de flirt : même lieu que le flirt du DESSUS d'un adversaire
       s.players.forEach((q, qi) => {
@@ -250,7 +199,7 @@ function poseSelf(s, pIdx, card) {
         const top = topFlirt(q)
         if (top && top.place === card.place) {
           // le flirt volé est posé de nouveau, chez le voleur
-          placeCard(s, p.flirts, liftCard(s, q.flirts, top.uid))
+          steal(s, top.uid, pIdx, { cause: 'vol' })
           log(s, `💘 ${p.name} vole le flirt ${top.name} de ${q.name} !`, 'malus')
         }
       })
@@ -258,28 +207,28 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'marriage':
-      addMarriage(s, p, card)
+      place(s, pIdx, card)
       log(s, `💒 ${p.name} se marie à ${card.name} !`)
       break
 
     case 'adultery':
-      addAdultery(s, p, card)
+      place(s, pIdx, card)
       log(s, `😏 ${p.name} commence un adultère...`)
       break
 
     case 'child':
-      placeCard(s, p.children, card)
+      place(s, pIdx, card)
       log(s, `👶 ${p.name} accueille ${card.name} !`)
       break
 
     case 'acquisition': {
       if (hasTag(card, 'animal')) {
-        placeCard(s, p.acquisitions, card)
+        place(s, pIdx, card)
         log(s, `${p.name} adopte ${card.name} ${card.emoji || ''}`)
         break
       }
       if (hasTag(card, 'travel') && hasJob(p, 'pilote')) {
-        placeCard(s, p.acquisitions, card)
+        place(s, pIdx, card)
         log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (Pilote)`)
         break
       }
@@ -289,7 +238,7 @@ function poseSelf(s, pIdx, card) {
     }
 
     case 'distinction': {
-      placeCard(s, p.distinctions, card)
+      place(s, pIdx, card)
       log(s, `🏅 ${p.name} reçoit ${card.name} !`)
       break
     }
@@ -307,9 +256,9 @@ function giveBirthdayGifts(s, pIdx, gifts) {
   let count = 0
   s.players.forEach((q, qi) => {
     if (qi === pIdx) return
-    const gift = takeMoney(s, q, gifts[qi])
+    const gift = unspentMoney(s, q).find((c) => c.uid === gifts[qi])
     if (gift) {
-      addMoney(s, p, gift)
+      steal(s, gift.uid, pIdx, { cause: 'anniversaire', by: qi })
       count++
       log(s, `🎂 ${q.name} offre un salaire niveau ${gift.level} à ${p.name}`)
     } else {
@@ -326,7 +275,7 @@ function applySpecial(s, pIdx, card) {
   const p = s.players[pIdx]
   switch (card.key) {
     case 'anniversaire': {
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       // chaque adversaire ayant un salaire non investi choisit celui qu'il offre
       // (action BIRTHDAY_GIFT) ; sans donateur, l'anniversaire est réglé tout de suite
       const donors = birthdayDonors(s, pIdx)
@@ -338,19 +287,15 @@ function applySpecial(s, pIdx, card) {
       return true
     }
     case 'arcenciel':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       // +3 jeux : après consommation de la pose de l'Arc-en-ciel, il en reste 3
       s.playsRemaining += 3
       s.rainbow = true // le joueur peut s'arrêter quand il veut (END_PLAYS)
       log(s, `🌈 ${p.name} joue Arc-en-ciel : jusqu’à 3 cartes d’un coup !`)
       return false
     case 'chance': {
-      placeCard(s, p.specials, card)
-      const cards = []
-      for (let i = 0; i < 3; i++) {
-        const c = drawCard(s)
-        if (c) cards.push(c)
-      }
+      place(s, pIdx, card)
+      const cards = draw(s, pIdx, { count: 3, to: 'aside' })
       // Chance agit comme une pioche : elle ne consomme pas le jeu du tour
       s.playsRemaining += 1
       log(s, `🍀 ${p.name} joue Chance : pioche ${cards.length} cartes, en garde une en main`)
@@ -358,26 +303,26 @@ function applySpecial(s, pIdx, card) {
       return true
     }
     case 'etoile':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       log(s, `🌠 ${p.name} joue Étoile filante`)
       s.pending = { type: 'discard-pick', source: 'Étoile filante' }
       return true
     case 'heritage':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       log(s, `💵 ${p.name} touche un Héritage : 3 liasses pour ses futurs achats`)
       return false
     case 'piston':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       s.pending = { type: 'piston' }
       return true
     case 'troc':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       s.pending = { type: 'troc' }
       return true
     case 'tsunami': {
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       let pool = []
-      s.players.forEach((q) => { pool = pool.concat(q.hand); q.hand = [] })
+      s.players.forEach((q, qi) => { pool = pool.concat(takeAll(s, { hand: qi })) })
       pool = shuffle(pool, rngOf(s))
       // redistribution équitable : chacun vers sa taille de main cible
       const order = s.players.map((_, i) => (pIdx + i) % s.players.length)
@@ -387,7 +332,7 @@ function applySpecial(s, pIdx, card) {
         for (const qi of order) {
           if (pool.length === 0) break
           if (s.players[qi].hand.length < handTarget(s.players[qi])) {
-            s.players[qi].hand.push(pool.pop())
+            put(s, pool.pop(), { hand: qi })
             active = true
           }
         }
@@ -395,18 +340,18 @@ function applySpecial(s, pIdx, card) {
       // s'il reste des cartes (mains inégales), distribution round-robin
       let k = 0
       while (pool.length > 0) {
-        s.players[order[k % order.length]].hand.push(pool.pop())
+        put(s, pool.pop(), { hand: order[k % order.length] })
         k++
       }
       log(s, `🌊 ${p.name} déclenche un Tsunami : toutes les mains sont redistribuées !`)
       return false
     }
     case 'vengeance':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       s.pending = { type: 'vengeance' }
       return true
     case 'casino':
-      placeCard(s, p.specials, card)
+      place(s, pIdx, card)
       s.casino = { owner: pIdx, stake: null }
       log(s, `🎰 ${p.name} ouvre un Casino !`)
       if (p.hand.some((c) => c.type === 'salary')) {
@@ -430,7 +375,8 @@ function finishPlay(s) {
 
 function endTurn(s) {
   const pIdx = s.current
-  refillHand(s, pIdx)
+  refill(s, pIdx)
+  emit(s, 'turnEnd', { player: pIdx })
 
   // fin de partie : pioche vide
   if (s.deck.length === 0) {
@@ -443,12 +389,8 @@ function endTurn(s) {
     if (s.riverUsedThisTurn) s.riverIdle = 0
     else s.riverIdle += 1
     if (s.riverIdle >= s.players.length) {
-      for (const c of s.river) toDiscard(s, c, null)
-      s.river = []
-      for (let i = 0; i < 3; i++) {
-        const c = drawCard(s)
-        if (c) s.river.push(c)
-      }
+      for (const c of takeAll(s, 'river')) put(s, c, 'discard')
+      draw(s, null, { count: 3, to: 'river' })
       s.riverIdle = 0
       log(s, `🌊 La rivière est renouvelée`)
       if (s.deck.length === 0) {
@@ -460,11 +402,14 @@ function endTurn(s) {
 
   // joueur suivant, en consommant les tours passés
   let next = (pIdx + 1) % s.players.length
+  let wrapped = next <= pIdx
   while (s.players[next].skipTurns > 0) {
     s.players[next].skipTurns -= 1
     log(s, `⏭️ ${s.players[next].name} passe son tour (${s.players[next].skipTurns} restant)`)
     next = (next + 1) % s.players.length
+    if (next === 0) wrapped = true
   }
+  if (wrapped) emit(s, 'roundEnd')
 
   s.current = next
   s.phase = 'draw'
@@ -475,23 +420,24 @@ function endTurn(s) {
   s.pending = null
   s.riverUsedThisTurn = false
   s.turnCount += 1
+  emit(s, 'turnStart', { player: next })
 }
 
 function gameOver(s) {
   // casino non résolu : le miseur récupère son salaire (avec son smile)
   if (s.casino?.stake) {
     const { card, by } = s.casino.stake
-    addMoney(s, s.players[by], card)
+    place(s, by, card)
     log(s, `🎰 Personne n’a relevé la mise : ${s.players[by].name} récupère son salaire`)
     s.casino.stake = null
   }
   // les mains restantes sont défaussées
-  for (const p of s.players) {
-    for (const c of p.hand) toDiscard(s, c, null)
-    p.hand = []
-  }
+  s.players.forEach((_, i) => {
+    for (const c of takeAll(s, { hand: i })) put(s, c, 'discard')
+  })
   log(s, `🏁 La pioche est vide : fin de partie !`)
   s.status = 'over'
+  emit(s, 'gameEnd')
 }
 
 // Consommation d'un jeu de carte (forcé ou non)
@@ -545,10 +491,12 @@ export function newGameState(names, colors, { river = false, seed, extensions = 
       turnCount: 1,       // n° du tour (augmente à chaque changement de tour)
     }
     // uid numérotés au hasard (un uid ne révèle pas la carte), puis paquet mélangé
-    s.deck = shuffle(buildDeck(s.extensions, rngOf(s)), rngOf(s))
-    for (const p of s.players) for (let i = 0; i < 5; i++) p.hand.push(s.deck.pop())
-    if (s.riverEnabled) for (let i = 0; i < 3; i++) s.river.push(s.deck.pop())
+    fillDeck(s, shuffle(buildDeck(s.extensions, rngOf(s)), rngOf(s)))
+    s.players.forEach((_, i) => draw(s, i, { count: 5 }))
+    if (s.riverEnabled) draw(s, null, { count: 3, to: 'river' })
     log(s, `🎉 La partie commence ! ${s.players.map((p) => p.name).join(', ')}`)
+    emit(s, 'gameSetup')
+    emit(s, 'turnStart', { player: s.current })
     return s
   }
 }
@@ -573,18 +521,17 @@ export function gameReducer(prev, action) {
     // ----- PHASE DE PIOCHE ------------------------------------------------
     case 'DRAW_DECK': {
       if (s.phase !== 'draw') return prev
-      const c = drawCard(s)
-      if (c) p.hand.push(c)
+      draw(s, s.current)
       s.phase = 'play'
       return s
     }
     case 'TAKE_DISCARD': {
       if (s.phase !== 'draw' || !canTakeDiscardTop(s, s.current).ok) return prev
-      const entry = s.discard.pop()
-      s.forced = entry.card
+      const card = take(s, 'discard', s.discard.at(-1).card.uid)
+      s.forced = card
       s.forcedConsumesPlay = true
       s.phase = 'play'
-      log(s, `${p.name} prend ${entry.card.name} dans la défausse (à jouer immédiatement)`)
+      log(s, `${p.name} prend ${card.name} dans la défausse (à jouer immédiatement)`)
       return s
     }
     case 'TAKE_RIVER': {
@@ -592,9 +539,8 @@ export function gameReducer(prev, action) {
       const i = action.index
       if (i < 0 || i >= s.river.length) return prev
       if (action.playNow && !canTakeRiverNow(s, s.current, s.river[i])) return prev
-      const card = s.river.splice(i, 1)[0]
-      const repl = drawCard(s)
-      if (repl) s.river.splice(i, 0, repl)
+      const card = take(s, 'river', s.river[i].uid)
+      draw(s, null, { to: 'river', at: i })
       s.riverUsedThisTurn = true
       s.phase = 'play'
       if (action.playNow) {
@@ -602,7 +548,7 @@ export function gameReducer(prev, action) {
         s.forcedConsumesPlay = true
         log(s, `${p.name} prend ${card.name} dans la rivière (jouée immédiatement)`)
       } else {
-        p.hand.push(card)
+        put(s, card, { hand: s.current })
         log(s, `${p.name} prend une carte dans la rivière`)
       }
       return s
@@ -612,15 +558,15 @@ export function gameReducer(prev, action) {
       const interim = isInterim(p)
       log(s, `${p.name} démissionne de ${jobOf(p).name}${interim ? ' (Intérimaire : joue quand même)' : ' et passe son tour'}`)
       // Chercheur : le tour ne se termine qu'après le choix de la carte défaussée
-      const choosing = loseJob(s, s.current, 'discard', interim ? 'none' : 'end-turn')
+      const choosing = loseJob(s, s.current, { cause: 'demission', by: s.current, resume: interim ? 'none' : 'end-turn' })
       if (!interim && !choosing) endTurn(s)
       return s
     }
     case 'DIVORCE_VOLUNTARY': {
       if (s.phase !== 'draw' || !marriageOf(p)) return prev
-      toDiscard(s, removeMarriage(s, p, marriageOf(p).uid), s.current)
+      remove(s, marriageOf(p).uid, { cause: 'divorce', by: s.current })
       if (adulteryOf(p)) {
-        toDiscard(s, removeAdultery(s, p, adulteryOf(p).uid), s.current)
+        remove(s, adulteryOf(p).uid, { cause: 'divorce', by: s.current })
         log(s, `${p.name} divorce volontairement (adultère défaussé, enfants et flirts conservés) et passe son tour`)
       } else {
         log(s, `${p.name} divorce volontairement (enfants conservés) et passe son tour`)
@@ -630,7 +576,7 @@ export function gameReducer(prev, action) {
     }
     case 'STOP_ADULTERY': {
       if (!canStopAdultery(s, s.current).ok) return prev
-      toDiscard(s, removeAdultery(s, p, adulteryOf(p).uid), s.current)
+      remove(s, adulteryOf(p).uid, { cause: 'fin-adultere', by: s.current })
       log(s, `${p.name} met fin à son adultère (flirts conservés)`)
       return s
     }
@@ -643,7 +589,7 @@ export function gameReducer(prev, action) {
       if (s.forced && !fromForced) return prev
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || !canPoseSelf(s, s.current, card).ok) return prev
-      if (!fromForced) removeFromHand(p, card.uid)
+      if (!fromForced) take(s, { hand: s.current }, card.uid)
       const hasPending = poseSelf(s, s.current, card)
       // la pose "purchase" n'est effective qu'après confirmation
       if (hasPending && s.pending?.type === 'purchase') {
@@ -661,7 +607,7 @@ export function gameReducer(prev, action) {
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || card.type !== 'malus') return prev
       if (!canPlayMalus(s, s.current, card, action.target).ok) return prev
-      if (!fromForced) removeFromHand(p, card.uid)
+      if (!fromForced) take(s, { hand: s.current }, card.uid)
       applyMalus(s, s.current, card, action.target)
       consumePlay(s, fromForced)
       finishPlay(s)
@@ -675,8 +621,8 @@ export function gameReducer(prev, action) {
       if (s.forced && !fromForced) return prev
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card) return prev
-      if (!fromForced) removeFromHand(p, card.uid)
-      toDiscard(s, card, s.current)
+      if (!fromForced) take(s, { hand: s.current }, card.uid)
+      put(s, card, 'discard', { by: s.current })
       log(s, `${p.name} défausse une carte`)
       consumePlay(s, fromForced)
       finishPlay(s)
@@ -692,7 +638,7 @@ export function gameReducer(prev, action) {
       const card = fromForced ? s.forced : p.hand.find((c) => c.uid === action.uid)
       if (!card || card.type !== 'salary') return prev
       if (s.casino.stake && s.casino.stake.by === s.current) return prev
-      if (!fromForced) removeFromHand(p, card.uid)
+      if (!fromForced) take(s, { hand: s.current }, card.uid)
       if (!s.casino.stake) {
         s.casino.stake = { card, by: s.current }
         log(s, `🎰 ${p.name} mise un salaire au Casino`)
@@ -707,8 +653,8 @@ export function gameReducer(prev, action) {
           winnerIdx = first.by
           log(s, `🎰 Niveaux différents (${first.card.level} vs ${card.level}) : ${firstP.name} remporte les deux salaires !`)
         }
-        addMoney(s, s.players[winnerIdx], first.card)
-        addMoney(s, s.players[winnerIdx], card)
+        place(s, winnerIdx, first.card)
+        place(s, winnerIdx, card)
         s.casino.stake = null
       }
       consumePlay(s, fromForced)
@@ -741,16 +687,16 @@ export function gameReducer(prev, action) {
         if (!validatePayment(cost, chosen.map((c) => c.level), heritage).ok) return prev
         const paid = chosen.reduce((t, c) => t + c.level, 0) + heritage
         // les salaires passent sous l'acquisition qu'ils ont payée
-        for (const sal of chosen) investMoney(s, p, sal.uid, card.uid)
+        for (const sal of chosen) attach(s, sal.uid, card.uid)
         // l'Héritage (tout ou rien) passe sous l'acquisition, avec les salaires
-        if (heritage > 0) for (const c of unusedHeritage(s, p)) markUsed(s, c.uid, card.uid)
+        if (heritage > 0) for (const c of unusedHeritage(s, p)) attach(s, c.uid, card.uid)
         log(s, `${p.name} achète ${card.name} pour ${cost} liasses (${paid} investies${paid > cost ? ' — pas de monnaie !' : ''})`)
       } else {
         p.architectFreeUsed = true
         log(s, `🏠 ${p.name} (Architecte) obtient ${card.name} gratuitement !`)
       }
       const wasForced = s.pending.fromForced
-      placeCard(s, p.acquisitions, card)
+      place(s, s.current, card)
       s.pending = null
       consumePlay(s, wasForced)
       finishPlay(s)
@@ -762,7 +708,7 @@ export function gameReducer(prev, action) {
       if (s.pending.fromForced) {
         s.pending = null
       } else {
-        p.hand.push(s.pending.card)
+        put(s, s.pending.card, { hand: s.current })
         s.pending = null
       }
       return s
@@ -772,9 +718,9 @@ export function gameReducer(prev, action) {
       const cards = s.pending.cards
       const kept = cards.find((c) => c.uid === action.uid)
       if (!kept) return prev
-      for (const c of cards) if (c.uid !== kept.uid) toDiscard(s, c, s.current)
+      for (const c of cards) if (c.uid !== kept.uid) put(s, c, 'discard', { by: s.current })
       // la carte gardée rejoint la main : le joueur joue ensuite ce qu'il veut
-      p.hand.push(kept)
+      put(s, kept, { hand: s.current })
       s.pending = null
       log(s, `🍀 ${p.name} garde une carte en main et défausse les deux autres`)
       finishPlay(s)
@@ -783,13 +729,13 @@ export function gameReducer(prev, action) {
     case 'DISCARD_PICK': {
       // Étoile filante / Astronaute : prendre une carte de la défausse et la jouer
       if (s.pending?.type !== 'discard-pick') return prev
-      const i = s.discard.findIndex((e) => e.card.uid === action.uid)
-      if (i < 0 || !isPlayableFromDiscard(s, s.current, s.discard[i].card)) return prev
-      const entry = s.discard.splice(i, 1)[0]
+      const entry = s.discard.find((e) => e.card.uid === action.uid)
+      if (!entry || !isPlayableFromDiscard(s, s.current, entry.card)) return prev
+      const card = take(s, 'discard', action.uid)
       s.pending = null
-      s.forced = entry.card
+      s.forced = card
       s.forcedConsumesPlay = false
-      log(s, `${p.name} récupère ${entry.card.name} dans la défausse`)
+      log(s, `${p.name} récupère ${card.name} dans la défausse`)
       return s
     }
     case 'PISTON_PICK': {
@@ -798,24 +744,17 @@ export function gameReducer(prev, action) {
       if (!card || card.type !== 'job' || isGrandProf(card)) return prev
       if (hasTag(card, 'outlaw') && s.players.some((q) => hasJob(q, 'policier'))) return prev
       if (jobOf(p)) return prev
-      removeFromHand(p, card.uid)
-      addJob(s, p, card)
+      take(s, { hand: s.current }, card.uid)
+      place(s, s.current, card)
       if (card.key === 'bandit') p.wasBandit = true
       log(s, `🤝 Grâce au Piston, ${p.name} devient ${card.name} sans les études !`)
       s.pending = null
       // "repiochez pour avoir 5 cartes"
-      refillHand(s, s.current)
+      refill(s, s.current)
       // le métier pistonné déclenche aussi son avantage instantané
       triggerJobApi(s, s.current, card)
       // Policier pistonné : purge les Bandits et Gourous
-      if (card.key === 'policier') {
-        s.players.forEach((q, qi) => {
-          if (qi !== s.current && hasTag(jobOf(q), 'outlaw')) {
-            log(s, `👮 Le Policier fait défausser le ${jobOf(q).name} de ${q.name}`, 'malus')
-            loseJob(s, qi)
-          }
-        })
-      }
+      if (card.key === 'policier') policeSweep(s, s.current)
       finishPlay(s)
       return s
     }
@@ -825,10 +764,8 @@ export function gameReducer(prev, action) {
       if (!t || action.target === s.current || t.hand.length === 0) return prev
       const mine = pick(s, p.hand)
       const theirs = pick(s, t.hand)
-      if (mine) removeFromHand(p, mine.uid)
-      if (theirs) removeFromHand(t, theirs.uid)
-      if (theirs) p.hand.push(theirs)
-      if (mine) t.hand.push(mine)
+      if (mine) move(s, mine.uid, { hand: s.current }, { hand: action.target })
+      if (theirs) move(s, theirs.uid, { hand: action.target }, { hand: s.current })
       log(s, `🔄 ${p.name} troque une carte au hasard avec ${t.name}`)
       s.pending = null
       finishPlay(s)
@@ -873,10 +810,8 @@ export function gameReducer(prev, action) {
       // même raison : action.index est ignoré, tirage au hasard dans la main adverse
       if (!(Number.isInteger(action.index) && action.index >= 0 && action.index < t.hand.length)) return prev
       const theirs = pick(s, t.hand)
-      const mine = removeFromHand(p, s.pending.oppPickedUid)
-      removeFromHand(t, theirs.uid)
-      if (mine) t.hand.push(mine)
-      p.hand.push(theirs)
+      move(s, s.pending.oppPickedUid, { hand: s.current }, { hand: s.pending.target })
+      move(s, theirs.uid, { hand: s.pending.target }, { hand: s.current })
       log(s, `🔄 ${p.name} (${jobOf(p).name}) troque une carte avec ${t.name} en en protégeant une`)
       s.pending = null
       finishPlay(s)
@@ -887,7 +822,7 @@ export function gameReducer(prev, action) {
       const malus = malusOf(p).find((c) => c.uid === action.uid)
       if (!malus) return prev
       if (!canPlayMalus(s, s.current, malus, action.target).ok) return prev
-      takeMalus(s, p, malus.uid)
+      remove(s, malus.uid, { cause: 'vengeance', by: s.current, to: 'aside' })
       log(s, `😈 ${p.name} se venge avec ${malus.name} !`)
       // avant applyMalus : un licenciement de Chercheur ouvre un nouveau choix
       s.pending = null
@@ -900,11 +835,10 @@ export function gameReducer(prev, action) {
       if (action.uid) {
         const card = p.hand.find((c) => c.uid === action.uid)
         if (!card || card.type !== 'salary') return prev
-        removeFromHand(p, card.uid)
+        take(s, { hand: s.current }, card.uid)
         s.casino.stake = { card, by: s.current }
         log(s, `🎰 ${p.name} mise immédiatement un salaire (et repioche)`)
-        const repl = drawCard(s)
-        if (repl) p.hand.push(repl)
+        draw(s, s.current)
       }
       s.pending = null
       finishPlay(s)
@@ -939,8 +873,7 @@ export function gameReducer(prev, action) {
         ? pick(s, q.hand)
         : q.hand.find((c) => c.uid === action.uid)
       if (!card) return prev
-      removeFromHand(q, card.uid)
-      toDiscard(s, card, pend.player)
+      move(s, card.uid, { hand: pend.player }, 'discard', { by: pend.player })
       log(s, `${q.name} (Chercheur) défausse 1 carte en plus`)
       s.pending = null
       // reprend là où la perte du métier s'était arrêtée
