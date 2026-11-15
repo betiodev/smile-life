@@ -801,7 +801,9 @@ function check(label, cond) {
 {
   // Casino : le salaire pris dans la défausse peut être misé (règle vérifiée par Teto)
   let s = freshState()
-  const sal = find((c) => c.type === 'salary')
+  // un vrai salaire de la pioche de cette partie (une copie de buildDeck() peut
+  // porter le même uid qu'une carte de la partie : le test échouait 3 fois sur 100)
+  const [sal] = s.deck.splice(s.deck.findIndex((c) => c.type === 'salary' && c.level === 1), 1)
   setMoney(s, s.players[1], [])
   s.discard = [{ card: sal, by: 1 }]
   s.casino = { owner: 1, stake: null }
