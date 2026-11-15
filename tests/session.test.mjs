@@ -3,7 +3,7 @@
 // Horloge factice : rien n'attend vraiment 30 s.
 import { gameReducer } from '../src/game/reducer.js'
 import { buildDeck } from '../src/data/index.js'
-import { moneyOf } from '../src/game/state.js'
+import { moneyOf, choiceOf } from '../src/game/state.js'
 import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
 import { startFlow } from '../src/game/flows/index.js'
 import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn } from '../src/game/state.js'
@@ -80,11 +80,11 @@ function birthdayState() {
     d.deadlines().length === 1 && d.deadlines()[0].seat === 2 && d.deadlines()[0].until === 1000 + WAIT_MS)
   now.advance(WAIT_MS - 10001)
   d.tick()
-  check('Anniversaire : rien avant l’échéance', d.fullState().pending?.type === 'birthday')
+  check('Anniversaire : rien avant l’échéance', choiceOf(d.fullState())?.type === 'birthday')
   now.advance(1)
   d.tick()
   const s = d.fullState()
-  check('Anniversaire : à l’échéance, le pilote offre pour Cléo (plus petit salaire)', s.pending === null &&
+  check('Anniversaire : à l’échéance, le pilote offre pour Cléo (plus petit salaire)', choiceOf(s) === null &&
     moneyOf(s.players[0]).some((c) => c.uid === lv(2).uid) && moneyOf(s.players[0]).some((c) => c.uid === lv(3).uid))
   check('Anniversaire : l’action par défaut est signée par Cléo', d.history().at(-1).by === 2 && d.history().at(-1).uid === null)
   check('Anniversaire : plus aucun délai ensuite', d.deadlines().length === 0)
@@ -98,7 +98,7 @@ function birthdayState() {
   now.advance(WAIT_MS)
   d.tick()
   check('Un seul écran : délai de Ben dépassé → son plus petit salaire est offert, Cléo a 30 s à son tour',
-    d.fullState().pending?.gifts[1] === lv(1).uid && d.deadlines().map((x) => x.seat).join() === '2' &&
+    choiceOf(d.fullState())?.gifts[1] === lv(1).uid && d.deadlines().map((x) => x.seat).join() === '2' &&
     d.deadlines()[0].until === now() + WAIT_MS)
 }
 {
@@ -106,7 +106,7 @@ function birthdayState() {
   const d = createDriver({ seats: seats3, state: birthdayState(), waitMs: 20 })
   d.dispatch(0, { type: 'PLAY_SELF', uid: anniv.uid })
   await new Promise((r) => setTimeout(r, 120))
-  check('Minuterie réelle : les cadeaux sont faits sans intervention', d.fullState().pending === null && d.fullState().current === 1)
+  check('Minuterie réelle : les cadeaux sont faits sans intervention', choiceOf(d.fullState()) === null && d.fullState().current === 1)
   d.destroy()
 }
 
@@ -130,7 +130,7 @@ function chercheurState() {
   d.tick()
   const s = d.fullState()
   check('Chercheur : à l’échéance, une carte est défaussée pour lui, le tour passe',
-    s.pending === null && s.players[1].hand.length === 5 && s.current === 1 && d.history().at(-1).by === 1)
+    choiceOf(s) === null && s.players[1].hand.length === 5 && s.current === 1 && d.history().at(-1).by === 1)
 }
 
 // --- un seul téléphone : écran de passage -------------------------------------

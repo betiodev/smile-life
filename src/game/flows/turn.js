@@ -9,7 +9,9 @@
 //   play   ATTENTE : jouer une carte (ou plusieurs : Arc-en-ciel), ou défausser.
 //          data.forced : carte forcée à jouer d'abord (prise dans la défausse
 //          ou la rivière, Étoile filante, Astronaute)
-//   end    fin du tour (endTurn) : main complétée, turnEnd, fin de partie
+//   end    fin du tour (endTurn) : main complétée, turnEnd, fin de partie.
+//          Comme étape rangée dans le cadre : seulement quand la fin du tour
+//          attend un choix posé au-dessus (Chercheur qui démissionne)
 //   next   joueur suivant, en consommant les tours passés, roundEnd
 // start, end et next n'attendent personne : ce sont des fonctions, pas des
 // étapes rangées dans la pile.
@@ -23,7 +25,7 @@ import {
   canPoseSelf, canPlayMalus, canTakeDiscardTop, canTakeRiverNow, canStopAdultery, canEndPlays, isInterim,
 } from '../rules.js'
 import {
-  jobOf, isMarried, marriageOf, adulteryOf, turnFrame, pendingOf, forcedOf,
+  jobOf, isMarried, marriageOf, adulteryOf, turnFrame, topFrame, forcedOf,
 } from '../state.js'
 import { poseSelf, applyMalus } from '../effects.js'
 
@@ -32,7 +34,7 @@ const copy = (x) => JSON.parse(JSON.stringify(x))
 const dataOf = (s) => turnFrame(s).data
 
 // ===========================================================================
-// Aides du tour (utilisées par les effets et les choix encore dans pending)
+// Aides du tour (utilisées par les effets et les autres flux)
 // ===========================================================================
 
 // un jeu de plus ce tour (Chance : n'use pas le jeu ; Arc-en-ciel : +3)
@@ -56,8 +58,9 @@ export function consumePlay(s, wasForced) {
 }
 
 // appelé après chaque résolution de jeu : continue, ou termine le tour
+// (un choix posé au-dessus du tour, ou une carte forcée : on attend)
 export function finishPlay(s) {
-  if (pendingOf(s) || forcedOf(s)) return
+  if (topFrame(s) !== turnFrame(s) || forcedOf(s)) return
   if (dataOf(s).plays > 0) return
   endTurn(s)
 }
@@ -108,7 +111,6 @@ export function endTurn(s) {
   if (wrapped) emit(s, 'roundEnd')
 
   s.current = next
-  s.pending = null
   s.turnCount += 1
   beginTurn(s)
 }
@@ -240,9 +242,11 @@ function apply(s, frame, action) {
       if (frame.step !== 'draw' || !jobOf(p)) return false
       const interim = isInterim(p)
       log(s, `${p.name} démissionne de ${jobOf(p).name}${interim ? ' (Intérimaire : joue quand même)' : ' et passe son tour'}`)
-      // Chercheur : le tour ne se termine qu'après le choix de la carte défaussée
-      const choosing = loseJob(s, s.current, { cause: 'demission', by: s.current, resume: interim ? 'none' : 'end-turn' })
-      if (!interim && !choosing) endTurn(s)
+      // il passe son tour ; un Chercheur choisit d'abord la carte qu'il
+      // défausse en plus (flux posé au-dessus) : le tour attend à l'étape end
+      if (!interim) frame.step = 'end'
+      loseJob(s, s.current, { cause: 'demission', by: s.current })
+      if (!interim && topFrame(s) === frame) endTurn(s)
       return true
     }
     case 'DIVORCE_VOLUNTARY': {
@@ -272,8 +276,10 @@ function apply(s, frame, action) {
       const { card, fromForced } = played
       if (!fromForced) take(s, { hand: s.current }, card.uid)
       poseSelf(s, s.current, card, { fromForced })
-      // achat : la pose n'est effective qu'après le paiement (resume plus bas)
-      if (s.stack.at(-1) !== frame) return true
+      // achat : la pose n'est effective qu'après le paiement (resume plus bas).
+      // Les autres choix (Chance, Piston…) viennent après la pose : le jeu est
+      // consommé tout de suite, le tour reprend quand le choix est fini
+      if (topFrame(s).flow === 'purchase') return true
       consumePlay(s, fromForced)
       finishPlay(s)
       return true
@@ -363,13 +369,21 @@ const turn = {
     return list
   },
   apply,
-  // le flux posé au-dessus est fini. Achat : payé → le jeu est consommé ;
-  // annulé → la carte est revenue en main (ou reste forcée), rien n'est joué
-  resume(s, frame, result) {
-    if (result?.bought) {
-      consumePlay(s, result.fromForced)
-      finishPlay(s)
+  // le flux posé au-dessus est fini.
+  // Achat : payé → le jeu est consommé ; annulé → la carte est revenue en main
+  // (ou reste forcée), rien n'est joué.
+  // Étape end (démission d'un Chercheur) : le tour se termine.
+  // Autres choix : le jeu (déjà consommé) est terminé, on continue ou on finit.
+  resume(s, frame, result, done) {
+    if (done?.flow === 'purchase') {
+      if (result?.bought) {
+        consumePlay(s, result.fromForced)
+        finishPlay(s)
+      }
+      return
     }
+    if (frame.step === 'end') endTurn(s)
+    else finishPlay(s)
   },
   // délai dépassé, bot sans avis, joueur parti : piocher ; puis terminer
   // l'Arc-en-ciel, sinon défausser (la première carte de la main), sinon jouer

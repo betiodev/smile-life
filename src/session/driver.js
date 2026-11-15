@@ -4,9 +4,11 @@
 //  - reçoit les actions d'un siège : dispatch(seat, action) signe `by` lui-même
 //    (un siège ne peut pas agir au nom d'un autre) ;
 //  - donne à chaque siège sa vue : view(seat) = viewFor(state, seat) + délais ;
-//  - tient les délais : un joueur qui doit agir et a une action par défaut
-//    (Anniversaire, défausse du Chercheur) a 30 s ; passé ce délai, le pilote
-//    joue pour lui l'action par défaut (fallbackAction, src/game/turn.js).
+//  - tient les délais : pendant un choix posé sur le tour (achat, Chance,
+//    Piston, Troc, Anniversaire, défausse du Chercheur…), chaque joueur qui
+//    doit agir a 30 s ; passé ce délai, le pilote joue pour lui l'action par
+//    défaut du flux du dessus (fallbackAction, src/game/turn.js). Le tour
+//    lui-même n'est pas minuté.
 // Le moteur (src/game/) ne connaît ni écrans, ni temps, ni téléphones.
 //
 // Sièges : [{ name, color, kind: 'human' }]. `kind` prendra plus tard
@@ -48,7 +50,9 @@ export function createDriver({ seats, seed, state: initial, oneAtATime = false, 
   function refreshDeadlines() {
     const waiting = whoMustAct(state).filter((seat) => fallbackAction(state, seat))
     const chosen = oneAtATime ? waiting.slice(0, 1) : waiting
-    const key = state.pending?.type ?? null
+    // une étape d'attente = un cadre de la pile à une étape donnée
+    const top = state.stack?.at(-1)
+    const key = top ? `${state.stack.length}:${top.flow}:${top.step}` : null
     deadlines = chosen.map((seat) => {
       const old = deadlines.find((d) => d.seat === seat && d.key === key)
       return old ?? { seat, key, until: now() + waitMs, total: waitMs }

@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
 // Smile Life — effets des cartes jouées (pose devant soi, malus, spéciales)
-// Appelés par le flux du tour (src/game/flows/turn.js) et par les choix
-// encore dans state.pending (reducer.js, étape 09). Les zones ne changent que
-// par les primitives ; un effet qui attend un joueur pose un cadre sur la pile
-// (achat) ou ouvre un state.pending.
+// Appelés par le flux du tour (src/game/flows/turn.js) et par d'autres flux
+// (Piston, Vengeance, Anniversaire). Les zones ne changent que par les
+// primitives ; un effet qui attend un joueur pose un flux sur la pile.
 // ---------------------------------------------------------------------------
 import { shuffle } from '../data/index.js'
 import { isPlayableFromDiscard, hasJob, interimReplaced, handTarget, hasTag, isGrandProf, birthdayDonors } from './rules.js'
@@ -91,26 +90,26 @@ export function policeSweep(s, pIdx) {
 }
 
 // Avantages instantanés (API) déclenchés à la pose d'un métier
-// (pose normale ou via Piston) — retourne true si un "pending" est créé
+// (pose normale ou via Piston) — retourne true si un flux est posé
 export function triggerJobApi(s, pIdx, card) {
   if (card.key === 'journaliste') {
-    s.pending = { type: 'journalist' }
+    startFlow(s, 'journalist')
     return true
   }
   if (card.key === 'medium') {
-    s.pending = { type: 'medium', cards: s.deck.slice(-13).reverse() }
+    startFlow(s, 'medium')
     return true
   }
   if (card.key === 'astronaute') {
     if (s.discard.some((e) => isPlayableFromDiscard(s, pIdx, e.card))) {
-      s.pending = { type: 'discard-pick', source: 'Astronaute' }
+      startFlow(s, 'discard-pick', { source: 'Astronaute' })
       return true
     }
     log(s, `L’avantage de l’Astronaute est perdu (rien de jouable dans la défausse)`)
   }
   if (card.key === 'chef_achats' || card.key === 'chef_ventes') {
     if (s.players.some((q, qi) => qi !== pIdx && q.hand.length > 0)) {
-      s.pending = { type: 'chef-troc', step: 'target' }
+      startFlow(s, 'chef-troc')
       return true
     }
     log(s, `L’avantage du ${card.name} est perdu (aucun adversaire avec des cartes)`)
@@ -120,7 +119,7 @@ export function triggerJobApi(s, pIdx, card) {
 
 // ---------------------------------------------------------------------------
 // Pose d'une carte devant soi (placement + effets)
-// Retourne true si la pose ouvre un choix (cadre d'achat ou state.pending)
+// Retourne true si la pose ouvre un choix (un flux posé sur la pile)
 // ---------------------------------------------------------------------------
 export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
   const p = s.players[pIdx]
@@ -239,7 +238,7 @@ export function giveBirthdayGifts(s, pIdx, gifts) {
 }
 
 // ---------------------------------------------------------------------------
-// Cartes spéciales — retourne true si un "pending" est créé
+// Cartes spéciales — retourne true si un flux est posé
 // ---------------------------------------------------------------------------
 function applySpecial(s, pIdx, card) {
   const p = s.players[pIdx]
@@ -253,7 +252,7 @@ function applySpecial(s, pIdx, card) {
         giveBirthdayGifts(s, pIdx, {})
         return false
       }
-      s.pending = { type: 'birthday', card, donors, gifts: {} }
+      startFlow(s, 'birthday', { card, donors })
       return true
     }
     case 'arcenciel':
@@ -269,13 +268,13 @@ function applySpecial(s, pIdx, card) {
       // Chance agit comme une pioche : elle ne consomme pas le jeu du tour
       addPlays(s, 1)
       log(s, `🍀 ${p.name} joue Chance : pioche ${cards.length} cartes, en garde une en main`)
-      s.pending = { type: 'chance', cards }
+      startFlow(s, 'chance', { cards })
       return true
     }
     case 'etoile':
       place(s, pIdx, card)
       log(s, `🌠 ${p.name} joue Étoile filante`)
-      s.pending = { type: 'discard-pick', source: 'Étoile filante' }
+      startFlow(s, 'discard-pick', { source: 'Étoile filante' })
       return true
     case 'heritage':
       place(s, pIdx, card)
@@ -283,11 +282,11 @@ function applySpecial(s, pIdx, card) {
       return false
     case 'piston':
       place(s, pIdx, card)
-      s.pending = { type: 'piston' }
+      startFlow(s, 'piston')
       return true
     case 'troc':
       place(s, pIdx, card)
-      s.pending = { type: 'troc' }
+      startFlow(s, 'troc')
       return true
     case 'tsunami': {
       place(s, pIdx, card)
@@ -318,14 +317,14 @@ function applySpecial(s, pIdx, card) {
     }
     case 'vengeance':
       place(s, pIdx, card)
-      s.pending = { type: 'vengeance' }
+      startFlow(s, 'vengeance')
       return true
     case 'casino':
       place(s, pIdx, card)
       s.casino = { owner: pIdx, stake: null }
       log(s, `🎰 ${p.name} ouvre un Casino !`)
       if (p.hand.some((c) => c.type === 'salary')) {
-        s.pending = { type: 'casino-stake' }
+        startFlow(s, 'casino-stake')
         return true
       }
       return false

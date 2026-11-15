@@ -165,21 +165,21 @@ export function Countdown({ until }) {
   return <span className="tabular-nums">{Math.max(0, Math.ceil((until - now) / 1000))} s</span>
 }
 
-// gifts : { pending, asking, until, give } (useBirthdayGifts)
+// gifts : { choice, asking, until, give } (useBirthdayGifts)
 export function GiftsOverlay({ gifts, state }) {
-  const { pending, asking, until, give } = gifts
+  const { choice, asking, until, give } = gifts
   const me = state.players[state.current]
   const d = state.players[asking]
   const unused = unspentMoney(state, d)
   return (
     <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-3 anim-fade">
       <div className="ui-zoom bg-[#2A2E36] rounded-2xl shadow-2xl p-3 flex gap-3 max-w-[min(680px,96vw)] w-full max-h-[94vh]">
-        <Dock card={pending.card} from={null} width={90} />
+        <Dock card={choice.card} from={null} width={90} />
         <div className="flex-1 min-w-0 flex flex-col gap-2">
           <h3 className="font-title text-lg font-semibold">🎂 Anniversaire de {me.name}</h3>
           <ul className="text-sm space-y-0.5">
-            {pending.donors.map((i) => {
-              const done = i in pending.gifts
+            {choice.donors.map((i) => {
+              const done = i in choice.gifts
               return (
                 <li key={i} className={done ? 'text-[#8FCB6B]' : i === asking ? 'font-bold' : 'opacity-60'}>
                   {done ? `✓ ${state.players[i].name} a choisi` : `En attente de ${state.players[i].name}…`}

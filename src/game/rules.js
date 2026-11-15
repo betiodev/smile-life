@@ -6,7 +6,7 @@
 import { hasTag } from '../data/index.js'
 import {
   jobs, jobOf, marriages, isMarried, adulteryOf, topFlirt, unspentMoney, moneyPaidFor, spentMoney, malusOf,
-  isUsed, onOf, phaseOf, pendingOf, forcedOf, forcedConsumesPlay, cardPlayedThisTurn, isRainbow, playsLeft,
+  isUsed, onOf, phaseOf, choiceOf, forcedOf, mustPlayForced, cardPlayedThisTurn, isRainbow, playsLeft,
 } from './state.js'
 
 const OK = { ok: true }
@@ -339,7 +339,7 @@ export function canStopAdultery(state, pIdx) {
   if (!p || !adulteryOf(p)) return NO('Pas d’adultère en cours')
   if (state.status !== 'playing' || state.current !== pIdx) return NO('Seulement pendant votre tour')
   if (phaseOf(state) !== 'draw' && phaseOf(state) !== 'play') return NO('Seulement pendant votre tour')
-  if (pendingOf(state) || forcedOf(state)) return NO('Terminez d’abord l’action en cours')
+  if (choiceOf(state) || forcedOf(state)) return NO('Terminez d’abord l’action en cours')
   if (cardPlayedThisTurn(state)) return NO('Trop tard : une carte a déjà été jouée ce tour')
   return OK
 }
@@ -349,7 +349,7 @@ export function canStopAdultery(state, pIdx) {
 // choix n'est en attente ni aucune carte forcée.
 export function canEndPlays(state) {
   return state.status === 'playing' && phaseOf(state) === 'play' && isRainbow(state) &&
-    !pendingOf(state) && !forcedOf(state) && playsLeft(state) > 0
+    !choiceOf(state) && !forcedOf(state) && playsLeft(state) > 0
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ export function canPlayFromHand(state, pIdx, card) {
 // Peut-on défausser cette carte ? (une carte prise dans la défausse ou la
 // rivière doit être réellement jouée)
 export function canDiscardFromHand(state, pIdx, card) {
-  if (forcedOf(state)?.uid === card.uid && forcedConsumesPlay(state)) return NO('Cette carte doit être jouée')
+  if (forcedOf(state)?.uid === card.uid && mustPlayForced(state)) return NO('Cette carte doit être jouée')
   return OK
 }
 

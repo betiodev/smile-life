@@ -27,7 +27,7 @@ const SAMPLE = 6 // actions hors liste essayées à chaque étape
 
 const fail = (msg) => { throw new Error('INVARIANT : ' + msg) }
 // où en est la partie (messages d'erreur)
-export const where = (s) => `pile=${(s.stack ?? []).map((f) => `${f.flow}:${f.step}`).join('>')} pending=${s.pending?.type}`
+export const where = (s) => `pile=${(s.stack ?? []).map((f) => `${f.flow}:${f.step}`).join('>')}`
 
 // --- 1. chaque carte à un seul endroit -----------------------------------------
 export function cardPlaces(s) {
@@ -42,11 +42,10 @@ export function cardPlaces(s) {
   outOfGameCards(s).forEach((c) => put(c, 'hors jeu'))
   s.river.forEach((c) => put(c, 'rivière'))
   put(s.casino?.stake?.card, 'mise du casino')
-  // cartes tenues par les cadres de la pile (carte forcée du tour, achat en cours)
+  // cartes tenues par les cadres de la pile (carte forcée du tour, achat en
+  // cours, les 3 cartes de la Chance ; le Médium ne fait que regarder la
+  // pioche, l'Anniversaire est déjà posé)
   heldCards(s).forEach((c) => put(c, 'pile des flux'))
-  // cartes « en l'air » pendant un choix (le Médium ne fait que regarder la pioche,
-  // l'Anniversaire est déjà posé)
-  if (s.pending?.type === 'chance') s.pending.cards.forEach((c) => put(c, 'Chance'))
   s.players.forEach((p, i) => {
     const at = (z) => `J${i + 1} ${z}`
     p.hand.forEach((c) => put(c, at('main')))
@@ -85,7 +84,6 @@ function candidates(s) {
   })
   heldCards(s).forEach(add)
   s.discard.slice(-4).forEach((e) => add(e.card))
-  if (s.pending?.type === 'chance') s.pending.cards.forEach(add)
   const uidList = [...uids, null]
   const targets = [...Array(n).keys()]
   const indexes = [0, 1, 2, 5, 6, -1]
@@ -93,7 +91,7 @@ function candidates(s) {
   const out = []
   // READY n'existe plus (passage d'écran : src/session/hotseat.js) : toujours refusé
   for (const type of ['READY', 'DRAW_DECK', 'TAKE_DISCARD', 'RESIGN', 'DIVORCE_VOLUNTARY', 'STOP_ADULTERY',
-    'END_PLAYS', 'PURCHASE_CANCEL', 'CLOSE_PENDING']) out.push({ type })
+    'END_PLAYS', 'PURCHASE_CANCEL', 'CLOSE_INFO']) out.push({ type })
   out.push({ type: 'PURCHASE_CONFIRM', useArchitect: true })
   for (const index of indexes) {
     out.push({ type: 'TAKE_RIVER', index, playNow: false }, { type: 'TAKE_RIVER', index, playNow: true })

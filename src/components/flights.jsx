@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 import { useLayoutEffect, useRef, useState } from 'react'
 import Card from './Card'
-import { boardCards, forcedOf } from '../game/state'
+import { boardCards, forcedOf, choiceOf } from '../game/state'
 
 export const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -26,7 +26,7 @@ export function locateCards(state) {
   })
   // Anniversaire en attente des cadeaux : la carte reste « dans le dock »,
   // elle ne s'envole vers le plateau qu'une fois les cadeaux reçus (comme avant)
-  if (state.pending?.type === 'birthday') put(state.pending.card, 'birthday')
+  if (choiceOf(state)?.type === 'birthday') put(choiceOf(state).card, 'birthday')
   return m
 }
 

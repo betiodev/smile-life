@@ -2,35 +2,14 @@
 // Smile Life — qui a le droit d'agir maintenant ?
 // Chaque action de jeu porte `by` (index du joueur qui l'envoie) ; le reducer
 // refuse toute action dont l'auteur n'est pas dans whoMustAct(state).
+// C'est le cadre du dessus de la pile des flux (src/game/flows/) qui le dit.
 // ---------------------------------------------------------------------------
 
 import { flowOf, activeFrame, frameFallback } from './flows/index.js'
 
-// Le cadre actif de la pile des flux (src/game/flows/) dit qui agit.
-// Pour les choix encore dans state.pending (étape 09 : portés en flux) :
-// étapes où ce n'est PAS le joueur courant qui choisit.
-// Chaque règle reçoit l'état et renvoie la liste des joueurs autorisés,
-// ou null si elle ne s'applique pas. Pour ajouter un cas, il suffit
-// d'ajouter une règle ici.
-const RULES = [
-  // Troc du Chef des achats/ventes : l'adversaire visé pioche à l'aveugle
-  // une carte non protégée du Chef
-  (s) => (s.pending?.type === 'chef-troc' && s.pending.step === 'opp-pick' ? [s.pending.target] : null),
-  // Anniversaire : les donateurs qui n'ont pas encore offert leur salaire
-  // (dans n'importe quel ordre ; le joueur fêté attend)
-  (s) => (s.pending?.type === 'birthday' ? s.pending.donors.filter((i) => !(i in s.pending.gifts)) : null),
-  // Chercheur qui perd son métier (Licenciement, démission) : lui seul choisit
-  // la carte qu'il défausse, même pendant le tour d'un autre joueur
-  (s) => (s.pending?.type === 'chercheur-discard' ? [s.pending.player] : null),
-]
-
 export function whoMustAct(state) {
   const frame = activeFrame(state)
   if (frame) return flowOf(frame.flow).actors(state, frame)
-  for (const rule of RULES) {
-    const who = rule(state)
-    if (who) return who
-  }
   return [state.current]
 }
 
@@ -41,25 +20,22 @@ export function canAct(state, by) {
 // ---------------------------------------------------------------------------
 // Action par défaut d'un joueur qui doit agir mais ne le fait pas à temps.
 // Le moteur ne connaît pas le temps : c'est le pilote (src/session/driver.js)
-// qui décide quand l'appliquer. null : pas d'action par défaut (on attend).
-// Seuls ces deux choix ont un délai aujourd'hui ; les flux (tour, achat) ont
-// leur fallback (defaultAction plus bas) mais le pilote n'en minute aucun.
-//  - Anniversaire : uid null → le moteur offre le plus petit salaire libre ;
-//  - Chercheur qui perd son métier : uid null → une carte au hasard.
+// qui décide quand l'appliquer. null : pas d'action par défaut minutée.
+// Chaque flux posé sur le tour (achat, Chance, Piston, Troc, Anniversaire,
+// défausse du Chercheur…) a la sienne : le fallback du cadre du dessus. Le
+// tour lui-même n'est pas minuté (on prend le temps de réfléchir à son jeu).
 // ---------------------------------------------------------------------------
 export function fallbackAction(state, seat) {
   if (state?.status !== 'playing' || !canAct(state, seat)) return null
-  const pend = state.pending
-  if (pend?.type === 'birthday') return { type: 'BIRTHDAY_GIFT', uid: null, by: seat }
-  if (pend?.type === 'chercheur-discard') return { type: 'CHERCHEUR_DISCARD', uid: null, by: seat }
-  return null
+  if (activeFrame(state)?.flow === 'turn') return null
+  const a = frameFallback(state, seat)
+  return a && { ...a, by: seat }
 }
 
-// Action par défaut de n'importe quelle attente : le fallback du cadre actif
-// (tour, achat), sinon celle d'un choix pending qui en a une. Pour les bots et
-// les joueurs partis (plus tard) ; le pilote, lui, n'utilise que fallbackAction.
+// Action par défaut de n'importe quelle attente, tour compris : le fallback du
+// cadre du dessus. Pour les bots et les joueurs partis (plus tard).
 export function defaultAction(state, seat) {
   if (state?.status !== 'playing' || !canAct(state, seat)) return null
-  const a = frameFallback(state, seat) ?? fallbackAction(state, seat)
+  const a = frameFallback(state, seat)
   return a && { ...a, by: seat }
 }

@@ -5,7 +5,7 @@ import { gameReducer } from '../src/game/reducer.js'
 import { viewFor } from '../src/game/view.js'
 import { setStep, setPlays, setForced } from '../src/game/flows/turn.js'
 import { startFlow } from '../src/game/flows/index.js'
-import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn } from '../src/game/state.js'
+import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn, choiceOf } from '../src/game/state.js'
 import { buildDeck } from '../src/data/index.js'
 import { jobOf, marriageOf, adulteryOf, moneyOf, malusOf, outOfGameCards } from '../src/game/state.js'
 import { setJob, setMarriage, setAdultery, setMoney, setMalus, putOutOfGame } from '../src/game/primitives.js'
@@ -25,7 +25,7 @@ function hiddenUids(s, viewer) {
   const hidden = new Set()
   if (!s.players) return hidden
   const me = viewer != null && viewer === s.current
-  const pend = s.pending
+  const pend = choiceOf(s)
   const seenByMedium = new Set(me && pend?.type === 'medium' ? pend.cards.map((c) => c.uid) : [])
   for (const c of s.deck) if (!seenByMedium.has(c.uid)) hidden.add(c.uid)
   s.players.forEach((p, i) => {
@@ -128,12 +128,12 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   const medium = find((c) => c.key === 'medium')
   let s = gameAt([medium])
   s = play(s, medium.uid)
-  check('Médium : pending ouvert', s.pending?.type === 'medium')
-  const seen = s.pending.cards.map((c) => c.uid)
-  check('Médium : le Médium voit les 13 cartes', viewFor(s, 0).pending.cards.map((c) => c.uid).join() === seen.join())
-  check('Médium : les autres ne voient rien', !('cards' in viewFor(s, 1).pending) && !('cards' in viewFor(s, null).pending))
+  check('Médium : choix ouvert', choiceOf(s)?.type === 'medium')
+  const seen = choiceOf(s).cards.map((c) => c.uid)
+  check('Médium : le Médium voit les 13 cartes', choiceOf(viewFor(s, 0)).cards.map((c) => c.uid).join() === seen.join())
+  check('Médium : les autres ne voient rien', !('cards' in choiceOf(viewFor(s, 1))) && !('cards' in choiceOf(viewFor(s, null))))
   assertNoLeak(s, 1, 'Médium')
-  s = gameReducer(s, { type: 'CLOSE_PENDING', by: 0 })
+  s = gameReducer(s, { type: 'CLOSE_INFO', by: 0 })
   const after = uidsIn(JSON.stringify(viewFor(s, 0)))
   // (la fin de tour a pu en piocher quelques-unes dans la main du Médium : celles-là, il les voit)
   const stillInDeck = seen.filter((u) => s.deck.some((c) => c.uid === u))
@@ -146,15 +146,15 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   let s = gameAt([journaliste])
   s.players[0].studies = take(s, findAll((c) => c.type === 'study' && c.levels === 1).slice(0, 3))
   s = play(s, journaliste.uid)
-  check('Journaliste : pending ouvert', s.pending?.type === 'journalist')
+  check('Journaliste : choix ouvert', choiceOf(s)?.type === 'journalist')
   const vj = viewFor(s, 0)
   check('Journaliste : voit toutes les autres mains',
-    vj.pending.hands[0] === null && [1, 2].every((i) => JSON.stringify(vj.pending.hands[i]) === JSON.stringify(s.players[i].hand)))
-  check('Journaliste : les autres ne voient pas les mains', !('hands' in viewFor(s, 1).pending))
+    choiceOf(vj).hands[0] === null && [1, 2].every((i) => JSON.stringify(choiceOf(vj).hands[i]) === JSON.stringify(s.players[i].hand)))
+  check('Journaliste : les autres ne voient pas les mains', !('hands' in choiceOf(viewFor(s, 1))))
   assertNoLeak(s, 1, 'Journaliste')
   assertNoLeak(s, null, 'Journaliste')
   const hand1 = s.players[1].hand.map((c) => c.uid)
-  s = gameReducer(s, { type: 'CLOSE_PENDING', by: 0 })
+  s = gameReducer(s, { type: 'CLOSE_INFO', by: 0 })
   const after = uidsIn(JSON.stringify(viewFor(s, 0)))
   check('Journaliste : regard unique, mains de nouveau cachées', hand1.every((u) => !after.has(u)))
 }
@@ -164,11 +164,11 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   const chance = find((c) => c.key === 'chance')
   let s = gameAt([chance])
   s = play(s, chance.uid)
-  check('Chance : pending ouvert', s.pending?.type === 'chance')
-  check('Chance : le joueur courant voit les 3 cartes', viewFor(s, 0).pending.cards.length === 3)
-  check('Chance : les autres n’en voient que le nombre', !('cards' in viewFor(s, 1).pending) && viewFor(s, 1).pending.count === 3)
+  check('Chance : choix ouvert', choiceOf(s)?.type === 'chance')
+  check('Chance : le joueur courant voit les 3 cartes', choiceOf(viewFor(s, 0)).cards.length === 3)
+  check('Chance : les autres n’en voient que le nombre', !('cards' in choiceOf(viewFor(s, 1))) && choiceOf(viewFor(s, 1)).count === 3)
   assertNoLeak(s, 1, 'Chance')
-  const cards = s.pending.cards
+  const cards = choiceOf(s).cards
   s = gameReducer(s, { type: 'CHANCE_PICK', uid: cards[0].uid, by: 0 })
   const v1 = viewFor(s, 1)
   check('Chance : les 2 cartes défaussées deviennent publiques, la gardée reste cachée',
@@ -182,21 +182,21 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
   s.players[0].studies = take(s, findAll((c) => c.type === 'study' && c.levels === 1).slice(0, 3))
   s = play(s, chef.uid)
   s = gameReducer(s, { type: 'CHEF_TROC_TARGET', target: 1, by: 0 })
-  check('Chef troc : étape protection', s.pending?.step === 'protect')
+  check('Chef troc : étape protection', choiceOf(s)?.step === 'protect')
   const protectedUid = s.players[0].hand[0].uid
   s = gameReducer(s, { type: 'CHEF_TROC_PROTECT', uid: protectedUid, by: 0 })
-  check('Chef troc (opp-pick) : le Chef voit la carte protégée', viewFor(s, 0).pending.protectedUid === protectedUid)
+  check('Chef troc (opp-pick) : le Chef voit la carte protégée', choiceOf(viewFor(s, 0)).protectedUid === protectedUid)
   const vt = viewFor(s, 1)
   check('Chef troc (opp-pick) : l’adversaire ne reçoit que le nombre de cartes',
-    !('protectedUid' in vt.pending) && vt.pending.pickCount === s.players[0].hand.length - 1 && vt.pending.protected === true)
+    !('protectedUid' in choiceOf(vt)) && choiceOf(vt).pickCount === s.players[0].hand.length - 1 && choiceOf(vt).protected === true)
   check('Chef troc (opp-pick) : l’adversaire peut agir, le Chef attend', vt.mayAct && !viewFor(s, 0).mayAct)
   ;[1, 2, null].forEach((v) => assertNoLeak(s, v, 'Chef opp-pick'))
   s = gameReducer(s, { type: 'CHEF_TROC_OPP_PICK', index: 0, by: 1 })
-  check('Chef troc : étape chef-pick', s.pending?.step === 'chef-pick')
+  check('Chef troc : étape chef-pick', choiceOf(s)?.step === 'chef-pick')
   const vc = viewFor(s, 0)
   check('Chef troc (chef-pick) : le Chef voit sa carte prise, pas la main adverse',
-    vc.pending.oppPickedUid === s.pending.oppPickedUid && vc.players[1].hand.every((c) => c.hidden))
-  check('Chef troc (chef-pick) : uid cachés aux autres', !('oppPickedUid' in viewFor(s, 1).pending))
+    choiceOf(vc).oppPickedUid === choiceOf(s).oppPickedUid && vc.players[1].hand.every((c) => c.hidden))
+  check('Chef troc (chef-pick) : uid cachés aux autres', !('oppPickedUid' in choiceOf(viewFor(s, 1))))
   ;[1, 2, null].forEach((v) => assertNoLeak(s, v, 'Chef chef-pick'))
 }
 
@@ -291,12 +291,15 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
 
 // --- fuite : 40 parties simulées, chaque étape, chaque joueur + spectateur -------------
 {
-  const pendings = {}
+  const GAMES = 40
+  const ALL_FLOWS = ['turn', 'purchase', 'chance', 'discard-pick', 'piston', 'troc', 'chef-troc', 'vengeance',
+    'casino-stake', 'birthday', 'chercheur-discard', 'journalist', 'medium']
+  const flowsSeen = {}
   let views = 0
-  for (let g = 0; g < 40; g++) {
+  for (let g = 0; g < GAMES; g++) {
     let s = newGame(g)
     // une partie sur deux commence avec un Chercheur posé (pris dans la pioche),
-    // pour que la défausse du Chercheur (pending public) soit bien vérifiée
+    // pour que la défausse du Chercheur (choix public) soit bien vérifiée
     if (g % 2 === 0) {
       const i = s.deck.findIndex((c) => c.key === 'chercheur')
       if (i >= 0) setJob(s, s.players[g % s.players.length], s.deck.splice(i, 1)[0])
@@ -307,14 +310,15 @@ const play = (s, uid, by = 0) => gameReducer(s, { type: 'PLAY_SELF', uid, by })
       const snapshot = JSON.stringify(s)
       for (const v of viewers) { assertNoLeak(s, v, `partie ${g}, étape ${guard}`); views++ }
       if (JSON.stringify(s) !== snapshot) throw new Error(`viewFor a modifié l’état (partie ${g})`)
-      if (s.pending) pendings[s.pending.type] = (pendings[s.pending.type] || 0) + 1
+      for (const f of s.stack) flowsSeen[f.flow] = (flowsSeen[f.flow] || 0) + 1
       if (s.status === 'over') break
       s = step(s)
       if (++guard > 20000) throw new Error('Partie infinie ?')
     }
   }
-  check('fuite : la défausse du Chercheur est couverte par les parties simulées', pendings['chercheur-discard'] > 0)
-  check(`aucune fuite sur 40 parties (${views} vues ; pendings vus : ${Object.keys(pendings).sort().join(', ')})`, true)
+  // le scan couvre chaque flux : chacun a été ouvert au moins une fois
+  for (const name of ALL_FLOWS) check(`fuite : le flux ${name} est couvert par les parties simulées`, flowsSeen[name] > 0)
+  check(`aucune fuite sur ${GAMES} parties (${views} vues ; flux vus : ${Object.keys(flowsSeen).sort().join(', ')})`, true)
 }
 
 console.log(`\n✅ ${passed} vérifications de la vue joueur réussies`)

@@ -8,7 +8,7 @@ import { PaymentSheet, VengeanceSheet, BirthdaySheet, GiftsOverlay, UndoToast, G
 import { FlightLayer, Ghost, locateCards, prefersReducedMotion, previewDuration } from './flights'
 import { canTakeDiscardTop, canPlayFromHand, canDiscardFromHand } from '../game/rules'
 import { legalActions } from '../game/legal'
-import { malusOf, phaseOf, forcedOf, pendingOf } from '../game/state'
+import { malusOf, phaseOf, forcedOf, choiceOf } from '../game/state'
 
 const rectOf = (el) => {
   if (!el) return null
@@ -31,7 +31,7 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
   const prevLogId = useRef(null)
   const snapshot = useRef(new Map()) // uid → position à l'écran au rendu précédent
   const nextId = useRef(0)
-  const pending = useRef(0)
+  const inFlight = useRef(0)
   const settledSent = useRef(false)
 
   const settle = useCallback(() => {
@@ -146,9 +146,9 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
     // les cartes d'arrivée restent cachées jusqu'à l'atterrissage de leur copie
     for (const f of out) if (f.el) f.el.style.visibility = 'hidden'
     if (out.length) {
-      pending.current += out.length
+      inFlight.current += out.length
       setFlights((fs) => [...fs, ...out])
-    } else if (pending.current === 0) {
+    } else if (inFlight.current === 0) {
       // on laisse la secousse se voir avant de passer la main
       if (struck) setTimeout(settle, 750)
       else settle()
@@ -167,8 +167,8 @@ function useCardAnimations({ state, viewer, rootRef, lastAction, locked, onSettl
     if (f.el) f.el.style.visibility = ''
     if (f.hit != null) strike(f.hit)
     setFlights((fs) => fs.filter((x) => x.id !== f.id))
-    pending.current -= 1
-    if (pending.current === 0) setTimeout(settle, f.hit != null ? 450 : 0)
+    inFlight.current -= 1
+    if (inFlight.current === 0) setTimeout(settle, f.hit != null ? 450 : 0)
   }, [strike, settle])
 
   // position de départ imposée pour la prochaine animation (carte en attente)
@@ -244,7 +244,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
   // le geste est-il permis ? (base commune au swipe et aux boutons)
   const baseGate = () => {
     if (!myTurn) return { ok: false, reason: 'Ce n’est pas ton tour' }
-    if (it || pendingOf(state)) return { ok: false }
+    if (it || choiceOf(state)) return { ok: false }
     if (phaseOf(state) === 'draw') return { ok: false, reason: 'Pioche d’abord' }
     return { ok: true }
   }
@@ -263,7 +263,7 @@ export default function GameScreen({ state, dispatch, viewer = state.current, lo
     hiddenUid: it ? it.card.uid : zoom?.fromHand ? zoom.cards[0].uid : zoomBack?.card.uid ?? null,
     // métier intérimaire en partance (toast) ou qui revient (Annuler)
     // (et l'Anniversaire posé pendant que les donateurs choisissent)
-    boardHiddenUid: it?.leavingUid ?? gifts?.pending.card.uid ?? null,
+    boardHiddenUid: it?.leavingUid ?? gifts?.choice.card.uid ?? null,
     hint,
     gateFor,
     onSwipe: (card, dir, rect) => pi.start(card, dir, rect),

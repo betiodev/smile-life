@@ -7,13 +7,16 @@ import Card from './Card'
 import { Countdown, deadlineOf } from './PlayChoices'
 import { canPlayMalus, hasJob, houseCost, validatePayment, hasTag, isGrandProf, heritageLiasses } from '../game/rules'
 import { legalActions } from '../game/legal'
-import { jobOf, isMarried, unspentMoney, malusOf, pendingOf } from '../game/state'
+import { jobOf, isMarried, unspentMoney, malusOf, choiceOf } from '../game/state'
 
-function Modal({ title, children, wide }) {
+// until : échéance du pilote pour ce choix (sans réponse, il joue l'action
+// par défaut) ; affichée en compte à rebours
+function Modal({ title, children, wide, until }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-3">
       <div className={`bg-white text-gray-800 rounded-2xl shadow-2xl p-5 w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[85vh] overflow-y-auto anim-slide-up`}>
         <h3 className="text-lg font-black text-gray-800 mb-3">{title}</h3>
+        {until != null && <p className="text-xs font-semibold text-gray-400 -mt-2 mb-2">⏱️ <Countdown until={until} /></p>}
         {children}
       </div>
     </div>
@@ -33,9 +36,9 @@ const Btn = ({ onClick, disabled, children, secondary, title }) => (
 )
 
 // --- Achat (voyage / maison) : choisir les salaires à investir ---------------
-function PurchaseModal({ state, dispatch }) {
+function PurchaseModal({ state, dispatch, until }) {
   const p = state.players[state.current]
-  const card = pendingOf(state).card
+  const card = choiceOf(state).card
   const [chosen, setChosen] = useState([])
   const [useHeritage, setUseHeritage] = useState(false)
   const cost = hasTag(card, 'house') ? houseCost(p, card) : card.cost
@@ -50,7 +53,7 @@ function PurchaseModal({ state, dispatch }) {
   const toggle = (u) => setChosen(chosen.includes(u) ? chosen.filter((x) => x !== u) : [...chosen, u])
 
   return (
-    <Modal title={`Acheter ${card.name} — coût ${cost} liasses${isMarried(p) && hasTag(card, 'house') ? ' (prix marié ÷2)' : ''}`} wide>
+    <Modal until={until} title={`Acheter ${card.name} — coût ${cost} liasses${isMarried(p) && hasTag(card, 'house') ? ' (prix marié ÷2)' : ''}`} wide>
       <div className="flex gap-3 flex-wrap items-start">
         <Card card={card} />
         <div className="flex-1 min-w-52">
@@ -96,13 +99,13 @@ function PurchaseModal({ state, dispatch }) {
 }
 
 // --- Chance : garder 1 des 3 cartes -----------------------------------------
-function ChanceModal({ state, dispatch }) {
+function ChanceModal({ state, dispatch, until }) {
   // les 3 cartes ne sont envoyées qu'au joueur courant (vue joueur)
-  if (!state.pending.cards) return null
+  if (!choiceOf(state).cards) return null
   return (
-    <Modal title="🍀 Chance — choisissez la carte à garder en main, les autres sont défaussées" wide>
+    <Modal until={until} title="🍀 Chance — choisissez la carte à garder en main, les autres sont défaussées" wide>
       <div className="flex gap-3 flex-wrap justify-center">
-        {state.pending.cards.map((c) => (
+        {choiceOf(state).cards.map((c) => (
           <Card key={c.uid} card={c} onClick={() => dispatch({ type: 'CHANCE_PICK', uid: c.uid })} />
         ))}
       </div>
@@ -111,11 +114,11 @@ function ChanceModal({ state, dispatch }) {
 }
 
 // --- Étoile filante / Astronaute : piocher dans la défausse ------------------
-function DiscardPickModal({ state, dispatch }) {
+function DiscardPickModal({ state, dispatch, until }) {
   const picks = new Set(legalActions(state, state.current).filter((a) => a.type === 'DISCARD_PICK').map((a) => a.uid))
   const playable = state.discard.filter((e) => picks.has(e.card.uid))
   return (
-    <Modal title={`🌠 ${state.pending.source} — choisissez une carte de la défausse à jouer immédiatement`} wide>
+    <Modal until={until} title={`🌠 ${choiceOf(state).source} — choisissez une carte de la défausse à jouer immédiatement`} wide>
       <div className="flex gap-2 flex-wrap justify-center">
         {playable.map((e) => (
           <Card key={e.card.uid} card={e.card} onClick={() => dispatch({ type: 'DISCARD_PICK', uid: e.card.uid })} />
@@ -127,12 +130,12 @@ function DiscardPickModal({ state, dispatch }) {
 }
 
 // --- Piston : choisir un métier en main --------------------------------------
-function PistonModal({ state, dispatch }) {
+function PistonModal({ state, dispatch, until }) {
   const p = state.players[state.current]
   const policier = state.players.some((q) => hasJob(q, 'policier'))
   const jobs = p.hand.filter((c) => c.type === 'job' && !isGrandProf(c))
   return (
-    <Modal title="🤝 Piston — posez le métier de votre choix, sans condition d’études" wide>
+    <Modal until={until} title="🤝 Piston — posez le métier de votre choix, sans condition d’études" wide>
       <div className="flex gap-2 flex-wrap justify-center">
         {jobs.map((c) => {
           const blocked = hasTag(c, 'outlaw') && policier
@@ -152,9 +155,9 @@ function PistonModal({ state, dispatch }) {
 }
 
 // --- Troc : choisir l'adversaire ----------------------------------------------
-function TrocModal({ state, dispatch }) {
+function TrocModal({ state, dispatch, until }) {
   return (
-    <Modal title="🔄 Troc — échangez une carte au hasard avec qui ?">
+    <Modal until={until} title="🔄 Troc — échangez une carte au hasard avec qui ?">
       <div className="space-y-2">
         {state.players.map((q, i) => {
           if (i === state.current) return null
@@ -176,13 +179,13 @@ function TrocModal({ state, dispatch }) {
 }
 
 // --- Troc du Chef des achats/ventes : échange avec picks face cachée -----------
-function ChefTrocModal({ state, dispatch }) {
+function ChefTrocModal({ state, dispatch, until }) {
   const p = state.players[state.current]
-  const pend = state.pending
+  const pend = choiceOf(state)
 
   if (pend.step === 'target') {
     return (
-      <Modal title={`🛡️ ${jobOf(p).name} — troquez en protégeant 1 carte. Avec qui ?`}>
+      <Modal until={until} title={`🛡️ ${jobOf(p).name} — troquez en protégeant 1 carte. Avec qui ?`}>
         <div className="space-y-2">
           {state.players.map((q, i) => {
             if (i === state.current) return null
@@ -205,7 +208,7 @@ function ChefTrocModal({ state, dispatch }) {
 
   if (pend.step === 'protect') {
     return (
-      <Modal title={`🛡️ ${p.name}, choisissez la carte de votre main à protéger`} wide>
+      <Modal until={until} title={`🛡️ ${p.name}, choisissez la carte de votre main à protéger`} wide>
         <div className="flex gap-2 flex-wrap justify-center">
           {p.hand.map((c) => (
             <Card key={c.uid} card={c} onClick={() => dispatch({ type: 'CHEF_TROC_PROTECT', uid: c.uid })} />
@@ -221,7 +224,7 @@ function ChefTrocModal({ state, dispatch }) {
     // l'adversaire ne connaît que le nombre de cartes où piocher (vue joueur)
     const count = pend.pickCount
     return (
-      <Modal title={`🂠 ${t.name}, choisissez une carte face cachée de ${p.name}`} wide>
+      <Modal until={until} title={`🂠 ${t.name}, choisissez une carte face cachée de ${p.name}`} wide>
         <div className="flex gap-2 flex-wrap justify-center">
           {Array.from({ length: count }, (_, i) => (
             <div key={i} onClick={() => dispatch({ type: 'CHEF_TROC_OPP_PICK', index: i, by: pend.target })} className="cursor-pointer hover:-translate-y-1 transition-transform">
@@ -237,7 +240,7 @@ function ChefTrocModal({ state, dispatch }) {
   // chef-pick
   const t = state.players[pend.target]
   return (
-    <Modal title={`🂠 ${p.name}, choisissez une carte face cachée de ${t.name}`} wide>
+    <Modal until={until} title={`🂠 ${p.name}, choisissez une carte face cachée de ${t.name}`} wide>
       <div className="flex gap-2 flex-wrap justify-center">
         {t.hand.map((c, i) => (
           <div key={c.uid} onClick={() => dispatch({ type: 'CHEF_TROC_CHEF_PICK', index: i })} className="cursor-pointer hover:-translate-y-1 transition-transform">
@@ -251,12 +254,12 @@ function ChefTrocModal({ state, dispatch }) {
 }
 
 // --- Vengeance : choisir un malus reçu + une cible -----------------------------
-function VengeanceModal({ state, dispatch }) {
+function VengeanceModal({ state, dispatch, until }) {
   const p = state.players[state.current]
   const [malusUid, setMalusUid] = useState(null)
   const malus = malusOf(p).find((c) => c.uid === malusUid)
   return (
-    <Modal title="😈 Vengeance — renvoyez un de vos malus reçus" wide>
+    <Modal until={until} title="😈 Vengeance — renvoyez un de vos malus reçus" wide>
       <div className="text-sm font-bold text-gray-600 mb-1">1. Choisissez le malus :</div>
       <div className="flex gap-2 flex-wrap">
         {malusOf(p).map((c) => (
@@ -290,11 +293,11 @@ function VengeanceModal({ state, dispatch }) {
 }
 
 // --- Casino : mise immédiate ---------------------------------------------------
-function CasinoStakeModal({ state, dispatch }) {
+function CasinoStakeModal({ state, dispatch, until }) {
   const p = state.players[state.current]
   const salaries = p.hand.filter((c) => c.type === 'salary')
   return (
-    <Modal title="🎰 Casino ouvert ! Misez un salaire de votre main (face cachée) ?">
+    <Modal until={until} title="🎰 Casino ouvert ! Misez un salaire de votre main (face cachée) ?">
       <div className="flex gap-2 flex-wrap justify-center">
         {salaries.map((c) => (
           <Card key={c.uid} card={c} onClick={() => dispatch({ type: 'CASINO_STAKE', uid: c.uid })} />
@@ -309,12 +312,12 @@ function CasinoStakeModal({ state, dispatch }) {
 }
 
 // --- Journaliste : voir toutes les mains -----------------------------------------
-function JournalistModal({ state, dispatch }) {
+function JournalistModal({ state, dispatch, until }) {
   // les mains ne sont exposées qu'au Journaliste, le temps de la modale (vue joueur)
-  const hands = state.pending.hands
+  const hands = choiceOf(state).hands
   if (!hands) return null
   return (
-    <Modal title="📰 Journaliste — vous voyez la main de chaque joueur" wide>
+    <Modal until={until} title="📰 Journaliste — vous voyez la main de chaque joueur" wide>
       {state.players.map((q, i) => {
         if (i === state.current) return null
         return (
@@ -327,20 +330,20 @@ function JournalistModal({ state, dispatch }) {
         )
       })}
       <div className="flex justify-end">
-        <Btn onClick={() => dispatch({ type: 'CLOSE_PENDING' })}>J’ai tout vu 👀</Btn>
+        <Btn onClick={() => dispatch({ type: 'CLOSE_INFO' })}>J’ai tout vu 👀</Btn>
       </div>
     </Modal>
   )
 }
 
 // --- Médium : voir les 13 prochaines cartes ---------------------------------------
-function MediumModal({ state, dispatch }) {
+function MediumModal({ state, dispatch, until }) {
   // les cartes ne sont envoyées qu'au Médium (vue joueur)
-  if (!state.pending.cards) return null
+  if (!choiceOf(state).cards) return null
   return (
-    <Modal title="🔮 Médium — les 13 prochaines cartes de la pioche (dans l’ordre)" wide>
+    <Modal until={until} title="🔮 Médium — les 13 prochaines cartes de la pioche (dans l’ordre)" wide>
       <div className="flex gap-1.5 flex-wrap">
-        {state.pending.cards.map((c, i) => (
+        {choiceOf(state).cards.map((c, i) => (
           <div key={c.uid} className="relative">
             <span className="absolute -top-1.5 -left-1.5 z-10 bg-purple-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center">{i + 1}</span>
             <Card card={c} small />
@@ -348,7 +351,7 @@ function MediumModal({ state, dispatch }) {
         ))}
       </div>
       <div className="flex justify-end mt-3">
-        <Btn onClick={() => dispatch({ type: 'CLOSE_PENDING' })}>Vision terminée 🔮</Btn>
+        <Btn onClick={() => dispatch({ type: 'CLOSE_INFO' })}>Vision terminée 🔮</Btn>
       </div>
     </Modal>
   )
@@ -356,7 +359,7 @@ function MediumModal({ state, dispatch }) {
 
 // --- Chercheur qui perd son métier : choisir 1 carte de sa main à défausser ------
 function ChercheurDiscardModal({ state, dispatch }) {
-  const pend = state.pending
+  const pend = choiceOf(state)
   const q = state.players[pend.player]
   const left = <span className="font-normal text-gray-400 text-sm">· <Countdown until={deadlineOf(state, pend.player)} /></span>
   // seul le Chercheur voit sa main (vue joueur) : les autres attendent
@@ -380,21 +383,23 @@ function ChercheurDiscardModal({ state, dispatch }) {
 }
 
 export default function Modals({ state, dispatch }) {
-  // choix en cours : le flux du dessus de la pile (achat), sinon state.pending
-  const pend = pendingOf(state)
+  // choix en cours : le flux du dessus de la pile (achat, Chance, Piston…)
+  const pend = choiceOf(state)
   if (!pend) return null
+  // délai du pilote pour ce joueur (chaque choix est minuté)
+  const until = deadlineOf(state, state.viewer) ?? state.deadlines?.[0]?.until ?? null
   switch (pend.type) {
-    case 'purchase': return <PurchaseModal state={state} dispatch={dispatch} />
-    case 'chance': return <ChanceModal state={state} dispatch={dispatch} />
-    case 'discard-pick': return <DiscardPickModal state={state} dispatch={dispatch} />
-    case 'piston': return <PistonModal state={state} dispatch={dispatch} />
-    case 'troc': return <TrocModal state={state} dispatch={dispatch} />
-    case 'chef-troc': return <ChefTrocModal state={state} dispatch={dispatch} />
-    case 'vengeance': return <VengeanceModal state={state} dispatch={dispatch} />
-    case 'casino-stake': return <CasinoStakeModal state={state} dispatch={dispatch} />
-    case 'journalist': return <JournalistModal state={state} dispatch={dispatch} />
-    case 'medium': return <MediumModal state={state} dispatch={dispatch} />
-    case 'chercheur-discard': return <ChercheurDiscardModal state={state} dispatch={dispatch} />
+    case 'purchase': return <PurchaseModal state={state} dispatch={dispatch} until={until} />
+    case 'chance': return <ChanceModal state={state} dispatch={dispatch} until={until} />
+    case 'discard-pick': return <DiscardPickModal state={state} dispatch={dispatch} until={until} />
+    case 'piston': return <PistonModal state={state} dispatch={dispatch} until={until} />
+    case 'troc': return <TrocModal state={state} dispatch={dispatch} until={until} />
+    case 'chef-troc': return <ChefTrocModal state={state} dispatch={dispatch} until={until} />
+    case 'vengeance': return <VengeanceModal state={state} dispatch={dispatch} until={until} />
+    case 'casino-stake': return <CasinoStakeModal state={state} dispatch={dispatch} until={until} />
+    case 'journalist': return <JournalistModal state={state} dispatch={dispatch} until={until} />
+    case 'medium': return <MediumModal state={state} dispatch={dispatch} until={until} />
+    case 'chercheur-discard': return <ChercheurDiscardModal state={state} dispatch={dispatch} until={until} />
     default: return null
   }
 }

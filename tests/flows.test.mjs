@@ -1,16 +1,16 @@
-// Pile des flux (src/game/flows/, étape 08) : le tour en bas, l'achat posé
-// dessus, la carte forcée dans le tour ; le cadre du dessus décide qui agit et
+// Pile des flux (src/game/flows/, étapes 08-09) : le tour en bas, les choix
+// posés dessus (achat, Chance, Vengeance…), emboîtés au besoin, la carte forcée dans le tour ; le cadre du dessus décide qui agit et
 // ce qui est permis ; chaque attente a une action par défaut ; la pile est une
 // simple donnée (survit à JSON) et chaque joueur la voit par la vue du flux.
 import { gameReducer } from '../src/game/reducer.js'
-import { whoMustAct, defaultAction } from '../src/game/turn.js'
+import { whoMustAct, defaultAction, fallbackAction } from '../src/game/turn.js'
 import { legalActions, actionKey } from '../src/game/legal.js'
 import { viewFor } from '../src/game/view.js'
 import { buildDeck, hasTag } from '../src/data/index.js'
-import { setMoney } from '../src/game/primitives.js'
+import { setMoney, setMalus, setJob } from '../src/game/primitives.js'
 import { setStep, setPlays } from '../src/game/flows/turn.js'
-import { flowOf } from '../src/game/flows/index.js'
-import { topFrame, phaseOf, playsLeft, forcedOf, pendingOf, unspentMoney } from '../src/game/state.js'
+import { flowOf, setFlow } from '../src/game/flows/index.js'
+import { topFrame, phaseOf, playsLeft, forcedOf, choiceOf, unspentMoney } from '../src/game/state.js'
 
 let passed = 0
 function check(label, cond) {
@@ -63,7 +63,7 @@ const study = find((c) => c.type === 'study' && c.levels === 1)
   check('Achat : un cadre d’achat est posé sur le tour', flows(a) === 'turn:play>purchase:pay')
   check('Achat : le voyage est tenu par le cadre, plus dans la main',
     topFrame(a).data.card.uid === travel.uid && a.players[0].hand.length === hand - 1 && !a.players[0].hand.some((c) => c.uid === travel.uid))
-  check('Achat : pendingOf le présente comme un choix « purchase »', pendingOf(a)?.type === 'purchase' && pendingOf(a).card.uid === travel.uid)
+  check('Achat : choiceOf le présente comme un choix « purchase »', choiceOf(a)?.type === 'purchase' && choiceOf(a).card.uid === travel.uid)
   check('Achat : seul le paiement ou l’annulation sont permis', types(legalActions(a, 0)) === 'PURCHASE_CANCEL,PURCHASE_CONFIRM')
   check('Achat : aucune autre action n’est acceptée',
     gameReducer(a, { type: 'DISCARD_CARD', uid: a.players[0].hand[0].uid, by: 0 }) === a &&
@@ -107,24 +107,75 @@ const study = find((c) => c.type === 'study' && c.levels === 1)
     unspentMoney(b, b.players[0]).length < 4)
 }
 
-// --- la pile d'abord, puis l'ancien pending ---------------------------------
+// --- un choix posé sur le tour (ici : Journaliste) -------------------------
 {
   const s = freshState()
   setStep(s, 'play')
   setPlays(s, 0) // le Journaliste posé a consommé le jeu du tour
-  s.pending = { type: 'journalist' }
-  check('Pending au-dessus du tour : le tour n’est plus le cadre actif',
-    legalActions(s, 0).map((a) => a.type).join() === 'CLOSE_PENDING' && defaultAction(s, 0) === null)
-  check('Pending : les actions du tour sont refusées', gameReducer(s, { type: 'DISCARD_CARD', uid: s.players[0].hand[0].uid, by: 0 }) === s)
-  const r = gameReducer(s, { type: 'CLOSE_PENDING', by: 0 })
-  check('Pending fermé : le tour reprend la main (jeu consommé → Ben)', r.pending === null && r.current === 1 && flows(r) === 'turn:draw')
+  setFlow(s, 'journalist', 'look')
+  check('Choix au-dessus du tour : le tour n’est plus le cadre actif',
+    legalActions(s, 0).map((a) => a.type).join() === 'CLOSE_INFO' && defaultAction(s, 0)?.type === 'CLOSE_INFO')
+  check('Choix : les actions du tour sont refusées', gameReducer(s, { type: 'DISCARD_CARD', uid: s.players[0].hand[0].uid, by: 0 }) === s)
+  check('Choix : le pilote a un délai (fallbackAction)', fallbackAction(s, 0)?.type === 'CLOSE_INFO')
+  const r = gameReducer(s, { type: 'CLOSE_INFO', by: 0 })
+  check('Choix fermé : le tour reprend la main (jeu consommé → Ben)', choiceOf(r) === null && r.current === 1 && flows(r) === 'turn:draw')
+  check('Plus de state.pending', !('pending' in s) && !('pending' in r))
+  check('Le tour lui-même n’est pas minuté par le pilote', fallbackAction(r, 1) === null && defaultAction(r, 1)?.type === 'DRAW_DECK')
 }
 
-// --- chaque flux définit toute l'interface ----------------------------------
-for (const name of ['turn', 'purchase']) {
-  const f = flowOf(name)
-  check(`Flux ${name} : start, actors, legal, apply, resume, fallback, view`,
-    ['start', 'actors', 'legal', 'apply', 'resume', 'fallback', 'view'].every((k) => typeof f[k] === 'function'))
+// --- flux emboîtés : un Chercheur licencié par une Vengeance pendant un Arc-en-ciel
+{
+  const s = freshState()
+  setStep(s, 'play')
+  const arc = find((c) => c.key === 'arcenciel')
+  const vengeance = find((c) => c.key === 'vengeance')
+  const licenciement = find((c) => c.key === 'licenciement')
+  const chercheur = find((c) => c.key === 'chercheur')
+  s.players[0].hand[0] = arc
+  s.players[0].hand[1] = vengeance
+  setMalus(s, s.players[0], [licenciement])
+  setJob(s, s.players[1], chercheur)
+  const benHand = s.players[1].hand.map((c) => c.uid)
+
+  const a = gameReducer(s, { type: 'PLAY_SELF', uid: arc.uid, by: 0 })
+  check('Emboîtés : Arc-en-ciel joué, 3 jeux restent', flows(a) === 'turn:play' && playsLeft(a) === 3)
+  const v = gameReducer(a, { type: 'PLAY_SELF', uid: vengeance.uid, by: 0 })
+  check('Emboîtés : la Vengeance se pose sur le tour (jeu déjà consommé)', flows(v) === 'turn:play>vengeance:pick' && playsLeft(v) === 2)
+  const c = gameReducer(v, { type: 'VENGEANCE_PICK', uid: licenciement.uid, target: 1, by: 0 })
+  check('Emboîtés : trois cadres (tour > vengeance > défausse du Chercheur)',
+    flows(c) === 'turn:play>vengeance:done>chercheur-discard:discard')
+  check('Emboîtés : Ben est licencié, le malus est chez lui', c.players[1].jobs.length === 0 &&
+    c.players[1].malus.some((m) => m.uid === licenciement.uid) && c.players[0].malus.length === 0)
+  check('Emboîtés : seul Ben agit, pendant le tour d’Ana', whoMustAct(c).join() === '1' && c.current === 0 &&
+    legalActions(c, 0).length === 0 && types(legalActions(c, 1)) === 'CHERCHEUR_DISCARD')
+  check('Emboîtés : Ana est refusée', gameReducer(c, { type: 'END_PLAYS', by: 0 }) === c)
+  check('Emboîtés : la pile survit à JSON', JSON.stringify(JSON.parse(JSON.stringify(c))) === JSON.stringify(c))
+  check('Emboîtés : chaque joueur voit les trois cadres', [0, 1, null].every((w) => viewFor(c, w).stack.length === 3))
+  check('Emboîtés : le pilote minute Ben (défausse au hasard)', fallbackAction(c, 1)?.type === 'CHERCHEUR_DISCARD' && fallbackAction(c, 0) === null)
+  const d = gameReducer(c, { type: 'CHERCHEUR_DISCARD', uid: benHand[0], by: 1 })
+  check('Emboîtés : la carte choisie est défaussée', d.discard.at(-1).card.uid === benHand[0] && d.discard.at(-1).by === 1)
+  check('Emboîtés : les deux choix se ferment, l’Arc-en-ciel d’Ana continue (2 jeux)',
+    flows(d) === 'turn:play' && d.current === 0 && playsLeft(d) === 2 && whoMustAct(d).join() === '0')
+  const e = gameReducer(d, { type: 'END_PLAYS', by: 0 })
+  check('Emboîtés : Ana termine son tour quand elle veut', e.current === 1 && flows(e) === 'turn:draw')
+}
+
+// --- Piston → Journaliste : le Piston attend la fin de l'avantage ------------
+{
+  const s = freshState()
+  setStep(s, 'play')
+  const piston = find((c) => c.key === 'piston')
+  const journaliste = find((c) => c.key === 'journaliste')
+  s.players[0].hand[0] = piston
+  s.players[0].hand[1] = journaliste
+  const p = gameReducer(s, { type: 'PLAY_SELF', uid: piston.uid, by: 0 })
+  check('Piston : le choix du métier', flows(p) === 'turn:play>piston:pick')
+  const j = gameReducer(p, { type: 'PISTON_PICK', uid: journaliste.uid, by: 0 })
+  check('Piston → Journaliste : deux choix emboîtés', flows(j) === 'turn:play>piston:done>journalist:look')
+  check('Piston → Journaliste : seul le Journaliste voit les mains',
+    choiceOf(viewFor(j, 0)).hands?.[1]?.length === j.players[1].hand.length && !('hands' in choiceOf(viewFor(j, 1))))
+  const r = gameReducer(j, { type: 'CLOSE_INFO', by: 0 })
+  check('Piston → Journaliste : fermé, le tour passe à Ben', flows(r) === 'turn:draw' && r.current === 1)
 }
 
 // --- Étoile filante : carte de la défausse jouée en plus (pas le jeu du tour) -
