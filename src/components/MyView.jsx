@@ -37,6 +37,7 @@ function Piles({ game }) {
   const [ref, { width, height }] = useElementSize()
   const discardTop = state.discard[state.discard.length - 1]
   const canTake = drawPhase && takeDiscard.ok
+  // toucher la défausse l'agrandit pour la lire ; la prendre est un bouton à part dans l'agrandi
   // deux cartes côte à côte, sans dépasser ~40 % de la hauteur
   const w = Math.max(40, Math.min((width - 32) / 2, (height * 0.4) / CARD_RATIO))
   const empty = <div className="pile-empty" style={{ width: w }} />
@@ -63,9 +64,12 @@ function Piles({ game }) {
 
         <button
           type="button"
-          className={`flex flex-col items-center gap-1 ${canTake ? 'cursor-pointer' : 'cursor-default'}`}
-          onClick={canTake ? () => act({ type: 'TAKE_DISCARD' }) : undefined}
-          title={drawPhase ? (takeDiscard.ok ? 'Prendre la défausse (à jouer aussitôt)' : takeDiscard.reason) : 'Dessus de la défausse'}
+          className={`flex flex-col items-center gap-1 ${discardTop ? 'cursor-pointer' : 'cursor-default'}`}
+          onClick={discardTop ? () => game.onZoom([discardTop.card], null,
+            !drawPhase ? null
+              : canTake ? { label: 'Prendre et jouer', onClick: () => act({ type: 'TAKE_DISCARD' }) }
+                : { reason: takeDiscard.reason }) : undefined}
+          title={drawPhase ? (takeDiscard.ok ? 'Voir la défausse (à prendre et jouer aussitôt)' : takeDiscard.reason) : 'Dessus de la défausse'}
         >
           <div data-pile="discard">
             {discardTop
