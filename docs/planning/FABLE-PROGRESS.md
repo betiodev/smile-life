@@ -52,5 +52,21 @@ All six deliverables are written. Nothing is owed. If the session continues, use
 Brief: review the whole codebase after Phase 1, write a fixes mini-guide and a visuals mini-guide. No game code changed. Branch `revue-fable`.
 
 - **Done:** `docs/planning/CODE-REVIEW.md` (verdict: healthy; no critical finding; four engine gaps to close before the first extension; save/resume and bug report missing).
-- **Next:** `docs/FIXES-GUIDE.md` + `docs/prompts/fixes/` (F1–F6), then `docs/VISUALS-GUIDE.md` + `docs/prompts/visuals/` (V1–V6).
 - **Done:** `docs/FIXES-GUIDE.md` + six prompts in `docs/prompts/fixes/` (F1 rule tests, F2 cards on the registry, F3 zones / view allow-list / pass, F4 save-resume-report, F5 hand-over and last action, F6 clean-up and docs). F6 is the step that edits `CLAUDE.md`, `ROADMAP.md`, `ARCHITECTURE.md` and appends notes to prompts 13, 14, 15, 17, 45, 51.
+- **Done:** `docs/VISUALS-GUIDE.md` + six prompts in `docs/prompts/visuals/` (V1 home-screen app, V2 design tokens and `#demo` game, V3 the mat and the zone sheet, V4 table overview, V5 hand, V6 small pictures and leftovers). iPhone facts checked on the web that day (home-screen web apps, no orientation lock, no Fullscreen API on iPhone).
+- All three deliverables are written. Nothing is owed.
+
+### Order for Teto
+
+F1 → F6, Checkpoint A, step 13, V1 → V6 (V1 may be done at any time), step 14, step 15, Phase 3.
+
+### Decisions of this session
+
+- No finding is critical. Phase 1 stands; no rework of the design.
+- The existing roadmap, prompts and `CLAUDE.md` were not edited. Fix step F6 edits them (two lines in the roadmap, notes appended to prompts 13, 14, 15, 17, 45, 51).
+- Visual direction: zones like a play mat; a small card is a picture and its name is written beside it as text; three depths (overview → one player's mat → one zone opened). Readable full cards for four players at once do not fit on a phone and are not promised.
+- Two rules questions left with Teto (discard pile at 2 players; whose children an Attentat removes). Not changed.
+
+### Checked with a throwaway script (not committed)
+
+A fake extension confirmed: an extension malus is refused as "Malus inconnu"; a non-Légion distinction is treated as the Grand Prix; a new card type is "Carte inconnue"; `onPlace` does not run for an acquisition or a flirt; a carte spéciale with smiles scores 0; "no draw" with an empty hand leaves no legal action; an unknown field on the state or on a player reaches other players' views. Engine speed: about 0.2 ms per action.
