@@ -16,6 +16,7 @@ import {
   setJob, setMarriage, setAdultery, setMoney, addMoney, setMalus, placeCard, liftCard, loseJob,
 } from '../src/game/primitives.js'
 import { whoMustAct } from '../src/game/turn.js'
+import { applyMalus } from '../src/game/effects.js'
 import { setStep, setPlays, setForced, beginTurn } from '../src/game/flows/turn.js'
 import { startFlow, setFlow } from '../src/game/flows/index.js'
 import { phaseOf, playsLeft, forcedOf, isRainbow, cardPlayedThisTurn, choiceOf, onOf, specialsUnder, looseSpecials } from '../src/game/state.js'
@@ -1148,6 +1149,313 @@ function check(label, cond) {
   check('Décompte : total = somme des catégories + bonus (0 dans le jeu de base)',
     sc.bonus === 0 && sc.total === Object.values(sc.cat).reduce((a, b) => a + b, 0))
   check('Décompte : par indice ou par joueur, et pour tous', computeScore(s, ana).total === sc.total && computeScores(s).length === 2)
+}
+
+// --- F1 : règles de base qui n'avaient aucun test direct ------------------------
+{
+  const key = (k) => find((c) => c.key === k)
+  const lv = (n) => find((c) => c.type === 'salary' && c.level === n)
+  const studies = (n) => findAll((c) => c.type === 'study' && c.levels === 1).slice(0, n)
+  const children = (n) => findAll((c) => c.type === 'child').slice(0, n)
+  const flirts = (n) => findAll((c) => c.type === 'flirt').slice(0, n)
+  const pizzaiolo = JOBS_IN_DECK.find((c) => c.key === 'pizzaiolo')
+  const uidList = (cards) => cards.map((c) => c.uid).sort().join()
+  const inDiscard = (s, card, by) => s.discard.some((e) => e.card.uid === card.uid && (by === undefined || e.by === by))
+  // partie à n joueurs, au tour d'Ana (0), étape « jouer »
+  const play = (n = 2, setup = () => {}) => {
+    const s = gameReducer(null, { type: 'START_GAME', names: ['Ana', 'Ben', 'Cléo'].slice(0, n), seed: 'f1-regles' })
+    setStep(s, 'play')
+    setup(s)
+    return s
+  }
+  const malus = (s, card, target, by = 0) => gameReducer(s, { type: 'PLAY_MALUS', uid: card.uid, target, by })
+  // finit le tour du joueur courant avec une défausse (piochant d'abord si besoin)
+  const endTurnByDiscard = (s) => {
+    let r = s
+    if (phaseOf(r) === 'draw') r = gameReducer(r, { type: 'DRAW_DECK', by: r.current })
+    const d = legalActions(r, r.current).find((a) => a.type === 'DISCARD_CARD')
+    return gameReducer(r, d)
+  }
+
+  // 1. Accident, Maladie, Burn-out : 1 tour passé, le malus reste chez la cible
+  for (const k of ['accident', 'maladie', 'burnout']) {
+    const card = key(k)
+    const s = play(2, (s) => { setJob(s, s.players[1], pizzaiolo) })
+    const direct = structuredClone(s)
+    applyMalus(direct, 0, card, 1)
+    check(`${card.name} : la cible passera 1 tour`, direct.players[1].skipTurns === 1)
+    check(`${card.name} : le malus est posé chez la cible`, malusOf(direct.players[1]).some((c) => c.uid === card.uid))
+    s.players[0].hand[0] = card
+    const r = malus(s, card, 1)
+    check(`${card.name} joué : posé chez la cible, plus en main`,
+      malusOf(r.players[1]).some((c) => c.uid === card.uid) && !r.players[0].hand.some((c) => c.uid === card.uid))
+  }
+  {
+    const burn = key('burnout')
+    check('Burn-out : refusé sur un joueur sans métier', !canTarget(play(), 0, burn, 1).ok)
+    check('Burn-out : permis sur un joueur qui a un métier', canTarget(play(2, (s) => setJob(s, s.players[1], pizzaiolo)), 0, burn, 1).ok)
+  }
+
+  // 2. Tours passés : une fois, puis le joueur rejoue normalement
+  {
+    const s = play(3, (s) => { s.players[1].skipTurns = 1 })
+    const r1 = endTurnByDiscard(s)
+    check('Tour passé : Ben est sauté, le tour va à Cléo', r1.current === 2 && r1.players[1].skipTurns === 0)
+    const r2 = endTurnByDiscard(r1)
+    check('Tour passé : Cléo joue, puis le tour revient à Ana', r2.current === 0)
+    const r3 = endTurnByDiscard(r2)
+    check('Tour passé : Ben rejoue normalement ensuite', r3.current === 1)
+    // Accident joué avec 3 joueurs : la cible est passée, le tour va au suivant
+    const acc = key('accident')
+    const s2 = play(3, (s) => { s.players[0].hand[0] = acc })
+    const r = malus(s2, acc, 1)
+    check('Accident (3 joueurs) : Ben est passé, c’est à Cléo', r.current === 2 && r.players[1].skipTurns === 0)
+  }
+
+  // 3. Prison : seulement sur un Bandit, 3 tours, Bandit et Prison à la défausse
+  {
+    const prison = key('prison'), bandit = JOBS_IN_DECK.find((c) => c.key === 'bandit')
+    const s = play(3, (s) => { setJob(s, s.players[1], bandit); s.players[0].hand[0] = prison })
+    check('Prison : permise sur un Bandit', canTarget(s, 0, prison, 1).ok)
+    check('Prison : refusée sur un autre métier', !canTarget(play(2, (x) => setJob(x, x.players[1], pizzaiolo)), 0, prison, 1).ok)
+    check('Prison : refusée sur un joueur sans métier', !canTarget(play(), 0, prison, 1).ok)
+    const direct = structuredClone(s)
+    applyMalus(direct, 0, prison, 1)
+    check('Prison : la cible passe 3 tours', direct.players[1].skipTurns === 3)
+    const r = malus(s, prison, 1)
+    check('Prison : le Bandit est défaussé', jobOf(r.players[1]) === null && inDiscard(r, bandit, 1))
+    check('Prison : la carte Prison va à la défausse, pas chez la cible',
+      inDiscard(r, prison) && !malusOf(r.players[1]).some((c) => c.uid === prison.uid))
+  }
+
+  // 4. Impôt : dernier salaire non investi, défaussé au nom de la cible
+  {
+    const imp = key('impot'), [a, b, c] = [lv(1), lv(2), lv(3)]
+    const s = play(2, (s) => {
+      setJob(s, s.players[1], pizzaiolo)
+      setMoney(s, s.players[1], [a, b])
+      addMoney(s, s.players[1], c, { used: true }) // posé en dernier, mais déjà dépensé
+      s.players[0].hand[0] = imp
+    })
+    const r = malus(s, imp, 1)
+    check('Impôt : le dernier salaire non investi est défaussé au nom de la cible', inDiscard(r, b, 1))
+    check('Impôt : les autres salaires (dont le dépensé) restent', uidList(moneyOf(r.players[1])) === uidList([a, c]))
+    check('Impôt : la carte Impôt est posée chez la cible', malusOf(r.players[1]).some((x) => x.uid === imp.uid))
+    const sans = play(2, (s) => { setJob(s, s.players[1], pizzaiolo); addMoney(s, s.players[1], a, { used: true }); s.players[0].hand[0] = imp })
+    check('Impôt : refusé sans salaire non investi', !canTarget(sans, 0, imp, 1).ok && malus(sans, imp, 1) === sans)
+  }
+
+  // 5. Redoublement : la dernière étude est défaussée
+  {
+    const red = key('redoublement'), [e1, e2] = studies(2)
+    const s = play(2, (s) => { s.players[1].studies = [e1, e2]; s.players[0].hand[0] = red })
+    const r = malus(s, red, 1)
+    check('Redoublement : la dernière étude posée est défaussée', inDiscard(r, e2, 1) && r.players[1].studies.map((c) => c.uid).join() === e1.uid)
+    check('Redoublement : refusé sur un joueur qui a un métier',
+      !canTarget(play(2, (x) => { x.players[1].studies = [e1]; setJob(x, x.players[1], pizzaiolo) }), 0, red, 1).ok)
+    check('Redoublement : refusé sans carte études', !canTarget(play(), 0, red, 1).ok)
+  }
+
+  // 6, 7. Divorce (malus)
+  {
+    const div = key('divorce'), mar = find((c) => c.type === 'marriage'), adu = find((c) => c.type === 'adultery')
+    const kids = children(2), fl = flirts(2)
+    const s6 = play(2, (s) => {
+      setMarriage(s, s.players[1], mar); s.players[1].children = [...kids]; s.players[1].flirts = [...fl]
+      s.players[0].hand[0] = div
+    })
+    const r6 = malus(s6, div, 1)
+    check('Divorce : le mariage est défaussé', !isMarried(r6.players[1]) && inDiscard(r6, mar, 1))
+    check('Divorce sans adultère : enfants et flirts restent',
+      uidList(r6.players[1].children) === uidList(kids) && uidList(r6.players[1].flirts) === uidList(fl))
+    check('Divorce : refusé sur un joueur non marié', !canTarget(play(), 0, div, 1).ok)
+    const s7 = play(2, (s) => {
+      setMarriage(s, s.players[1], mar); setAdultery(s, s.players[1], adu)
+      s.players[1].children = [...kids]; s.players[1].flirts = [...fl]
+      s.players[0].hand[0] = div
+    })
+    const r7 = malus(s7, div, 1)
+    check('Divorce en plein adultère : mariage et Adultère défaussés', !isMarried(r7.players[1]) && adulteryOf(r7.players[1]) == null && inDiscard(r7, mar) && inDiscard(r7, adu))
+    check('Divorce en plein adultère : tous les enfants sont défaussés', r7.players[1].children.length === 0 && kids.every((k) => inDiscard(r7, k)))
+    check('Divorce en plein adultère : les flirts restent', uidList(r7.players[1].flirts) === uidList(fl))
+  }
+
+  // 8. Divorce volontaire : à la place de piocher
+  {
+    const mar = find((c) => c.type === 'marriage'), adu = find((c) => c.type === 'adultery')
+    const kids = children(2), fl = flirts(2)
+    const setup = (withAdultery) => (s) => {
+      setMarriage(s, s.players[0], mar)
+      if (withAdultery) setAdultery(s, s.players[0], adu)
+      s.players[0].children = [...kids]; s.players[0].flirts = [...fl]
+    }
+    const sDraw = play(3, setup(false)); setStep(sDraw, 'draw')
+    check('Divorce volontaire : proposé à la place de la pioche', legalActions(sDraw, 0).some((a) => a.type === 'DIVORCE_VOLUNTARY'))
+    const sPlay = play(3, setup(false))
+    check('Divorce volontaire : refusé après la pioche', gameReducer(sPlay, { type: 'DIVORCE_VOLUNTARY', by: 0 }) === sPlay)
+    const r = gameReducer(sDraw, { type: 'DIVORCE_VOLUNTARY', by: 0 })
+    check('Divorce volontaire : mariage défaussé, enfants et flirts gardés',
+      !isMarried(r.players[0]) && inDiscard(r, mar, 0) && uidList(r.players[0].children) === uidList(kids) && uidList(r.players[0].flirts) === uidList(fl))
+    check('Divorce volontaire : le tour passe au joueur suivant', r.current === 1)
+    const sAdu = play(3, setup(true)); setStep(sAdu, 'draw')
+    const ra = gameReducer(sAdu, { type: 'DIVORCE_VOLUNTARY', by: 0 })
+    check('Divorce volontaire pendant un adultère : l’Adultère est défaussé aussi, enfants et flirts gardés',
+      adulteryOf(ra.players[0]) == null && inDiscard(ra, adu, 0) && ra.players[0].children.length === 2 && ra.players[0].flirts.length === 2)
+  }
+
+  // 9. Attentat
+  // à confirmer avec Teto : enfants de tous les joueurs ?
+  {
+    const att = key('attentat'), legion = key('legion')
+    const ka = children(1), kt = findAll((c) => c.type === 'child').slice(1, 3)
+    const s = play(3, (s) => { s.players[0].children = [...ka]; s.players[1].children = [...kt]; s.players[0].hand[0] = att })
+    const r = malus(s, att, 1)
+    check('Attentat : les enfants de l’auteur et de la cible sont retirés du jeu',
+      r.players[0].children.length === 0 && r.players[1].children.length === 0 &&
+      outOfGameCards(r).length >= 4 && [...ka, ...kt].every((k) => r.outOfGame.some((e) => e.card.uid === k.uid)))
+    check('Attentat : cause et auteur notés sur chaque carte retirée',
+      r.outOfGame.every((e) => e.cause === 'attentat' && e.by === 0))
+    check('Attentat : la carte elle-même sort du jeu', r.outOfGame.some((e) => e.card.uid === att.uid) && !inDiscard(r, att))
+    check('Attentat : l’auteur ne peut plus poser la Légion d’honneur', !canPlace(r, 0, legion).ok)
+    check('Légion d’honneur : permise à qui n’a pas commis d’attentat', canPlace(play(), 0, legion).ok)
+  }
+
+  // 10. Policier (posé, ou obtenu par Piston) : Bandits et Gourous des AUTRES défaussés
+  {
+    const pol = key('policier'), piston = key('piston')
+    const bandit = JOBS_IN_DECK.find((c) => c.key === 'bandit'), gourou = JOBS_IN_DECK.find((c) => c.key === 'gourou')
+    const setup = (s) => { setJob(s, s.players[1], bandit); setJob(s, s.players[2], gourou) }
+    const s1 = play(3, (s) => { setup(s); s.players[0].studies = studies(1); s.players[0].hand[0] = pol })
+    const r1 = gameReducer(s1, { type: 'PLAY_SELF', uid: pol.uid, by: 0 })
+    check('Policier posé : le Bandit et le Gourou des autres sont défaussés',
+      jobOf(r1.players[0])?.uid === pol.uid && !jobOf(r1.players[1]) && !jobOf(r1.players[2]) && inDiscard(r1, bandit, 1) && inDiscard(r1, gourou, 2))
+    const s2 = play(3, (s) => { setup(s); s.players[0].hand = [piston, pol] })
+    let r2 = gameReducer(s2, { type: 'PLAY_SELF', uid: piston.uid, by: 0 })
+    r2 = gameReducer(r2, { type: 'PISTON_PICK', uid: pol.uid, by: 0 })
+    check('Policier obtenu par Piston : même purge',
+      jobOf(r2.players[0])?.uid === pol.uid && !jobOf(r2.players[1]) && !jobOf(r2.players[2]) && inDiscard(r2, bandit, 1) && inDiscard(r2, gourou, 2))
+    check('Policier en poste : ni Bandit ni Gourou ne se posent', !canPlace(r1, 1, bandit).ok)
+  }
+
+  // 11. Astronaute
+  {
+    const astro = key('astronaute'), sal = lv(2)
+    const setup = (discard) => play(2, (s) => {
+      s.players[0].studies = studies(6); s.players[0].hand[0] = astro
+      s.discard = discard
+    })
+    const s = setup([{ card: sal, by: 1 }])
+    const r = gameReducer(s, { type: 'PLAY_SELF', uid: astro.uid, by: 0 })
+    check('Astronaute : le choix dans la défausse s’ouvre', choiceOf(r)?.type === 'discard-pick' && jobOf(r.players[0])?.uid === astro.uid)
+    const p = gameReducer(r, { type: 'DISCARD_PICK', uid: sal.uid, by: 0 })
+    check('Astronaute : la carte choisie devient la carte à jouer d’abord, hors jeu du tour',
+      forcedOf(p)?.uid === sal.uid && p.current === 0 && !inDiscard(p, sal) && playsLeft(p) === 0)
+    const played = gameReducer(p, { type: 'PLAY_SELF', uid: sal.uid, by: 0 })
+    check('Astronaute : la carte jouée rejoint le plateau, puis le tour finit',
+      moneyOf(played.players[0]).some((c) => c.uid === sal.uid) && played.current === 1)
+    check('Astronaute : la carte forcée peut être défaussée', legalActions(p, 0).some((a) => a.type === 'DISCARD_CARD' && a.uid === sal.uid))
+    const thrown = gameReducer(p, { type: 'DISCARD_CARD', uid: sal.uid, by: 0 })
+    check('Astronaute : carte défaussée, le tour finit', inDiscard(thrown, sal) && thrown.current === 1)
+    const none = gameReducer(setup([]), { type: 'PLAY_SELF', uid: astro.uid, by: 0 })
+    check('Astronaute sans carte jouable : avantage perdu, le tour se termine',
+      !choiceOf(none) && !forcedOf(none) && none.current === 1 && jobOf(none.players[0])?.uid === astro.uid)
+  }
+
+  // 12. Grand Prof
+  {
+    const gp = key('grand_prof'), prof = JOBS_IN_DECK.find((c) => c.key === 'prof_maths'), sal = lv(2)
+    check('Grand Prof : refusé sans métier', !canPlace(play(), 0, gp).ok)
+    check('Grand Prof : refusé sur un métier qui n’est pas Prof', !canPlace(play(2, (s) => setJob(s, s.players[0], pizzaiolo)), 0, gp).ok)
+    const s = play(2, (s) => { setJob(s, s.players[0], prof); setMoney(s, s.players[0], [sal]); s.players[0].hand[0] = gp })
+    check('Grand Prof : permis sur un Prof', canPlace(s, 0, gp).ok)
+    const r = gameReducer(s, { type: 'PLAY_SELF', uid: gp.uid, by: 0 })
+    check('Grand Prof : il prend la place du Prof, qui est défaussé', jobOf(r.players[0])?.uid === gp.uid && inDiscard(r, prof, 0))
+    check('Grand Prof : les salaires posés restent', uidList(moneyOf(r.players[0])) === sal.uid)
+  }
+
+  // 13. Casino
+  {
+    const casino = key('casino')
+    const [a, b, c] = [lv(2), lv(2) && findAll((x) => x.type === 'salary' && x.level === 2)[1], lv(3)]
+    // ouverture : pas de salaire en main → rien à miser, le tour finit
+    const s0 = play(2, (s) => { s.players[0].hand = [casino, ...studies(4)] })
+    const o = gameReducer(s0, { type: 'PLAY_SELF', uid: casino.uid, by: 0 })
+    check('Casino : ouvert, aucune mise en attente', o.casino?.owner === 0 && o.casino.stake === null)
+    // ouverture avec un salaire en main : on peut miser tout de suite
+    const s1 = play(2, (s) => { s.players[0].hand = [casino, a, ...studies(3)] })
+    const o1 = gameReducer(s1, { type: 'PLAY_SELF', uid: casino.uid, by: 0 })
+    check('Casino : avec un salaire en main, la mise immédiate est proposée', choiceOf(o1)?.type === 'casino-stake')
+    const m1 = gameReducer(o1, { type: 'CASINO_STAKE', uid: a.uid, by: 0 })
+    check('Casino : la mise immédiate est enregistrée', m1.casino.stake?.card.uid === a.uid && m1.casino.stake.by === 0)
+    // deuxième mise, même niveau ou niveau différent
+    const duel = (second) => play(2, (s) => {
+      s.casino = { owner: 0, stake: { card: a, by: 0 } }
+      s.current = 1; setStep(s, 'play'); s.players[1].hand[0] = second
+    })
+    const same = gameReducer(duel(b), { type: 'CASINO_BET', uid: b.uid, by: 1 })
+    check('Casino, même niveau : le 2e joueur gagne les deux salaires, non dépensés',
+      uidList(moneyOf(same.players[1])) === uidList([a, b]) && unspentMoney(same, same.players[1]).length === 2 && moneyOf(same.players[0]).length === 0)
+    check('Casino : la mise est réglée', same.casino.stake === null)
+    const diff = gameReducer(duel(c), { type: 'CASINO_BET', uid: c.uid, by: 1 })
+    check('Casino, niveaux différents : le 1er joueur gagne les deux salaires, non dépensés',
+      uidList(moneyOf(diff.players[0])) === uidList([a, c]) && unspentMoney(diff, diff.players[0]).length === 2 && moneyOf(diff.players[1]).length === 0)
+    // pas de mise contre soi-même
+    const self = play(2, (s) => { s.casino = { owner: 0, stake: { card: a, by: 0 } }; s.players[0].hand[0] = b })
+    check('Casino : on ne mise pas contre soi-même',
+      gameReducer(self, { type: 'CASINO_BET', uid: b.uid, by: 0 }) === self && !legalActions(self, 0).some((x) => x.type === 'CASINO_BET'))
+  }
+
+  // 14. Tsunami
+  {
+    const s = play(3, (s) => {
+      const t = s.deck.splice(s.deck.findIndex((c) => c.key === 'tsunami'), 1)[0]
+      s.players[0].hand.push(s.deck.pop())
+      s.players[0].hand[0] = t // 6 cartes avec le Tsunami
+      // mains inégales : 6 / 3 / 7 (15 cartes à redistribuer sans le Tsunami)
+      s.players[2].hand.push(...s.players[1].hand.splice(0, 2))
+    })
+    const t = s.players[0].hand[0]
+    const before = s.players.flatMap((p) => p.hand).filter((c) => c.uid !== t.uid)
+    const deckBefore = s.deck.length
+    const r = gameReducer(s, { type: 'PLAY_SELF', uid: t.uid, by: 0 })
+    const after = r.players.flatMap((p) => p.hand)
+    check('Tsunami : aucune carte perdue ni en double', after.length === before.length && uidList(after) === uidList(before) && new Set(after.map((c) => c.uid)).size === after.length)
+    check('Tsunami : sans Chercheur, chacun a 5 cartes', r.players.every((p) => p.hand.length === 5))
+    check('Tsunami : la pioche n’est pas touchée', r.deck.length === deckBefore)
+  }
+
+  // 15. Fin de partie : pioche vide à la fin d'un tour
+  {
+    const sal = lv(2)
+    const s = play(2, (s) => {
+      s.deck = []
+      s.casino = { owner: 0, stake: { card: sal, by: 1 } }
+    })
+    const handBefore = [...s.players[0].hand]
+    const d = legalActions(s, 0).find((a) => a.type === 'DISCARD_CARD')
+    const r = gameReducer(s, d)
+    check('Fin de partie : pioche vide en fin de tour → partie finie', r.status === 'over')
+    check('Fin de partie : toutes les mains sont défaussées', r.players.every((p) => p.hand.length === 0) &&
+      handBefore.every((c) => inDiscard(r, c)))
+    check('Fin de partie : plus aucun flux en attente', r.stack.length === 0)
+    check('Fin de partie : la mise du Casino non relevée revient à son joueur, non dépensée',
+      r.casino.stake === null && moneyOf(r.players[1]).some((c) => c.uid === sal.uid) && unspentMoney(r, r.players[1]).length === 1)
+    check('Fin de partie : cette mise compte dans le score', computeScore(r, 1).cat['Salaires 💰'] >= sal.smiles)
+    // pioche non vide : la partie continue
+    const s2 = play(2)
+    check('Pioche non vide : la partie continue', endTurnByDiscard(s2).status === 'playing')
+  }
+
+  // 16. Pioche presque vide : Chance
+  {
+    const chance = key('chance')
+    const setup = (n) => play(2, (s) => { s.deck = s.deck.slice(0, n); s.players[0].hand[0] = chance })
+    const s2 = setup(2)
+    const r = gameReducer(s2, { type: 'PLAY_SELF', uid: chance.uid, by: 0 })
+    check('Chance avec 2 cartes dans la pioche : 2 cartes proposées', choiceOf(r)?.type === 'chance' && choiceOf(r).cards.length === 2)
+    const s0 = setup(0)
+    check('Chance refusée avec une pioche vide', !canPlace(s0, 0, chance).ok && gameReducer(s0, { type: 'PLAY_SELF', uid: chance.uid, by: 0 }) === s0)
+  }
 }
 
 console.log(`\n✅ ${passed} vérifications OK`)

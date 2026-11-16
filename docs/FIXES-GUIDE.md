@@ -28,7 +28,7 @@ Opus 5.5 for F2, F3 and F5 (engine and session logic). Sonnet 5.5 for F1, F4 and
 
 ## Steps
 
-- [ ] **Step F1 — Tests for the base rules that have none**
+- [x] **Step F1 — Tests for the base rules that have none**
   - Goal: Write down, as tests, the base rules that today are only protected by the reference games, before the next step moves their code.
   - Where: New Claude Code session · Model: Sonnet 5.5
   - Inputs to attach: none
