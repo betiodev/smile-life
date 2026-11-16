@@ -9,18 +9,19 @@ import { TEST_DEFS, SPARE_COUNT } from './test-ext.mjs'
 import { gameReducer, newGameState } from '../../src/game/reducer.js'
 import { viewFor, canSee } from '../../src/game/view.js'
 import { legalActions } from '../../src/game/legal.js'
-import { canPlace, handSize, drawMode } from '../../src/game/rules.js'
-import { computeScore } from '../../src/game/scoring.js'
+import { canPlace, canTarget, canPlayMalus, handSize, drawMode } from '../../src/game/rules.js'
+import { computeScore, CATEGORIES } from '../../src/game/scoring.js'
+import { checkInvariants } from '../invariants.mjs'
 import { defaultAction } from '../../src/game/turn.js'
 import { CATALOGUE, EXTENSIONS, buildDeck } from '../../src/data/index.js'
-import { setStep, setPlays } from '../../src/game/flows/turn.js'
+import { setStep, setPlays, setForced } from '../../src/game/flows/turn.js'
 import { startFlow, setFlow } from '../../src/game/flows/index.js'
 import { registerExtension } from '../../src/game/extensions.js'
 import {
   draw, placeCard, placeCenter, remove, protect, setFaceDown, addSight, put, setJob, attach, place,
 } from '../../src/game/primitives.js'
 import {
-  topFrame, turnFrame, jobOf, metaOf, centerInForce, choiceOf, inSetup, boardCards,
+  topFrame, turnFrame, jobOf, metaOf, centerInForce, choiceOf, inSetup, boardCards, playsLeft, onOf,
 } from '../../src/game/state.js'
 import { step, newGame } from '../sim-lib.mjs'
 
@@ -42,7 +43,8 @@ function settle(s) {
   return s
 }
 // partie avec l'extension test, prête à jouer (au tour d'Ana, étape draw)
-function fresh(seed = 11) {
+// (graine sans carte jouée d’office dans les mains de départ)
+function fresh(seed = 12) {
   return settle(newGameState(names, null, { seed, extensions: ['test'] }))
 }
 // sort une carte de la définition def de la pioche (ou d'une main : la main
@@ -262,7 +264,7 @@ const act = (s, a) => {
 {
   let s = fresh()
   setStep(s, 'play')
-  const house = grabWhere(s, (c) => c.tags.includes('house'))
+  const house = grabWhere(s, (c) => c.tags.includes('house') && c.def.startsWith('base.'))
   const salaries = [grabWhere(s, (c) => c.type === 'salary' && c.level === 4), grabWhere(s, (c) => c.type === 'salary' && c.level === 4),
     grabWhere(s, (c) => c.type === 'salary' && c.level === 4)]
   const ana = s.players[0]
@@ -326,7 +328,8 @@ const act = (s, a) => {
 {
   const s = fresh()
   setStep(s, 'play')
-  const f1 = grabWhere(s, (c) => c.type === 'flirt')
+  // un flirt dont un autre du même lieu est aussi dans la pioche
+  const f1 = grabWhere(s, (c) => c.type === 'flirt' && s.deck.filter((d) => d.type === 'flirt' && d.place === c.place).length >= 2)
   const twin = grabWhere(s, (c) => c.type === 'flirt' && c.place === f1.place)
   const shieldCard = grab(s, SHIELD)
   place(s, 1, f1)
@@ -394,12 +397,12 @@ const act = (s, a) => {
 {
   const s = fresh()
   const hand = s.players[0].hand[0]
-  const deckCard = s.deck[0]
   const spareCard = s.spare[0]
   const potCard = grabWhere(s, (c) => c.type === 'salary')
   put(s, potCard, 'pot')
   const job = grabWhere(s, (c) => c.key === 'pizzaiolo')
   setJob(s, s.players[2], job)
+  const deckCard = s.deck[0]
   check('canSee main : son propriétaire seulement', canSee(s, 0, hand.uid) && !canSee(s, 1, hand.uid) && !canSee(s, null, hand.uid))
   check('canSee pioche : personne', [0, 1, 2, null].every((v) => !canSee(s, v, deckCard.uid)))
   check('canSee de côté : personne', [0, 1, 2, null].every((v) => !canSee(s, v, spareCard.uid)))
@@ -522,6 +525,133 @@ const act = (s, a) => {
   check('souvenirs : rien au départ', !s.players[0].history.wasBandit && !s.players[0].history.didAttentat)
   s = act(s, { type: 'PLAY_SELF', uid: bandit.uid, by: 0 })
   check('souvenirs : le Bandit posé est retenu (history.wasBandit)', s.players[0].history.wasBandit === true)
+}
+
+// --- cartes d'extension par le registre (étape F2) : malus, acquisitions, ------------------
+// --- distinction, carte spéciale qui compte ----------------------------------------------------
+const GEL = 'test.gel', CHATON = 'test.chaton', CHATEAU = 'test.chateau', MEDAILLE = 'test.medaille', TREFLE = 'test.trefle'
+{
+  // malus : canTarget du comportement, onTarget pour l'effet
+  let s = fresh()
+  setStep(s, 'play')
+  plainTop(s, 30)
+  const gel = grab(s, GEL)
+  s.players[0].hand.push(gel)
+  // (réponse de base : canPlayMalus ; la question canTarget ne rend pas « hard »)
+  const r = canPlayMalus(s, 0, gel, 1)
+  check('malus d’extension : refusé sans flirt chez la cible, avec sa raison (refus normal)',
+    !r.ok && r.reason === 'La cible doit avoir un flirt' && !r.hard && canTarget(s, 0, gel, 1).reason === r.reason)
+  check('malus d’extension : jamais sur soi-même (refus définitif)', canPlayMalus(s, 0, gel, 0).hard === true)
+  const unknown = { ...gel, uid: 'zz', def: 'zz.malus' }
+  const u = canPlayMalus(s, 0, unknown, 1)
+  check('malus sans canTarget : refus normal « Malus inconnu »', !u.ok && u.reason === 'Malus inconnu' && !u.hard)
+  const f1 = grabWhere(s, (c) => c.type === 'flirt')
+  place(s, 1, f1)
+  check('malus d’extension : permis sur Ben (un flirt), pas sur Cléo (aucun)', canTarget(s, 0, gel, 1).ok && !canTarget(s, 0, gel, 2).ok)
+  check('malus d’extension : listé dans les actions permises, seulement sur Ben',
+    legalActions(s, 0).filter((a) => a.type === 'PLAY_MALUS' && a.uid === gel.uid).map((a) => a.target).join() === '1')
+  s = act(s, { type: 'PLAY_MALUS', uid: gel.uid, target: 1, by: 0 })
+  check('malus d’extension joué : le flirt de Ben est défaussé, le malus posé chez lui',
+    s.players[1].flirts.length === 0 && s.discard.some((e) => e.card.uid === f1.uid) && s.players[1].malus.some((c) => c.uid === gel.uid))
+  check('malus d’extension joué : le journal le dit', s.log.some((e) => e.text.includes('❄️ Ana gèle Ben')))
+  // Ben renvoie le Gel avec la Vengeance
+  s = settle(s)
+  check('tour de Ben', s.current === 1)
+  setStep(s, 'play')
+  const f2 = grabWhere(s, (c) => c.type === 'flirt')
+  place(s, 0, f2)
+  const ven = grabWhere(s, (c) => c.key === 'vengeance')
+  s.players[1].hand.push(ven)
+  s = act(s, { type: 'PLAY_SELF', uid: ven.uid, by: 1 })
+  check('Vengeance : le Gel reçu peut être renvoyé à Ana (elle a un flirt)',
+    legalActions(s, 1).some((a) => a.type === 'VENGEANCE_PICK' && a.uid === gel.uid && a.target === 0))
+  s = act(s, { type: 'VENGEANCE_PICK', uid: gel.uid, target: 0, by: 1 })
+  check('Vengeance avec le Gel : le flirt d’Ana est défaussé, le Gel passe chez elle',
+    s.players[0].flirts.length === 0 && s.players[0].malus.some((c) => c.uid === gel.uid) && !s.players[1].malus.some((c) => c.uid === gel.uid))
+}
+{
+  // acquisition gratuite (animal) : onPlace joué à la pose
+  let s = fresh()
+  setStep(s, 'play')
+  plainTop(s, 30)
+  const chaton = grab(s, CHATON)
+  s.players[0].hand.push(chaton)
+  check('Chaton : gratuit, jouable sans argent', canPlace(s, 0, chaton).ok)
+  s = act(s, { type: 'PLAY_SELF', uid: chaton.uid, by: 0 })
+  check('Chaton joué : posé, son onPlace donne un jeu de plus (le tour d’Ana continue)',
+    s.players[0].acquisitions.some((c) => c.uid === chaton.uid) && s.current === 0 && playsLeft(s) === 1)
+  check('Chaton joué : le journal le dit', s.log.some((e) => e.text.includes('🐱 Le Chaton de Ana')))
+}
+{
+  // acquisition à payer : onPlace après le paiement ; il pose un flux, l'achat l'attend
+  let s = fresh()
+  setStep(s, 'play')
+  plainTop(s, 30)
+  const chateau = grab(s, CHATEAU)
+  const sal = grabWhere(s, (c) => c.type === 'salary' && c.level === 2)
+  placeCard(s, s.players[0].money, sal)
+  s.players[0].hand.push(chateau)
+  s = act(s, { type: 'PLAY_SELF', uid: chateau.uid, by: 0 })
+  check('Château : le flux d’achat attend le paiement, pas d’annonce avant', topFrame(s).flow === 'purchase' && s.stack.length === 2)
+  const pay = legalActions(s, 0).find((a) => a.type === 'PURCHASE_CONFIRM' && !a.useArchitect)
+  s = act(s, pay)
+  check('Château payé : posé sur le salaire, puis son onPlace pose l’annonce PAR-DESSUS l’achat',
+    s.players[0].acquisitions.some((c) => c.uid === chateau.uid) && onOf(s, sal) === chateau.uid &&
+    s.stack.map((f) => `${f.flow}:${f.step}`).join('>') === 'turn:play>purchase:done>test.notice:look')
+  check('Château payé : le jeu est déjà consommé, le tour attend l’annonce', playsLeft(s) === 0 && s.current === 0)
+  check('Château payé : seule l’annonce est jouable', legalActions(s, 0).map((a) => a.type).join() === 'CLOSE_INFO')
+  check('Château payé : invariants vérifiés pendant l’attente (chaque carte à un seul endroit, actions permises acceptées)',
+    !throws(() => checkInvariants(s)))
+  s = act(s, { type: 'CLOSE_INFO', by: 0 })
+  check('annonce fermée : l’achat sort et le tour reprend une seule fois (au tour de Ben)',
+    s.current === 1 && s.stack.length === 1 && turnFrame(s).step === 'draw')
+  // carte forcée (prise dans la défausse) payée : la carte forcée est jouée
+  let t = fresh()
+  setStep(t, 'play')
+  plainTop(t, 30)
+  const ch2 = grab(t, CHATEAU)
+  placeCard(t, t.players[0].money, grabWhere(t, (c) => c.type === 'salary' && c.level === 2))
+  setForced(t, ch2, true)
+  t = act(t, { type: 'PLAY_SELF', uid: ch2.uid, by: 0 })
+  t = act(t, legalActions(t, 0).find((a) => a.type === 'PURCHASE_CONFIRM' && !a.useArchitect))
+  check('Château forcé payé : plus de carte forcée pendant l’annonce', !turnFrame(t).data.forced && topFrame(t).flow === 'test.notice')
+  check('Château forcé payé : invariants vérifiés pendant l’annonce', !throws(() => checkInvariants(t)))
+  t = act(t, { type: 'CLOSE_INFO', by: 0 })
+  check('Château forcé : annonce fermée, le tour passe à Ben', t.current === 1 && t.stack.length === 1)
+}
+{
+  // distinction : canPlay du comportement ; type inconnu sans comportement
+  let s = fresh()
+  setStep(s, 'play')
+  plainTop(s, 30)
+  const med = grab(s, MEDAILLE)
+  s.players[0].hand.push(med)
+  check('Médaille : refusée sans enfant, avec sa raison', canPlace(s, 0, med).reason === 'Il faut au moins un enfant')
+  check('distinction sans canPlay : « Carte inconnue »', canPlace(s, 0, { ...med, uid: 'zz', def: 'zz.distinction' }).reason === 'Carte inconnue')
+  check('type inconnu sans canPlay : « Carte inconnue »', canPlace(s, 0, { ...med, uid: 'zz', def: 'zz.x', type: 'zz' }).reason === 'Carte inconnue')
+  place(s, 0, grabWhere(s, (c) => c.type === 'child'))
+  check('Médaille : permise avec un enfant (aussi d’après la vue d’Ana)', canPlace(s, 0, med).ok && canPlace(viewFor(s, 0), 0, med).ok)
+  s = act(s, { type: 'PLAY_SELF', uid: med.uid, by: 0 })
+  check('Médaille jouée : posée dans les distinctions, comptée (2 smiles)',
+    s.players[0].distinctions.some((c) => c.uid === med.uid) && computeScore(s, 0).cat['Distinctions 🏅'] === 2)
+}
+{
+  // décompte : cartes spéciales et malus reçus comptent aussi
+  let s = fresh()
+  setStep(s, 'play')
+  plainTop(s, 30)
+  const trefle = grab(s, TREFLE)
+  s.players[0].hand.push(trefle)
+  s = act(s, { type: 'PLAY_SELF', uid: trefle.uid, by: 0 })
+  const sc = computeScore(s, 0)
+  check('Trèfle joué : 2 smiles dans « Cartes spéciales », comptés dans le total',
+    s.players[0].specials.some((c) => c.uid === trefle.uid) && sc.cat['Cartes spéciales 🃏'] === 2 && sc.total === 2 + sc.bonus + sc.cat['Études 📚'] + sc.cat['Métier 💼'] + sc.cat['Salaires 💰'] + sc.cat['Flirts 💕'] + sc.cat['Mariage 💒'] + sc.cat['Adultère 😏'] + sc.cat['Enfants 👶'] + sc.cat['Acquisitions 🏠'] + sc.cat['Distinctions 🏅'] + sc.cat['Malus ⚡'])
+  const t = structuredClone(s)
+  const bad = { ...grab(t, GEL), smiles: -3 }
+  place(t, 1, bad)
+  check('un malus reçu qui vaut des smiles compte dans « Malus »', computeScore(t, 1).cat['Malus ⚡'] === -3)
+  check('les catégories couvrent tout le plateau de chaque joueur',
+    t.players.every((p) => CATEGORIES.reduce((n, [, cards]) => n + cards(p).length, 0) === boardCards(p).length))
 }
 
 // --- fuite : parties simulées avec l'extension, chaque étape, chaque joueur ---------------------

@@ -1144,8 +1144,10 @@ function check(label, cond) {
   // décompte : smiles par carte, somme par catégorie, bonus
   check('Décompte : cardSmiles = smiles imprimés', cardSmiles(s, 0, villa) === villa.smiles)
   const sc = computeScore(s, 0)
-  check('Décompte : mêmes catégories qu’avant',
-    Object.keys(sc.cat).join() === 'Études 📚,Métier 💼,Salaires 💰,Flirts 💕,Mariage 💒,Adultère 😏,Enfants 👶,Acquisitions 🏠,Distinctions 🏅')
+  check('Décompte : catégories d’avant, puis cartes spéciales et malus à la fin',
+    Object.keys(sc.cat).join() === 'Études 📚,Métier 💼,Salaires 💰,Flirts 💕,Mariage 💒,Adultère 😏,Enfants 👶,Acquisitions 🏠,Distinctions 🏅,Cartes spéciales 🃏,Malus ⚡')
+  check('Décompte : cartes spéciales et malus valent 0 dans le jeu de base',
+    sc.cat['Cartes spéciales 🃏'] === 0 && sc.cat['Malus ⚡'] === 0)
   check('Décompte : total = somme des catégories + bonus (0 dans le jeu de base)',
     sc.bonus === 0 && sc.total === Object.values(sc.cat).reduce((a, b) => a + b, 0))
   check('Décompte : par indice ou par joueur, et pour tous', computeScore(s, ana).total === sc.total && computeScores(s).length === 2)

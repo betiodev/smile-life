@@ -410,18 +410,11 @@ const turn = {
   },
   apply,
   // le flux posé au-dessus est fini.
-  // Achat : payé → le jeu est consommé ; annulé → la carte est revenue en main
-  // (ou reste forcée), rien n'est joué.
+  // Achat : payé, il a déjà consommé le jeu ; annulé, la carte est revenue en
+  // main (ou reste forcée) et rien n'est joué (finishPlay n'y change rien).
   // Étape end (démission d'un Chercheur) : le tour se termine.
   // Autres choix : le jeu (déjà consommé) est terminé, on continue ou on finit.
-  resume(s, frame, result, done) {
-    if (done?.flow === 'purchase') {
-      if (result?.bought) {
-        consumePlay(s, result.fromForced)
-        finishPlay(s)
-      }
-      return
-    }
+  resume(s, frame) {
     if (frame.step === 'end') endTurn(s)
     else finishPlay(s)
   },

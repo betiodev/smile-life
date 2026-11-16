@@ -4,83 +4,26 @@
 // (Piston, Vengeance, Anniversaire). Les zones ne changent que par les
 // primitives ; un effet qui attend un joueur pose un flux sur la pile.
 // ---------------------------------------------------------------------------
-import { interimReplaced, hasTag, isGrandProf, needsPayment, skipLength } from './rules.js'
+import { interimReplaced, hasTag, isGrandProf, needsPayment } from './rules.js'
 import { setBy } from './queries.js'
-import { jobOf, marriageOf, adulteryOf, topFlirt, taxableMoney, giftableMoney, moneyValue } from './state.js'
-import { log, put, place, remove, removeAll, steal, loseJob, skip } from './primitives.js'
+import { jobOf, topFlirt, giftableMoney, moneyValue } from './state.js'
+import { log, place, remove, steal, loseJob } from './primitives.js'
 import { startFlow } from './flows/index.js'
 import { BEHAVIOURS } from './cards/index.js'
 // ---------------------------------------------------------------------------
-// Effets des malus (utilisé pour jeu direct ET Vengeance)
+// Effet d'un malus (jeu direct ET Vengeance) : le comportement du malus
+// (onTarget, src/game/cards/)
 // ---------------------------------------------------------------------------
 export function applyMalus(s, attackerIdx, card, targetIdx) {
-  const a = s.players[attackerIdx]
-  const t = s.players[targetIdx]
-  switch (card.key) {
-    case 'accident':
-    case 'maladie':
-    case 'burnout':
-      skip(s, targetIdx, skipLength(s, targetIdx, card, 1))
-      place(s, targetIdx, card)
-      log(s, `${a.name} inflige ${card.name} à ${t.name} : passe 1 tour`, 'malus')
-      break
-    case 'licenciement':
-      log(s, `${a.name} licencie ${t.name} (${jobOf(t).name})`, 'malus')
-      loseJob(s, targetIdx, { cause: 'licenciement', by: attackerIdx })
-      place(s, targetIdx, card)
-      break
-    case 'impot': {
-      // le dernier salaire non investi (argent imposable)
-      const last = taxableMoney(s, t).at(-1)
-      // (un salaire protégé reste en place : remove → null)
-      if (last && remove(s, last.uid, { cause: 'impot', by: attackerIdx })) {
-        log(s, `${a.name} impose ${t.name} : salaire niveau ${moneyValue(last)} défaussé`, 'malus')
-      }
-      place(s, targetIdx, card)
-      break
-    }
-    case 'divorce': {
-      const cause = { cause: 'divorce', by: attackerIdx }
-      remove(s, marriageOf(t).uid, cause)
-      if (adulteryOf(t)) {
-        remove(s, adulteryOf(t).uid, cause)
-        removeAll(s, targetIdx, 'children', cause)
-        log(s, `${a.name} divorce ${t.name} en plein adultère : mariage, adultère et enfants perdus !`, 'malus')
-      } else {
-        log(s, `${a.name} inflige un Divorce à ${t.name} (enfants conservés)`, 'malus')
-      }
-      place(s, targetIdx, card)
-      break
-    }
-    case 'redoublement': {
-      const study = t.studies.at(-1)
-      if (study) remove(s, study.uid, { cause: 'redoublement', by: attackerIdx })
-      place(s, targetIdx, card)
-      log(s, `${a.name} fait redoubler ${t.name} : 1 carte études défaussée`, 'malus')
-      break
-    }
-    case 'prison':
-      skip(s, targetIdx, skipLength(s, targetIdx, card, 3))
-      log(s, `${a.name} envoie ${t.name} en Prison : passe 3 tours, le Bandit est défaussé`, 'malus')
-      loseJob(s, targetIdx, { cause: 'prison', by: attackerIdx })
-      put(s, card, 'discard', { by: attackerIdx })
-      break
-    case 'attentat': {
-      // règle vérifiée : les enfants de TOUS les joueurs sont retirés du jeu
-      const n = s.players.reduce((sum, p) => sum + p.children.length, 0)
-      const cause = { cause: 'attentat', by: attackerIdx, to: 'outOfGame' }
-      s.players.forEach((_, i) => removeAll(s, i, 'children', cause))
-      a.history.didAttentat = true
-      put(s, card, 'outOfGame', cause)
-      log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${n} enfant(s) retirés du jeu`, 'malus')
-      break
-    }
-  }
+  const onTarget = BEHAVIOURS[card.def]?.onTarget
+  if (!onTarget) throw new Error(`Malus sans effet (onTarget) : ${card.def}`)
+  onTarget(s, { card, owner: attackerIdx, target: targetIdx })
 }
 
 // Ce que fait une carte quand son propriétaire la joue (déjà posée) :
 // comportement onPlace (src/game/cards/) → true si un flux est posé.
-// Avantages instantanés des métiers (pose normale ou Piston), cartes spéciales.
+// Pour tout type de carte : pose normale ou forcée, Piston, acquisition une
+// fois payée (flows/purchase.js). Pas pour une carte volée ou offerte.
 export function runOnPlace(s, pIdx, card) {
   const onPlace = BEHAVIOURS[card.def]?.onPlace
   return onPlace ? !!onPlace(s, { card, owner: pIdx }) : false
@@ -116,8 +59,8 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
       }
       place(s, pIdx, card)
       log(s, `${p.name} devient ${card.name}`)
-      // Policier (purge), Bandit, avantages instantanés : cards/base.js
-      return runOnPlace(s, pIdx, card)
+      // Policier (purge), Bandit, avantages instantanés : onPlace, plus bas
+      break
     }
 
     case 'salary':
@@ -169,7 +112,8 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
         log(s, `✈️ ${p.name} voyage gratuitement à ${card.name} (${by?.effect.note ?? by?.card?.name})`)
         break
       }
-      // achat à payer : le flux d'achat attend le paiement (flows/purchase.js)
+      // achat à payer : le flux d'achat attend le paiement (flows/purchase.js),
+      // qui joue onPlace une fois l'acquisition payée
       startFlow(s, 'purchase', { card, fromForced })
       return true
     }
@@ -182,9 +126,14 @@ export function poseSelf(s, pIdx, card, { fromForced = false } = {}) {
 
     case 'special':
       place(s, pIdx, card)
-      return runOnPlace(s, pIdx, card)
+      break
+
+    default:
+      // type que le jeu de base ne connaît pas (extension)
+      place(s, pIdx, card)
   }
-  return false
+  // ce que fait la carte jouée, quel que soit son type (cards/)
+  return runOnPlace(s, pIdx, card)
 }
 
 // Anniversaire : applique tous les cadeaux d'un coup (gifts[qi] = uid du salaire

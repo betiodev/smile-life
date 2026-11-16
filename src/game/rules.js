@@ -13,7 +13,7 @@
 import { hasTag } from '../data/index.js'
 import {
   jobs, jobOf, marriages, isMarried, adulteryOf, topFlirt, moneyPaidFor, spentMoney, malusOf,
-  isUsed, moneyTraits, moneyValue, looseMoney, lumpMoney, taxableMoney, giftableMoney, paidWith, spentPaying, phaseOf, choiceOf, forcedOf, mustPlayForced, cardPlayedThisTurn, isRainbow, playsLeft,
+  isUsed, moneyTraits, moneyValue, looseMoney, lumpMoney, giftableMoney, paidWith, spentPaying, phaseOf, choiceOf, forcedOf, mustPlayForced, cardPlayedThisTurn, isRainbow, playsLeft,
 } from './state.js'
 import { ask } from './queries.js'
 import { BEHAVIOURS } from './cards/index.js'
@@ -246,26 +246,21 @@ export function canPoseSelf(state, pIdx, card, { ignoreStudies = false } = {}) {
       // maison
       return NO(`Coût : ${cost} liasses${isMarried(p) ? ' (prix marié)' : ''} — vous avez ${have}`)
     }
-    case 'distinction': {
-      if (card.key === 'legion') {
-        // (Bandit en poste : cards/base.js)
-        if (p.history.wasBandit) return NO('Interdite aux Bandits, présents ou passés')
-        if (p.history.didAttentat) return NO('Interdite aux auteurs d’attentat')
-        return OK
-      }
-      // grand prix
-      if (!anyJobTagged(p, 'trophy')) return NO('Réservé aux métiers 🏆 : Écrivain, Chercheur, Journaliste')
-      if (activeGrandPrix(state, p))
-        return NO('Un seul Grand Prix par métier exercé')
-      return OK
-    }
     case 'special':
       return canPlaySpecial(state, pIdx, card)
     case 'malus':
       return NO('Un malus se joue sur un adversaire')
     default:
-      return NO('Carte inconnue')
+      // distinction (Légion d'honneur, Grand Prix…) ou type que le jeu de base
+      // ne connaît pas : le comportement de la carte donne la réponse de base
+      return ownCanPlay(state, pIdx, card, 'Carte inconnue')
   }
+}
+
+// réponse de base donnée par le comportement de la carte (canPlay, src/game/cards/)
+function ownCanPlay(state, pIdx, card, unknown) {
+  const own = BEHAVIOURS[card.def]?.canPlay
+  return own ? own(state, pIdx, card) : NO(unknown)
 }
 
 // ---------------------------------------------------------------------------
@@ -318,8 +313,7 @@ export function canPlaySpecial(state, pIdx, card) {
     default: {
       // carte spéciale d'une extension : son comportement donne la réponse de
       // base (canPlay, src/game/cards/)
-      const own = BEHAVIOURS[card.def]?.canPlay
-      return own ? own(state, pIdx, card) : NO('Carte spéciale inconnue')
+      return ownCanPlay(state, pIdx, card, 'Carte spéciale inconnue')
     }
   }
 }
@@ -333,36 +327,12 @@ export const canTarget = (state, attackerIdx, card, targetIdx) =>
   ask(state, 'canTarget', { player: attackerIdx, card, target: targetIdx },
     () => canPlayMalus(state, attackerIdx, card, targetIdx))
 
-// réponse de base de canTarget
+// réponse de base de canTarget : ce qui vaut pour tout malus, puis la
+// réponse du comportement du malus (canTarget, src/game/cards/)
 export function canPlayMalus(state, attackerIdx, card, targetIdx) {
   if (attackerIdx === targetIdx) return HARD('On ne joue pas un malus sur soi-même')
-  const t = state.players[targetIdx]
-  switch (card.key) {
-    case 'accident':
-    case 'maladie':
-    case 'attentat':
-      return OK
-    case 'burnout':
-    case 'licenciement':
-      if (!jobOf(t)) return HARD('La cible doit avoir un métier')
-      return OK
-    case 'impot':
-      if (!jobOf(t)) return HARD('La cible doit avoir un métier')
-      if (taxableMoney(state, t).length === 0) return NO('Aucun salaire non-investi à imposer')
-      return OK
-    case 'divorce':
-      if (!isMarried(t)) return HARD('La cible doit être mariée')
-      return OK
-    case 'redoublement':
-      if (jobOf(t)) return NO('La cible ne doit pas avoir de métier (étudiant)')
-      if (t.studies.length === 0) return NO('La cible doit avoir des études posées')
-      return OK
-    case 'prison':
-      // seul le Bandit peut y aller (cards/base.js l'autorise)
-      return NO('La prison ne concerne que le Bandit')
-    default:
-      return HARD('Malus inconnu')
-  }
+  const own = BEHAVIOURS[card.def]?.canTarget
+  return own ? own(state, attackerIdx, card, targetIdx) : NO('Malus inconnu')
 }
 
 // Le malus a-t-il au moins une cible valide ?
