@@ -135,7 +135,7 @@ const MALUS = [
   { key: 'divorce', name: 'Divorce', count: 5, desc: 'Le mariage est défaussé (adultère : enfants perdus aussi)', cond: 'Doit être marié' },
   { key: 'redoublement', name: 'Redoublement', count: 5, desc: 'Dernière carte études défaussée', cond: 'Doit être étudiant' },
   { key: 'prison', name: 'Prison', count: 1, desc: 'Passe 3 tours, le Bandit est défaussé', cond: 'Doit être Bandit' },
-  { key: 'attentat', name: 'Attentat', count: 1, desc: "TOUS les enfants de l'auteur et de la victime sont retirés du jeu", cond: "N'importe qui" },
+  { key: 'attentat', name: 'Attentat', count: 1, desc: 'Les enfants de TOUS les joueurs sont retirés du jeu', cond: "N'importe qui" },
 ].map(({ count, ...m }) => def(m.key, { type: 'malus', ...m, smiles: 0 }, { count }))
 
 // --- SPÉCIALES (10, 0 smile) ------------------------------------------------------

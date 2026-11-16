@@ -1303,8 +1303,7 @@ function check(label, cond) {
       adulteryOf(ra.players[0]) == null && inDiscard(ra, adu, 0) && ra.players[0].children.length === 2 && ra.players[0].flirts.length === 2)
   }
 
-  // 9. Attentat
-  // à confirmer avec Teto : enfants de tous les joueurs ?
+  // 9. Attentat (règle vérifiée : les enfants de TOUS les joueurs sont retirés du jeu)
   {
     const att = key('attentat'), legion = key('legion')
     const ka = children(1), kt = findAll((c) => c.type === 'child').slice(1, 3)
@@ -1318,6 +1317,19 @@ function check(label, cond) {
     check('Attentat : la carte elle-même sort du jeu', r.outOfGame.some((e) => e.card.uid === att.uid) && !inDiscard(r, att))
     check('Attentat : l’auteur ne peut plus poser la Légion d’honneur', !canPlace(r, 0, legion).ok)
     check('Légion d’honneur : permise à qui n’a pas commis d’attentat', canPlace(play(), 0, legion).ok)
+  }
+  {
+    // à 3 joueurs : les enfants du troisième joueur (ni auteur ni cible) partent aussi
+    const att = key('attentat')
+    const [k0, k1, k2] = [0, 1, 2].map((i) => findAll((c) => c.type === 'child').slice(2 * i, 2 * i + 2))
+    const s = play(3, (s) => {
+      s.players[0].children = [...k0]; s.players[1].children = [...k1]; s.players[2].children = [...k2]
+      s.players[0].hand[0] = att
+    })
+    const r = malus(s, att, 1)
+    check('Attentat : les enfants de TOUS les joueurs sont retirés du jeu (le troisième joueur compris)',
+      r.players.every((p) => p.children.length === 0) &&
+      [...k0, ...k1, ...k2].every((k) => r.outOfGame.some((e) => e.card.uid === k.uid && e.cause === 'attentat' && e.by === 0)))
   }
 
   // 10. Policier (posé, ou obtenu par Piston) : Bandits et Gourous des AUTRES défaussés

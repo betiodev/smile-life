@@ -66,13 +66,13 @@ export function applyMalus(s, attackerIdx, card, targetIdx) {
       put(s, card, 'discard', { by: attackerIdx })
       break
     case 'attentat': {
-      const na = a.children.length, nt = t.children.length
+      // règle vérifiée : les enfants de TOUS les joueurs sont retirés du jeu
+      const n = s.players.reduce((sum, p) => sum + p.children.length, 0)
       const cause = { cause: 'attentat', by: attackerIdx, to: 'outOfGame' }
-      removeAll(s, attackerIdx, 'children', cause)
-      removeAll(s, targetIdx, 'children', cause)
+      s.players.forEach((_, i) => removeAll(s, i, 'children', cause))
       a.history.didAttentat = true
       put(s, card, 'outOfGame', cause)
-      log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${na + nt} enfant(s) retirés du jeu`, 'malus')
+      log(s, `💥 ${a.name} commet un Attentat contre ${t.name} : ${n} enfant(s) retirés du jeu`, 'malus')
       break
     }
   }
