@@ -46,3 +46,10 @@ All six deliverables are written. Nothing is owed. If the session continues, use
 - Migration is 10 engine steps before the first extension card; Girl Power is the pilot; Apocalypse is last.
 - Own change to Teto's build order: an easy bot and solo mode come right after the engine migration (step 13), so every extension can be tested alone; stronger levels stay after same-wifi play.
 - Pull requests get an automatic `npm test` check, set up in step 00.
+
+## Checkpoint review session (2026-11-16)
+
+Brief: review the whole codebase after Phase 1, write a fixes mini-guide and a visuals mini-guide. No game code changed. Branch `revue-fable`.
+
+- **Done:** `docs/planning/CODE-REVIEW.md` (verdict: healthy; no critical finding; four engine gaps to close before the first extension; save/resume and bug report missing).
+- **Next:** `docs/FIXES-GUIDE.md` + `docs/prompts/fixes/` (F1–F6), then `docs/VISUALS-GUIDE.md` + `docs/prompts/visuals/` (V1–V6).
