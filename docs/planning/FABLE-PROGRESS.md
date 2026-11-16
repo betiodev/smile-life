@@ -53,3 +53,4 @@ Brief: review the whole codebase after Phase 1, write a fixes mini-guide and a v
 
 - **Done:** `docs/planning/CODE-REVIEW.md` (verdict: healthy; no critical finding; four engine gaps to close before the first extension; save/resume and bug report missing).
 - **Next:** `docs/FIXES-GUIDE.md` + `docs/prompts/fixes/` (F1–F6), then `docs/VISUALS-GUIDE.md` + `docs/prompts/visuals/` (V1–V6).
+- **Done:** `docs/FIXES-GUIDE.md` + six prompts in `docs/prompts/fixes/` (F1 rule tests, F2 cards on the registry, F3 zones / view allow-list / pass, F4 save-resume-report, F5 hand-over and last action, F6 clean-up and docs). F6 is the step that edits `CLAUDE.md`, `ROADMAP.md`, `ARCHITECTURE.md` and appends notes to prompts 13, 14, 15, 17, 45, 51.
