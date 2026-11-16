@@ -7,10 +7,13 @@
 //      connus (les effets qui comparent les joueurs les lisent dans q.subtotals)
 // Marche sur l'état complet comme sur une vue (viewFor).
 // ---------------------------------------------------------------------------
-import { jobs, moneyOf, marriages, adulteries } from './state.js'
+import { jobs, moneyOf, marriages, adulteries, malusOf } from './state.js'
 import { ask } from './queries.js'
 
-// catégories de l'écran de fin, dans l'ordre : [libellé, cartes du joueur]
+// catégories de l'écran de fin, dans l'ordre : [libellé, cartes du joueur,
+// options]. Ensemble, elles couvrent tout le plateau du joueur (boardCards).
+// hideIfZero : l'écran de fin ne montre pas la ligne si elle vaut 0 pour
+// tout le monde (cartes spéciales et malus ne valent rien dans le jeu de base)
 export const CATEGORIES = [
   ['Études 📚', (p) => p.studies],
   ['Métier 💼', jobs],
@@ -21,6 +24,8 @@ export const CATEGORIES = [
   ['Enfants 👶', (p) => p.children],
   ['Acquisitions 🏠', (p) => p.acquisitions],
   ['Distinctions 🏅', (p) => p.distinctions],
+  ['Cartes spéciales 🃏', (p) => p.specials, { hideIfZero: true }],
+  ['Malus ⚡', malusOf, { hideIfZero: true }],
 ]
 
 // smiles d'une carte posée devant le joueur pIdx

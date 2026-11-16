@@ -1,4 +1,4 @@
-import { computeScores } from '../game/scoring'
+import { computeScores, CATEGORIES } from '../game/scoring'
 
 const CONFETTI_COLORS = ['#f472b6', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f87171']
 
@@ -22,7 +22,11 @@ export default function GameOverScreen({ state, dispatch }) {
   const all = computeScores(state)
   const scores = state.players.map((p, i) => ({ p, i, ...all[i] }))
   scores.sort((a, b) => b.total - a.total)
-  const categories = Object.keys(scores[0].cat)
+  // une ligne qui vaut 0 pour tout le monde n'est pas montrée si sa catégorie
+  // le demande (cartes spéciales, malus : rien dans le jeu de base)
+  const categories = CATEGORIES
+    .filter(([label, , opts]) => !opts?.hideIfZero || scores.some((s) => s.cat[label] || s.changed[label]))
+    .map(([label]) => label)
   const medals = ['🥇', '🥈', '🥉', '4e', '5e']
 
   return (

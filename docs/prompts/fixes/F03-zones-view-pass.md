@@ -54,6 +54,7 @@ Record the answer in `docs/extensions/INTERACTIONS.md` as a general principle. I
 
 10. In the turn flow (`src/game/flows/turn.js`), when the play step has no legal action for the current player (ignoring `STOP_ADULTERY`), list one action, `PASS`. `apply` accepts it only in that situation; it logs the French sentence agreed with Teto and ends the turn. Its fallback is `PASS`. Add `PASS` to the action types tried by `tests/invariants.mjs`.
 11. Test it with the `probe` module (`drawMode` `'none'` and an empty hand), and check that `PASS` is refused whenever anything else is legal.
+12. **Open question left by step F2 — ask Teto.** A card taken from the river (or the discard) must be played at once, but the river is refilled first. If the replacement is a card that plays itself and forbids the taken card (test card `test.global-rule`: no flirts), the taken card is forced, unplayable and cannot be discarded: the game is stuck (replay: `SEED=1006 GAME=6 EXT=test node tests/sim.mjs`). It cannot happen in the base game. Teto chose to decide here. Possible answers: the player may discard it (it uses the play), or it goes back to the river and the turn goes on normally. Record the answer in the spec, implement it, add a test, and move the 30 simulated games with the test extension back to seeds 1000… (`tests/sim.mjs`).
 
 ## Rules for this session
 

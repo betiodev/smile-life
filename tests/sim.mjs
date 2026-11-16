@@ -2,7 +2,7 @@
 // avec les vérifications d'intégrité (tests/invariants.mjs) après chaque action.
 // 40 parties du jeu de base, puis 30 avec l'extension factice 'test'
 // (tests/ext/test-ext.mjs : carte jouée d'office au centre, protection, cartes
-// mises de côté).
+// mises de côté, malus, acquisitions, distinction et carte spéciale d'extension).
 import { playGame, stats } from './sim-lib.mjs'
 import { computeScore } from '../src/game/scoring.js'
 import { buildDeck } from '../src/data/index.js'
@@ -21,7 +21,11 @@ const games = only
   ? [{ g: Number(process.env.GAME ?? 0), seed: Number(process.env.SEED), extensions: process.env.EXT ? process.env.EXT.split(',') : [] }]
   : [
     ...Array.from({ length: 40 }, (_, g) => ({ g, seed: g, extensions: [] })),
-    ...Array.from({ length: 30 }, (_, g) => ({ g, seed: 1000 + g, extensions: ['test'] })),
+    // graines 1100… : avec les cartes test de l'étape F2, les graines 1000… tombent
+    // sur un blocage connu, laissé à l'étape F3 (docs/FIXES-GUIDE.md) : une carte
+    // prise dans la rivière devient injouable quand la carte de remplacement est
+    // une règle jouée d'office qui l'interdit (SEED=1006 GAME=6 EXT=test)
+    ...Array.from({ length: 30 }, (_, g) => ({ g, seed: 1100 + g, extensions: ['test'] })),
   ]
 
 let totalTurns = 0

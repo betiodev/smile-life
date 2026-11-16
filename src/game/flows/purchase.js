@@ -1,9 +1,11 @@
 // ---------------------------------------------------------------------------
 // Smile Life — le flux d'achat (voyage, maison : à payer avec ses salaires)
 // Posé sur le tour quand une acquisition à payer est jouée (effects.js).
-// Une seule étape, 'pay' : le joueur du tour paie (PURCHASE_CONFIRM) ou
-// renonce (PURCHASE_CANCEL). En sortant, il rend au tour { bought, fromForced }
-// (flows/turn.js, resume).
+// Étape 'pay' : le joueur du tour paie (PURCHASE_CONFIRM) ou renonce
+// (PURCHASE_CANCEL). Payée, l'acquisition est posée, le jeu du tour est
+// consommé, puis son onPlace est joué (src/game/cards/) ; s'il pose un flux,
+// celui-ci attend à l'étape 'done' qu'il finisse (finishFlow / resumeDone).
+// En sortant, le tour reprend (flows/turn.js, resume).
 //
 // data = { card, fromForced }
 //   card       : l'acquisition, tenue par ce cadre tant qu'elle n'est pas payée
@@ -12,7 +14,9 @@
 // ---------------------------------------------------------------------------
 import { attach, place, put, log } from '../primitives.js'
 import { checkPayment, architectFree, cheapestPayment, purchaseCost } from '../rules.js'
-import { endFlow } from './index.js'
+import { runOnPlace } from '../effects.js'
+import { consumePlay } from './turn.js'
+import { endFlow, finishFlow, resumeDone } from './index.js'
 
 const copy = (x) => JSON.parse(JSON.stringify(x))
 
@@ -24,6 +28,7 @@ const purchase = {
   // le paiement valide le moins cher (et l'Architecte) : le reducer accepte
   // tout paiement que checkPayment accepte (règle : la question paymentRule) (ARCHITECTURE.md §6.5)
   legal(state, frame) {
+    if (frame.step !== 'pay') return []
     const p = state.players[state.current]
     const { card } = frame.data
     const out = []
@@ -36,6 +41,7 @@ const purchase = {
   apply(s, frame, action) {
     const p = s.players[s.current]
     const { card, fromForced } = frame.data
+    if (frame.step !== 'pay') return false
     switch (action.type) {
       case 'PURCHASE_CONFIRM': {
         // offerte au choix (Architecte : cards/base.js)
@@ -55,7 +61,11 @@ const purchase = {
           log(s, `🏠 ${p.name} (Architecte) obtient ${card.name} gratuitement !`)
         }
         place(s, s.current, card)
-        endFlow(s, { bought: true, fromForced })
+        // le jeu est consommé dès la pose (la carte forcée aussi)
+        consumePlay(s, fromForced)
+        // ce que fait la carte jouée (cards/) ; un flux posé : on l'attend
+        runOnPlace(s, s.current, card)
+        finishFlow(s, frame, { bought: true, fromForced })
         return true
       }
       case 'PURCHASE_CANCEL':
@@ -67,7 +77,7 @@ const purchase = {
         return false
     }
   },
-  resume() {},
+  resume: resumeDone,
   // carte forcée (elle doit être jouée) : le paiement le moins cher ; sinon on
   // renonce, la carte revient en main
   fallback(state, frame, actor) {
@@ -78,7 +88,7 @@ const purchase = {
   // public : l'acquisition est jouée face visible
   view: (state, frame) => copy(frame),
   // carte tenue par ce cadre (vérifications d'intégrité)
-  held: (state, frame) => (frame.data.fromForced ? [] : [frame.data.card]),
+  held: (state, frame) => (frame.step === 'pay' && !frame.data.fromForced ? [frame.data.card] : []),
 }
 
 export default purchase

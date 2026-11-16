@@ -10,6 +10,14 @@
 //   test.shield       carte spéciale : protège la dernière carte posée de son
 //                     propriétaire contre les autres joueurs (meta.protectedBy,
 //                     question isProtected).
+//   test.gel          malus : seulement sur un joueur qui a un flirt ; son
+//                     flirt du dessus est défaussé (canTarget / onTarget).
+//   test.chaton       acquisition gratuite (animal) : une carte de plus à jouer
+//                     ce tour (onPlace).
+//   test.chateau      acquisition à payer (maison, 2 liasses) : une fois payée,
+//                     son onPlace annonce l'achat (flux test.notice).
+//   test.medaille     distinction : il faut au moins un enfant (canPlay).
+//   test.trefle       carte spéciale qui vaut 2 smiles en fin de partie.
 //   mise en place     3 cartes du dessous de la pioche mises de côté (spare).
 //   règle bonus       (sans carte, toujours en vigueur avec l'extension) :
 //                     +1 smile en fin de partie par Bouclier posé.
@@ -22,8 +30,9 @@
 import { registerExtension } from '../../src/game/extensions.js'
 import { EXTENSIONS } from '../../src/data/index.js'
 import { startFlow, endFlow } from '../../src/game/flows/index.js'
-import { protect, log, setAsideFromDeck } from '../../src/game/primitives.js'
-import { boardCards, metaOf } from '../../src/game/state.js'
+import { protect, log, setAsideFromDeck, place, remove } from '../../src/game/primitives.js'
+import { boardCards, metaOf, topFlirt } from '../../src/game/state.js'
+import { addPlays } from '../../src/game/flows/turn.js'
 
 const copy = (x) => JSON.parse(JSON.stringify(x))
 
@@ -36,6 +45,26 @@ export const TEST_DEFS = [
   {
     id: 'test.shield', ext: 'test', type: 'special', name: 'Bouclier (test)', smiles: 0, count: 4, tags: [],
     desc: 'Protège votre dernière carte posée contre les autres joueurs.',
+  },
+  {
+    id: 'test.gel', ext: 'test', type: 'malus', name: 'Gel (test)', smiles: 0, count: 3, tags: [],
+    desc: 'Malus sur un joueur qui a un flirt : son flirt du dessus est défaussé.',
+  },
+  {
+    id: 'test.chaton', ext: 'test', type: 'acquisition', name: 'Chaton (test)', emoji: '🐱', smiles: 1, cost: 0, count: 2, tags: ['animal'],
+    desc: 'Gratuit. Jouez une carte de plus ce tour.',
+  },
+  {
+    id: 'test.chateau', ext: 'test', type: 'acquisition', name: 'Château (test)', emoji: '🏰', smiles: 2, cost: 2, count: 2, tags: ['house'],
+    desc: 'Maison à 2 liasses. Une fois payée, l’achat est annoncé.',
+  },
+  {
+    id: 'test.medaille', ext: 'test', type: 'distinction', name: 'Médaille (test)', smiles: 2, count: 2, tags: [],
+    desc: 'Il faut au moins un enfant.',
+  },
+  {
+    id: 'test.trefle', ext: 'test', type: 'special', name: 'Trèfle (test)', smiles: 2, count: 2, tags: [],
+    desc: 'Vaut 2 smiles en fin de partie.',
   },
 ]
 export const SPARE_COUNT = 3
@@ -81,9 +110,39 @@ const BEHAVIOURS = {
       effect: { forbid: 'On peut toujours retirer soi-même sa carte' },
     }],
   },
+  'test.gel': {
+    canTarget: (state, attacker, card, target) =>
+      (state.players[target].flirts.length > 0 ? { ok: true } : { ok: false, reason: 'La cible doit avoir un flirt' }),
+    onTarget(s, { card, owner, target }) {
+      const flirt = topFlirt(s.players[target])
+      // (un flirt protégé reste en place : remove → null)
+      if (flirt && remove(s, flirt.uid, { cause: 'test.gel', by: owner })) {
+        log(s, `❄️ ${s.players[owner].name} gèle ${s.players[target].name} : flirt ${flirt.name} défaussé`, 'malus')
+      }
+      place(s, target, card)
+    },
+  },
+  'test.chaton': {
+    onPlace(s, { owner }) {
+      addPlays(s, 1)
+      log(s, `🐱 Le Chaton de ${s.players[owner].name} : une carte de plus à jouer ce tour`)
+      return false
+    },
+  },
+  'test.chateau': {
+    onPlace(s, { card, owner }) {
+      startFlow(s, 'test.notice', { player: owner, uid: card.uid })
+      return true
+    },
+  },
+  'test.medaille': {
+    canPlay: (state, pIdx) =>
+      (state.players[pIdx].children.length > 0 ? { ok: true } : { ok: false, reason: 'Il faut au moins un enfant' }),
+  },
+  'test.trefle': { canPlay: () => ({ ok: true }) },
 }
 
-// annonce d'une carte jouée d'office : celui qui l'a piochée ferme l'annonce
+// annonce d'une carte jouée d'office (ou d'un achat : Château) : celui qui l'a piochée ferme l'annonce
 const notice = {
   start: (s, { player, uid }) => ({ flow: 'test.notice', step: 'look', data: { player, uid } }),
   actors: (s, frame) => [frame.data.player],

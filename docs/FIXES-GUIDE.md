@@ -42,7 +42,7 @@ Opus 5.5 for F2, F3 and F5 (engine and session logic). Sonnet 5.5 for F1, F4 and
   - What: The review found two places where the game may differ from the physical game. (1) With 2 players, may you take the top card of the discard pile? The memo on the official mat says "dès 3 joueurs". The game allows it at 2. (2) Attentat: does it remove the children of every player, or only of the attacker and the target? The game does the second.
   - How: Check the leaflet and the Attentat card. If the game is right, tick this box and move on. If the game is wrong, open a new Claude Code session (Opus 5.5) and paste: `Read CLAUDE.md. A base rule is wrong: <say which and what the card says>. Fix it, add a test in tests/regles.test.mjs, add the rule to the "Verified rules" list in CLAUDE.md, re-record the golden games and say so in the commit message.` Then tick this box (pencil icon on github.com, as explained in the roadmap).
 
-- [ ] **Step F2 — Every base card goes through the card registry**
+- [x] **Step F2 — Every base card goes through the card registry**
   - Goal: Malus, distinctions and "what a card does when played" work the same way for every kind of card, so an extension card never needs a line added to the base game's code.
   - Where: New Claude Code session · Model: Opus 5.5
   - Inputs to attach: none
