@@ -37,7 +37,7 @@ Opus 5.5 for F2, F3 and F5 (engine and session logic). Sonnet 5.5 for F1, F4 and
   - How you test it: Nothing to test on your phone: the game is unchanged. Read the session's summary: if it says a test "disagrees with the game", that is a rules question for you; answer it before merging.
   - Prompt: [docs/prompts/fixes/F01-base-rule-tests.md](prompts/fixes/F01-base-rule-tests.md)
 
-- [ ] **Your two rules answers**
+- [x] **Your two rules answers**
   - Who: you, no Claude session
   - What: The review found two places where the game may differ from the physical game. (1) With 2 players, may you take the top card of the discard pile? The memo on the official mat says "dès 3 joueurs". The game allows it at 2. (2) Attentat: does it remove the children of every player, or only of the attacker and the target? The game does the second.
   - How: Check the leaflet and the Attentat card. If the game is right, tick this box and move on. If the game is wrong, open a new Claude Code session (Opus 5.5) and paste: `Read CLAUDE.md. A base rule is wrong: <say which and what the card says>. Fix it, add a test in tests/regles.test.mjs, add the rule to the "Verified rules" list in CLAUDE.md, re-record the golden games and say so in the commit message.` Then tick this box (pencil icon on github.com, as explained in the roadmap).
